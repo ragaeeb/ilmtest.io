@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { format, join } from 'node:path';
 import { doApiGet, getCollection, getEntity, getLibrary, init, type Translator } from '@ilmtest/ilmtest-sdk-js';
-import type { Collection, Excerpts } from '@/types/excerpts';
+import type { Collection, Excerpt, Excerpts } from '@/types/excerpts';
 import { getChunkFilename, groupAndChunkExcerpts } from './chunking';
 import { HF_ASL_STORE, HF_EXCERPT_STORE, HF_SHAMELA4_STORE, HF_TOKEN, ILMTEST_API_URL, OUTPUT_DIR } from './env';
 import { downloadDataSet } from './huggingface';
@@ -99,6 +99,21 @@ const loadTranslators = async (): Promise<Translator[]> => {
     return Bun.file(jsonFile).json();
 };
 
+/**
+ * Fill in missing translator fields by using the translator from
+ * the previous or next excerpt that has one defined.
+ */
+const fillMissingTranslators = (excerpts: Excerpt[]): void => {
+    for (let i = 0; i < excerpts.length; i++) {
+        if (excerpts[i].translator === undefined || excerpts[i].translator === null) {
+            // Try previous, then next, then fallback to default
+            const translator = excerpts[i - 1]?.translator ?? excerpts[i + 1]?.translator ?? 890;
+            console.log(`  Filled missing translator for ${excerpts[i].id} with ${translator}`);
+            excerpts[i].translator = translator;
+        }
+    }
+};
+
 export const setup = async (...collectionIds: string[]) => {
     console.log('Starting setup');
 
@@ -112,9 +127,18 @@ export const setup = async (...collectionIds: string[]) => {
     let translators = await loadTranslators();
     const usedTranslatorIds = new Set<number>();
     let totalChunks = 0;
+    const collections: Collection[] = [];
 
     for (const id of collectionIds) {
         const data = await loadExcerpts(id);
+
+        // Store collection metadata
+        collections.push(data.collection);
+
+        // Fill in missing translator fields
+        console.log(`Checking and filling missing translators for collection ${id}...`);
+        fillMissingTranslators(data.excerpts);
+        fillMissingTranslators(data.headings);
 
         // Generate indexes for this collection
         console.log(`Generating indexes for collection ${id}...`);
@@ -153,6 +177,11 @@ export const setup = async (...collectionIds: string[]) => {
     const indexesPath = join(INDEXES_DIR, 'indexes.json');
     await Bun.write(indexesPath, JSON.stringify(allIndexes, null, 2));
     console.log(`Generated ${indexesPath}`);
+
+    // Write collections metadata
+    const collectionsPath = join(INDEXES_DIR, 'collections.json');
+    await Bun.write(collectionsPath, JSON.stringify(collections, null, 2));
+    console.log(`Generated ${collectionsPath}`);
 
     translators = translators.filter((t) => usedTranslatorIds.has(t.id)).map((t) => ({ id: t.id, name: t.name }));
 

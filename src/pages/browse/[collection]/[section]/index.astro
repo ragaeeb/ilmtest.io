@@ -5,36 +5,66 @@ import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
 import Card from '@/components/ui/Card.astro';
-// Import indexes
+// Import data
+import collectionsData from '@/data/collections.json';
 import indexes from '@/data/indexes.json';
 import BaseLayout from '@/layouts/BaseLayout.astro';
+import type { Collection } from '@/types/excerpts';
 
-const { collection, section } = Astro.params;
+// Generate static paths for all sections in all collections
+export async function getStaticPaths() {
+    const collections = collectionsData as Collection[];
+    const paths = [];
 
-if (!collection || !section) {
+    for (const collection of collections) {
+        const sections = indexes.collectionToSections?.[collection.id] || [];
+        for (const section of sections) {
+            paths.push({
+                params: {
+                    collection: collection.slug,
+                    section: section,
+                },
+            });
+        }
+    }
+
+    return paths;
+}
+
+const { collection: collectionSlug, section } = Astro.params;
+
+if (!collectionSlug || !section) {
     return Astro.redirect('/404');
+}
+
+// Find collection metadata
+const collections = collectionsData as Collection[];
+const collectionData = collections.find((c) => c.slug === collectionSlug);
+
+if (!collectionData) {
+    return Astro.redirect('/browse');
 }
 
 // Get excerpts for this section
 const excerptIds = indexes.sectionToExcerpts?.[section] || [];
 
 if (excerptIds.length === 0) {
-    return Astro.redirect(`/browse/${collection}`);
+    return Astro.redirect(`/browse/${collectionSlug}`);
 }
 
 // Load chunks for this section
 const allChunks = await getCollection('excerpt-chunks');
 const sectionChunks = allChunks.filter(
-    (chunk) => chunk.data.sectionId === section && chunk.id.startsWith(`${collection}-`),
+    (chunk) => chunk.data.sectionId === section && chunk.id.startsWith(`${collectionData.id}-`),
 );
 
 // Extract all excerpts from chunks and filter out headings
 const excerpts = sectionChunks
     .flatMap((chunk) => chunk.data.excerpts)
-    .filter((excerpt) => !excerpt.meta?.type) // Exclude headings (which have meta.type)
-    .sort((a, b) => a.from - b.from); // Sort by page order
+    .filter((excerpt) => !excerpt.meta?.type) // Exclude headings
+    .sort((a, b) => a.from - b.from);
 
-// Get the section heading (first excerpt with meta.type in this section)
+// Get the section heading
 const headingExcerpt = sectionChunks
     .flatMap((chunk) => chunk.data.excerpts)
     .find((excerpt) => excerpt.meta?.type === 'C' || excerpt.meta?.type === 'B');
@@ -44,7 +74,7 @@ const sectionTitleArabic = headingExcerpt?.nass || '';
 
 const breadcrumbItems = [
     { label: 'Browse', href: '/browse' },
-    { label: `Collection ${collection}`, href: `/browse/${collection}` },
+    { label: collectionData.roman, href: `/browse/${collectionSlug}` },
     { label: sectionTitle },
 ];
 ---
@@ -75,7 +105,7 @@ const breadcrumbItems = [
                     <Card
                         variant="outlined"
                         hoverable
-                        href={`/browse/${collection}/${section}/e/${excerpt.id}`}
+                        href={`/browse/${collectionSlug}/${section}/e/${excerpt.id}`}
                     >
                         <div class="excerpt-preview">
                             <div class="excerpt-text-arabic" lang="ar" dir="rtl">

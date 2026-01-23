@@ -7,15 +7,25 @@ import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
-// Import indexes
+// Import data
+import collectionsData from '@/data/collections.json';
 import indexes from '@/data/indexes.json';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { formatCitation } from '@/lib/citations';
+import type { Collection } from '@/types/excerpts';
 
-const { collection, section, excerpt: excerptId } = Astro.params;
+const { collection: collectionSlug, section, excerpt: excerptId } = Astro.params;
 
-if (!collection || !section || !excerptId) {
+if (!collectionSlug || !section || !excerptId) {
     return Astro.redirect('/404');
+}
+
+// Find collection metadata
+const collections = collectionsData as Collection[];
+const collectionData = collections.find((c) => c.slug === collectionSlug);
+
+if (!collectionData) {
+    return Astro.redirect('/browse');
 }
 
 // Verify this excerpt belongs to this section
@@ -27,7 +37,7 @@ if (expectedSection !== section) {
 // Load chunks for this section
 const allChunks = await getCollection('excerpt-chunks');
 const sectionChunks = allChunks.filter(
-    (chunk) => chunk.data.sectionId === section && chunk.id.startsWith(`${collection}-`),
+    (chunk) => chunk.data.sectionId === section && chunk.id.startsWith(`${collectionData.id}-`),
 );
 
 // Find the specific excerpt
@@ -40,7 +50,7 @@ for (const chunk of sectionChunks) {
 }
 
 if (!excerpt) {
-    return Astro.redirect(`/browse/${collection}/${section}`);
+    return Astro.redirect(`/browse/${collectionSlug}/${section}`);
 }
 
 // Get the section heading for breadcrumb
@@ -50,24 +60,13 @@ const headingExcerpt = sectionChunks
 
 const sectionTitle = headingExcerpt?.text || `Section ${section}`;
 
-// Mock collection data for citation (in real implementation, load from indexes or separate file)
-const mockCollection = {
-    id: collection,
-    authors: [{ id: '1', name: 'Author', ism: 'المؤلف' }],
-    roman: `Collection ${collection}`,
-    src: { id: '75', fid: collection },
-    slug: collection,
-    citationTemplate: `https://shamela.ws/book/${collection}/:page`,
-    unwan: `مجموعة ${collection}`,
-};
-
-// Format citation
-const citation = formatCitation(excerpt, mockCollection);
+// Format citation using the actual collection data
+const citation = formatCitation(excerpt, collectionData);
 
 const breadcrumbItems = [
     { label: 'Browse', href: '/browse' },
-    { label: `Collection ${collection}`, href: `/browse/${collection}` },
-    { label: sectionTitle, href: `/browse/${collection}/${section}` },
+    { label: collectionData.roman, href: `/browse/${collectionSlug}` },
+    { label: sectionTitle, href: `/browse/${collectionSlug}/${section}` },
     { label: `Excerpt ${excerptId}` },
 ];
 

@@ -5,32 +5,48 @@ import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
 import Card from '@/components/ui/Card.astro';
-// Import indexes
+// Import data
+import collectionsData from '@/data/collections.json';
 import indexes from '@/data/indexes.json';
 import BaseLayout from '@/layouts/BaseLayout.astro';
+import type { Collection } from '@/types/excerpts';
 
-const { collection } = Astro.params;
+// Generate static paths for all collections
+export async function getStaticPaths() {
+    const collections = collectionsData as Collection[];
+    return collections.map((col) => ({
+        params: { collection: col.slug },
+    }));
+}
 
-if (!collection) {
+const { collection: collectionSlug } = Astro.params;
+
+if (!collectionSlug) {
     return Astro.redirect('/404');
 }
 
+// Find the collection metadata
+const collections = collectionsData as Collection[];
+const collectionData = collections.find((c) => c.slug === collectionSlug);
+
+if (!collectionData) {
+    return Astro.redirect('/browse');
+}
+
 // Get sections for this collection
-const sections = indexes.collectionToSections?.[collection] || [];
+const sections = indexes.collectionToSections?.[collectionData.id] || [];
 
 if (sections.length === 0) {
     return Astro.redirect('/browse');
 }
 
 // Load all chunks to get heading information
-// We need to find headings (excerpts with meta.type = 'B' or 'C')
 const allChunks = await getCollection('excerpt-chunks');
 
 // Filter chunks for this collection and extract headings
-const collectionChunks = allChunks.filter((chunk) => chunk.id.startsWith(`${collection}-`));
+const collectionChunks = allChunks.filter((chunk) => chunk.id.startsWith(`${collectionData.id}-`));
 
 // Extract headings from chunks
-// Headings are excerpts with meta.type defined
 const headings = collectionChunks
     .flatMap((chunk) => chunk.data.excerpts)
     .filter((excerpt) => excerpt.meta?.type === 'C' || excerpt.meta?.type === 'B')
@@ -57,7 +73,7 @@ for (const heading of headings) {
 // Create section items with their primary heading
 const sectionItems = sections.map((sectionId) => {
     const sectionHeadingList = sectionHeadings.get(sectionId) || [];
-    const primaryHeading = sectionHeadingList[0]; // First heading in the section
+    const primaryHeading = sectionHeadingList[0];
 
     return {
         id: sectionId,
@@ -67,10 +83,10 @@ const sectionItems = sections.map((sectionId) => {
     };
 });
 
-const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: `Collection ${collection}` }];
+const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: collectionData.roman }];
 ---
 
-<BaseLayout title={`Collection ${collection}`} description={`Browse collection ${collection}`}>
+<BaseLayout title={collectionData.roman} description={`Browse ${collectionData.roman}`}>
     <Header slot="header" currentPath="/browse">
         <ThemeToggle client:only="react" slot="theme-toggle" />
     </Header>
@@ -79,14 +95,22 @@ const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: `Collect
         <Breadcrumb items={breadcrumbItems} />
 
         <header class="collection-header">
-            <h1>Collection {collection}</h1>
+            <h1 class="collection-title-arabic" lang="ar" dir="rtl">
+                {collectionData.unwan}
+            </h1>
+            <h1>{collectionData.roman}</h1>
+            {collectionData.authors.length > 0 && (
+                <p class="author-name">
+                    by {collectionData.authors.map((a) => a.name).join(', ')}
+                </p>
+            )}
             <p class="subtitle">{sections.length} sections</p>
         </header>
 
         <div class="sections-list">
             {
                 sectionItems.map((section) => (
-                    <Card variant="outlined" hoverable href={`/browse/${collection}/${section.id}`}>
+                    <Card variant="outlined" hoverable href={`/browse/${collectionSlug}/${section.id}`}>
                         <div class="section-content">
                             <div class="section-titles">
                                 {section.titleArabic && (
@@ -121,9 +145,24 @@ const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: `Collect
         text-align: center;
     }
 
+    .collection-title-arabic {
+        font-family: var(--font-arabic-content);
+        font-size: var(--text-3xl);
+        line-height: var(--leading-arabic);
+        margin-bottom: var(--space-3);
+        color: var(--color-text-primary);
+    }
+
     .collection-header h1 {
         font-size: var(--text-3xl);
         margin-bottom: var(--space-3);
+    }
+
+    .author-name {
+        color: var(--color-text-secondary);
+        font-size: var(--text-lg);
+        font-style: italic;
+        margin-bottom: var(--space-2);
     }
 
     .subtitle {
