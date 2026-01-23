@@ -1,4 +1,4 @@
-import type { Excerpt, Excerpts, Heading } from './types/excerpts';
+import type { Excerpt, Excerpts, Heading } from '@/types/excerpts';
 
 /**
  * Pre-computed indexes for O(1) lookups.

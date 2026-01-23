@@ -1,0 +1,179 @@
+---
+import { getCollection } from 'astro:content';
+import { ThemeToggle } from '@/components/islands/ThemeToggle';
+import Footer from '@/components/layout/Footer.astro';
+import Header from '@/components/layout/Header.astro';
+import Breadcrumb from '@/components/ui/Breadcrumb.astro';
+import Card from '@/components/ui/Card.astro';
+// Import indexes
+import indexes from '@/data/indexes.json';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+
+const { collection } = Astro.params;
+
+if (!collection) {
+    return Astro.redirect('/404');
+}
+
+// Get sections for this collection
+const sections = indexes.collectionToSections?.[collection] || [];
+
+if (sections.length === 0) {
+    return Astro.redirect('/browse');
+}
+
+// Load all chunks to get heading information
+// We need to find headings (excerpts with meta.type = 'B' or 'C')
+const allChunks = await getCollection('excerpt-chunks');
+
+// Filter chunks for this collection and extract headings
+const collectionChunks = allChunks.filter((chunk) => chunk.id.startsWith(`${collection}-`));
+
+// Extract headings from chunks
+// Headings are excerpts with meta.type defined
+const headings = collectionChunks
+    .flatMap((chunk) => chunk.data.excerpts)
+    .filter((excerpt) => excerpt.meta?.type === 'C' || excerpt.meta?.type === 'B')
+    .map((heading) => ({
+        id: heading.id,
+        nass: heading.nass,
+        text: heading.text,
+        from: heading.from,
+        type: heading.meta?.type,
+    }));
+
+// Group headings by section
+const sectionHeadings = new Map<string, typeof headings>();
+for (const heading of headings) {
+    const sectionId = indexes.excerptToSection?.[heading.id];
+    if (sectionId) {
+        if (!sectionHeadings.has(sectionId)) {
+            sectionHeadings.set(sectionId, []);
+        }
+        sectionHeadings.get(sectionId)!.push(heading);
+    }
+}
+
+// Create section items with their primary heading
+const sectionItems = sections.map((sectionId) => {
+    const sectionHeadingList = sectionHeadings.get(sectionId) || [];
+    const primaryHeading = sectionHeadingList[0]; // First heading in the section
+
+    return {
+        id: sectionId,
+        title: primaryHeading?.text || `Section ${sectionId}`,
+        titleArabic: primaryHeading?.nass || '',
+        excerptCount: indexes.sectionToExcerpts?.[sectionId]?.length || 0,
+    };
+});
+
+const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: `Collection ${collection}` }];
+---
+
+<BaseLayout title={`Collection ${collection}`} description={`Browse collection ${collection}`}>
+    <Header slot="header" currentPath="/browse">
+        <ThemeToggle client:only="react" slot="theme-toggle" />
+    </Header>
+
+    <div class="collection-container">
+        <Breadcrumb items={breadcrumbItems} />
+
+        <header class="collection-header">
+            <h1>Collection {collection}</h1>
+            <p class="subtitle">{sections.length} sections</p>
+        </header>
+
+        <div class="sections-list">
+            {
+                sectionItems.map((section) => (
+                    <Card variant="outlined" hoverable href={`/browse/${collection}/${section.id}`}>
+                        <div class="section-content">
+                            <div class="section-titles">
+                                {section.titleArabic && (
+                                    <h3 class="section-title-arabic" lang="ar" dir="rtl">
+                                        {section.titleArabic}
+                                    </h3>
+                                )}
+                                <h3 class="section-title">{section.title}</h3>
+                            </div>
+                            <div class="section-meta">
+                                <span>{section.excerptCount} excerpts</span>
+                            </div>
+                        </div>
+                    </Card>
+                ))
+            }
+        </div>
+    </div>
+
+    <Footer slot="footer" />
+</BaseLayout>
+
+<style>
+    .collection-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: var(--space-8) var(--space-6);
+    }
+
+    .collection-header {
+        margin: var(--space-8) 0;
+        text-align: center;
+    }
+
+    .collection-header h1 {
+        font-size: var(--text-3xl);
+        margin-bottom: var(--space-3);
+    }
+
+    .subtitle {
+        color: var(--color-text-secondary);
+        font-size: var(--text-lg);
+    }
+
+    .sections-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+    }
+
+    .section-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: var(--space-4);
+    }
+
+    .section-titles {
+        flex: 1;
+    }
+
+    .section-title-arabic {
+        font-family: var(--font-arabic-content);
+        font-size: var(--text-xl);
+        margin-bottom: var(--space-2);
+        color: var(--color-text-primary);
+    }
+
+    .section-title {
+        font-size: var(--text-lg);
+        font-weight: 600;
+        color: var(--color-text-primary);
+    }
+
+    .section-meta {
+        color: var(--color-text-tertiary);
+        font-size: var(--text-sm);
+        white-space: nowrap;
+    }
+
+    @media (max-width: 640px) {
+        .section-content {
+            flex-direction: column;
+        }
+
+        .section-meta {
+            align-self: flex-start;
+        }
+    }
+</style>

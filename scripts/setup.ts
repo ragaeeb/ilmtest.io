@@ -1,12 +1,12 @@
 import { mkdir } from 'node:fs/promises';
 import { format, join } from 'node:path';
 import { doApiGet, getCollection, getEntity, getLibrary, init, type Translator } from '@ilmtest/ilmtest-sdk-js';
+import type { Collection, Excerpts } from '@/types/excerpts';
 import { getChunkFilename, groupAndChunkExcerpts } from './chunking';
 import { HF_ASL_STORE, HF_EXCERPT_STORE, HF_SHAMELA4_STORE, HF_TOKEN, ILMTEST_API_URL, OUTPUT_DIR } from './env';
 import { downloadDataSet } from './huggingface';
 import { addEntityMappings, generateIndexes, mergeIndexes } from './indexing';
 import { decompressJson } from './io';
-import type { Collection, Excerpts } from './types/excerpts';
 
 const SHAMELA4_LIBRARY_ID = '75';
 

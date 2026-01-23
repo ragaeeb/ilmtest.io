@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
+import type { Excerpt } from '../src/types/excerpts';
 import { CHUNK_CONFIG, chunkExcerpts, getChunkFilename, groupAndChunkExcerpts, shouldSplitChunk } from './chunking';
-import type { Excerpt } from './types/excerpts';
 
 // Helper to create mock excerpts
 const createMockExcerpts = (count: number, startFrom = 1): Excerpt[] => {

@@ -1,4 +1,4 @@
-import type { Excerpt } from './types/excerpts';
+import type { Excerpt } from '@/types/excerpts';
 
 /**
  * Chunking configuration

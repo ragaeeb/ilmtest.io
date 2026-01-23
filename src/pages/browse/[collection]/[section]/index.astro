@@ -1,0 +1,188 @@
+---
+import { getCollection } from 'astro:content';
+import { ThemeToggle } from '@/components/islands/ThemeToggle';
+import Footer from '@/components/layout/Footer.astro';
+import Header from '@/components/layout/Header.astro';
+import Breadcrumb from '@/components/ui/Breadcrumb.astro';
+import Card from '@/components/ui/Card.astro';
+// Import indexes
+import indexes from '@/data/indexes.json';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+
+const { collection, section } = Astro.params;
+
+if (!collection || !section) {
+    return Astro.redirect('/404');
+}
+
+// Get excerpts for this section
+const excerptIds = indexes.sectionToExcerpts?.[section] || [];
+
+if (excerptIds.length === 0) {
+    return Astro.redirect(`/browse/${collection}`);
+}
+
+// Load chunks for this section
+const allChunks = await getCollection('excerpt-chunks');
+const sectionChunks = allChunks.filter(
+    (chunk) => chunk.data.sectionId === section && chunk.id.startsWith(`${collection}-`),
+);
+
+// Extract all excerpts from chunks and filter out headings
+const excerpts = sectionChunks
+    .flatMap((chunk) => chunk.data.excerpts)
+    .filter((excerpt) => !excerpt.meta?.type) // Exclude headings (which have meta.type)
+    .sort((a, b) => a.from - b.from); // Sort by page order
+
+// Get the section heading (first excerpt with meta.type in this section)
+const headingExcerpt = sectionChunks
+    .flatMap((chunk) => chunk.data.excerpts)
+    .find((excerpt) => excerpt.meta?.type === 'C' || excerpt.meta?.type === 'B');
+
+const sectionTitle = headingExcerpt?.text || `Section ${section}`;
+const sectionTitleArabic = headingExcerpt?.nass || '';
+
+const breadcrumbItems = [
+    { label: 'Browse', href: '/browse' },
+    { label: `Collection ${collection}`, href: `/browse/${collection}` },
+    { label: sectionTitle },
+];
+---
+
+<BaseLayout title={sectionTitle} description={`Browse excerpts from ${sectionTitle}`}>
+    <Header slot="header" currentPath="/browse">
+        <ThemeToggle client:only="react" slot="theme-toggle" />
+    </Header>
+
+    <div class="section-container">
+        <Breadcrumb items={breadcrumbItems} />
+
+        <header class="section-header">
+            {
+                sectionTitleArabic && (
+                    <h1 class="section-title-arabic" lang="ar" dir="rtl">
+                        {sectionTitleArabic}
+                    </h1>
+                )
+            }
+            <h1 class="section-title">{sectionTitle}</h1>
+            <p class="subtitle">{excerpts.length} excerpts</p>
+        </header>
+
+        <div class="excerpts-list">
+            {
+                excerpts.map((excerpt) => (
+                    <Card
+                        variant="outlined"
+                        hoverable
+                        href={`/browse/${collection}/${section}/e/${excerpt.id}`}
+                    >
+                        <div class="excerpt-preview">
+                            <div class="excerpt-text-arabic" lang="ar" dir="rtl">
+                                {excerpt.nass.slice(0, 150)}
+                                {excerpt.nass.length > 150 ? '...' : ''}
+                            </div>
+                            <div class="excerpt-text-english">
+                                {excerpt.text.slice(0, 150)}
+                                {excerpt.text.length > 150 ? '...' : ''}
+                            </div>
+                            <div class="excerpt-meta">
+                                <span class="page-number">Page {excerpt.from}</span>
+                                {excerpt.meta?.num && <span class="hadith-num">#{excerpt.meta.num}</span>}
+                                {excerpt.meta?.vol && (
+                                    <span class="volume">
+                                        Vol {excerpt.meta.vol}
+                                        {excerpt.meta.vp && `/${excerpt.meta.vp}`}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </Card>
+                ))
+            }
+        </div>
+    </div>
+
+    <Footer slot="footer" />
+</BaseLayout>
+
+<style>
+    .section-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: var(--space-8) var(--space-6);
+    }
+
+    .section-header {
+        margin: var(--space-8) 0;
+        text-align: center;
+    }
+
+    .section-title-arabic {
+        font-family: var(--font-arabic-content);
+        font-size: var(--text-3xl);
+        line-height: var(--leading-arabic);
+        margin-bottom: var(--space-4);
+        color: var(--color-text-primary);
+    }
+
+    .section-title {
+        font-size: var(--text-2xl);
+        margin-bottom: var(--space-3);
+        color: var(--color-text-primary);
+    }
+
+    .subtitle {
+        color: var(--color-text-secondary);
+        font-size: var(--text-base);
+    }
+
+    .excerpts-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+    }
+
+    .excerpt-preview {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+    }
+
+    .excerpt-text-arabic {
+        font-family: var(--font-arabic-content);
+        font-size: var(--text-lg);
+        line-height: var(--leading-arabic);
+        color: var(--color-text-primary);
+        background-color: var(--color-arabic-bg);
+        padding: var(--space-4);
+        border-radius: var(--radius-md);
+    }
+
+    .excerpt-text-english {
+        font-size: var(--text-base);
+        line-height: var(--leading-relaxed);
+        color: var(--color-text-secondary);
+        background-color: var(--color-english-bg);
+        padding: var(--space-4);
+        border-radius: var(--radius-md);
+    }
+
+    .excerpt-meta {
+        display: flex;
+        gap: var(--space-4);
+        color: var(--color-text-tertiary);
+        font-size: var(--text-sm);
+        font-family: var(--font-mono);
+    }
+
+    @media (max-width: 640px) {
+        .section-title-arabic {
+            font-size: var(--text-2xl);
+        }
+
+        .section-title {
+            font-size: var(--text-xl);
+        }
+    }
+</style>

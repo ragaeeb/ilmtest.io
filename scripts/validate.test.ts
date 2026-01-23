@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
+import type { Excerpt, Excerpts, Heading } from '../src/types/excerpts';
 import type { LookupIndexes } from './indexing';
-import type { Excerpt, Excerpts, Heading } from './types/excerpts';
 import {
     type ValidationResult,
     validateDuplicateIds,

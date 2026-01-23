@@ -1,5 +1,5 @@
+import type { Excerpt, Excerpts, Heading } from '@/types/excerpts';
 import type { LookupIndexes } from './indexing';
-import type { Excerpt, Excerpts, Heading } from './types/excerpts';
 
 /**
  * Result of a validation check.

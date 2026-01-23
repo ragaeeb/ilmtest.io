@@ -1,0 +1,269 @@
+---
+// Enable SSR for this route
+export const prerender = false;
+
+import { getCollection } from 'astro:content';
+import { ThemeToggle } from '@/components/islands/ThemeToggle';
+import Footer from '@/components/layout/Footer.astro';
+import Header from '@/components/layout/Header.astro';
+import Breadcrumb from '@/components/ui/Breadcrumb.astro';
+// Import indexes
+import indexes from '@/data/indexes.json';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { formatCitation } from '@/lib/citations';
+
+const { collection, section, excerpt: excerptId } = Astro.params;
+
+if (!collection || !section || !excerptId) {
+    return Astro.redirect('/404');
+}
+
+// Verify this excerpt belongs to this section
+const expectedSection = indexes.excerptToSection?.[excerptId];
+if (expectedSection !== section) {
+    return Astro.redirect('/404');
+}
+
+// Load chunks for this section
+const allChunks = await getCollection('excerpt-chunks');
+const sectionChunks = allChunks.filter(
+    (chunk) => chunk.data.sectionId === section && chunk.id.startsWith(`${collection}-`),
+);
+
+// Find the specific excerpt
+let excerpt: any = null;
+for (const chunk of sectionChunks) {
+    excerpt = chunk.data.excerpts.find((e: any) => e.id === excerptId);
+    if (excerpt) {
+        break;
+    }
+}
+
+if (!excerpt) {
+    return Astro.redirect(`/browse/${collection}/${section}`);
+}
+
+// Get the section heading for breadcrumb
+const headingExcerpt = sectionChunks
+    .flatMap((chunk) => chunk.data.excerpts)
+    .find((e: any) => e.meta?.type === 'C' || e.meta?.type === 'B');
+
+const sectionTitle = headingExcerpt?.text || `Section ${section}`;
+
+// Mock collection data for citation (in real implementation, load from indexes or separate file)
+const mockCollection = {
+    id: collection,
+    authors: [{ id: '1', name: 'Author', ism: 'المؤلف' }],
+    roman: `Collection ${collection}`,
+    src: { id: '75', fid: collection },
+    slug: collection,
+    citationTemplate: `https://shamela.ws/book/${collection}/:page`,
+    unwan: `مجموعة ${collection}`,
+};
+
+// Format citation
+const citation = formatCitation(excerpt, mockCollection);
+
+const breadcrumbItems = [
+    { label: 'Browse', href: '/browse' },
+    { label: `Collection ${collection}`, href: `/browse/${collection}` },
+    { label: sectionTitle, href: `/browse/${collection}/${section}` },
+    { label: `Excerpt ${excerptId}` },
+];
+
+// Set cache headers for edge caching
+Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
+---
+
+<BaseLayout
+    title={`Excerpt ${excerptId}`}
+    description={excerpt.text.slice(0, 160)}
+>
+    <Header slot="header" currentPath="/browse">
+        <ThemeToggle client:only="react" slot="theme-toggle" />
+    </Header>
+
+    <article class="excerpt-container">
+        <Breadcrumb items={breadcrumbItems} />
+
+        <div class="excerpt-content">
+            <!-- Arabic Text -->
+            <section class="text-section arabic-section">
+                <h2 class="sr-only">Arabic Text</h2>
+                <div
+                    class="text-content arabic-text"
+                    lang="ar"
+                    dir="rtl"
+                    role="article"
+                    aria-label="Arabic text"
+                >
+                    {excerpt.nass}
+                </div>
+            </section>
+
+            <!-- English Translation -->
+            <section class="text-section english-section">
+                <h2 class="sr-only">English Translation</h2>
+                <div
+                    class="text-content english-text"
+                    lang="en"
+                    dir="ltr"
+                    role="article"
+                    aria-label="English translation"
+                >
+                    {excerpt.text}
+                </div>
+            </section>
+
+            <!-- Citation Block -->
+            <section class="citation-section">
+                <h2 class="citation-label">Citation</h2>
+                <div class="citation-block">
+                    <code class="citation-text" set:html={citation} />
+                </div>
+            </section>
+
+            <!-- Metadata -->
+            <section class="metadata-section">
+                <dl class="metadata-list">
+                    <div class="metadata-item">
+                        <dt>Page</dt>
+                        <dd>{excerpt.from}</dd>
+                    </div>
+                    {
+                        excerpt.meta?.num && (
+                            <div class="metadata-item">
+                                <dt>Hadith Number</dt>
+                                <dd>{excerpt.meta.num}</dd>
+                            </div>
+                        )
+                    }
+                    {
+                        excerpt.meta?.vol && (
+                            <div class="metadata-item">
+                                <dt>Volume</dt>
+                                <dd>
+                                    {excerpt.meta.vol}
+                                    {excerpt.meta.vp && ` / Page ${excerpt.meta.vp}`}
+                                </dd>
+                            </div>
+                        )
+                    }
+                    <div class="metadata-item">
+                        <dt>Translator</dt>
+                        <dd>AI Model #{excerpt.translator}</dd>
+                    </div>
+                </dl>
+            </section>
+        </div>
+    </article>
+
+    <Footer slot="footer" />
+</BaseLayout>
+
+<style>
+    .excerpt-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: var(--space-8) var(--space-6);
+    }
+
+    .excerpt-content {
+        margin-top: var(--space-8);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-8);
+    }
+
+    .text-section {
+        border-radius: var(--radius-lg);
+        padding: var(--space-6);
+    }
+
+    .arabic-section {
+        background-color: var(--color-arabic-bg);
+    }
+
+    .english-section {
+        background-color: var(--color-english-bg);
+    }
+
+    .text-content {
+        line-height: var(--leading-relaxed);
+    }
+
+    .arabic-text {
+        font-family: var(--font-arabic-content);
+        font-size: var(--text-lg);
+        line-height: var(--leading-arabic);
+    }
+
+    .english-text {
+        font-size: var(--text-base);
+    }
+
+    .citation-section {
+        border-top: 2px solid var(--color-border);
+        padding-top: var(--space-6);
+    }
+
+    .citation-label {
+        font-size: var(--text-sm);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--color-text-secondary);
+        margin-bottom: var(--space-3);
+    }
+
+    .citation-block {
+        background-color: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        padding: var(--space-4);
+    }
+
+    .citation-text {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        color: var(--color-text-primary);
+    }
+
+    .metadata-section {
+        border-top: 1px solid var(--color-border);
+        padding-top: var(--space-6);
+    }
+
+    .metadata-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: var(--space-4);
+    }
+
+    .metadata-item {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+    }
+
+    .metadata-item dt {
+        font-size: var(--text-sm);
+        font-weight: 600;
+        color: var(--color-text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .metadata-item dd {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        color: var(--color-text-primary);
+    }
+
+    @media (max-width: 640px) {
+        .metadata-list {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>

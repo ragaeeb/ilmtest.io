@@ -1,5 +1,5 @@
 import type { BookData, Page, Title } from 'shamela';
-import type { Excerpt, Excerpts, Heading } from './types/excerpts';
+import type { Excerpt, Excerpts, Heading } from '@/types/excerpts';
 
 /**
  * When the user gets a shareable link to an excerpt and they open it, there hould be a hard link to exactly where this excerpt was taken from its original library.

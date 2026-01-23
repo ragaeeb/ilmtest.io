@@ -1,0 +1,120 @@
+---
+import { ThemeToggle } from '@/components/islands/ThemeToggle';
+import Footer from '@/components/layout/Footer.astro';
+import Header from '@/components/layout/Header.astro';
+import Card from '@/components/ui/Card.astro';
+// Import indexes to get collection list
+import indexes from '@/data/indexes.json';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+
+// For now, we'll create mock collection data
+// In a real implementation, this would come from the indexes or a separate collections data file
+const collections = Object.keys(indexes.collectionToSections || {}).map((collectionId) => ({
+    id: collectionId,
+    slug: collectionId,
+    title: `Collection ${collectionId}`,
+    description: `Browse excerpts from collection ${collectionId}`,
+    sectionCount: indexes.collectionToSections[collectionId]?.length || 0,
+}));
+---
+
+<BaseLayout
+    title="Browse Collections"
+    description="Explore Islamic texts with verified translations and scholarly sources."
+>
+    <Header slot="header" currentPath="/browse">
+        <ThemeToggle client:only="react" slot="theme-toggle" />
+    </Header>
+
+    <div class="browse-container">
+        <header class="browse-header">
+            <h1>Browse Collections</h1>
+            <p class="subtitle">
+                Explore carefully curated Islamic texts with authentic translations.
+            </p>
+        </header>
+
+        <div class="collections-grid">
+            {
+                collections.map((collection) => (
+                    <Card variant="elevated" hoverable href={`/browse/${collection.slug}`}>
+                        <h3 class="collection-title">{collection.title}</h3>
+                        <p class="collection-description">{collection.description}</p>
+                        <div class="collection-meta">
+                            <span class="section-count">{collection.sectionCount} sections</span>
+                        </div>
+                    </Card>
+                ))
+            }
+        </div>
+    </div>
+
+    <Footer slot="footer" />
+</BaseLayout>
+
+<style>
+    .browse-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: var(--space-12) var(--space-6);
+    }
+
+    .browse-header {
+        text-align: center;
+        margin-bottom: var(--space-12);
+    }
+
+    .browse-header h1 {
+        font-size: var(--text-4xl);
+        margin-bottom: var(--space-4);
+        color: var(--color-text-primary);
+    }
+
+    .subtitle {
+        font-size: var(--text-lg);
+        color: var(--color-text-secondary);
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    .collections-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: var(--space-6);
+    }
+
+    .collection-title {
+        font-size: var(--text-xl);
+        margin-bottom: var(--space-3);
+        color: var(--color-text-primary);
+    }
+
+    .collection-description {
+        color: var(--color-text-secondary);
+        margin-bottom: var(--space-4);
+        line-height: var(--leading-relaxed);
+    }
+
+    .collection-meta {
+        display: flex;
+        gap: var(--space-4);
+        color: var(--color-text-tertiary);
+        font-size: var(--text-sm);
+    }
+
+    .section-count {
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+    }
+
+    @media (max-width: 768px) {
+        .browse-header h1 {
+            font-size: var(--text-3xl);
+        }
+
+        .collections-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>

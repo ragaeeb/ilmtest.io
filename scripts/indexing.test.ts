@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
+import type { Excerpt, Heading } from '../src/types/excerpts';
 import { addEntityMappings, findSectionForExcerpt, generateIndexes, mergeIndexes } from './indexing';
-import type { Excerpt, Heading } from './types/excerpts';
 
 describe('findSectionForExcerpt', () => {
     const headings: Heading[] = [
@@ -87,12 +87,12 @@ describe('generateIndexes', () => {
 describe('mergeIndexes', () => {
     it('should merge multiple partial indexes', () => {
         const partial1 = {
-            sectionToExcerpts: { 'H1': ['P1'] },
-            excerptToSection: { 'P1': 'H1' },
+            sectionToExcerpts: { H1: ['P1'] },
+            excerptToSection: { P1: 'H1' },
         };
         const partial2 = {
-            sectionToExcerpts: { 'H2': ['P2'] },
-            excerptToSection: { 'P2': 'H2' },
+            sectionToExcerpts: { H2: ['P2'] },
+            excerptToSection: { P2: 'H2' },
         };
 
         const merged = mergeIndexes(partial1, partial2);

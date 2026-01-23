@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import type { Heading } from '../src/types/excerpts';
 import {
     arabicToWestern,
     getExcerptsUnderTitle,
@@ -7,7 +8,6 @@ import {
     mapTitleTreeToHeadingTree,
     type TitleNode,
 } from './mapping';
-import type { Heading } from './types/excerpts';
 
 describe('mapTitlesToTableOfContents', () => {
     it('should return empty array for empty input', () => {
