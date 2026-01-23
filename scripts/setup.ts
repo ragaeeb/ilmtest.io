@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { format, join } from 'node:path';
 import { doApiGet, getCollection, getEntity, getLibrary, init, type Translator } from '@ilmtest/ilmtest-sdk-js';
+import { slugify } from '@/lib/textUtils';
 import type { Collection, Excerpt, Excerpts } from '@/types/excerpts';
 import { getChunkFilename, groupAndChunkExcerpts } from './chunking';
 import { HF_ASL_STORE, HF_EXCERPT_STORE, HF_SHAMELA4_STORE, HF_TOKEN, ILMTEST_API_URL, OUTPUT_DIR } from './env';
@@ -35,6 +36,8 @@ const loadCollection = async (id: string): Promise<Collection> => {
 
     const [entity] = collection.author ? await getEntity(collection.author) : [];
 
+    const slug = slugify(collection.title!, entity.display_name);
+
     return {
         authors: [
             {
@@ -46,7 +49,7 @@ const loadCollection = async (id: string): Promise<Collection> => {
         ],
         src: { id: collection.library!.toString(), fid: collection.fid! },
         roman: collection.display_name,
-        slug: collection.title!.replace(' ', '_').toLowerCase(),
+        slug,
         citationTemplate: library.url_template!,
         unwan: collection.ar_display_name!,
         id,
@@ -142,7 +145,7 @@ export const setup = async (...collectionIds: string[]) => {
 
         // Generate indexes for this collection
         console.log(`Generating indexes for collection ${id}...`);
-        const indexes = generateIndexes(data, data.collection.slug);
+        const indexes = generateIndexes(data, id); // Use ID instead of slug
         allIndexes = mergeIndexes(allIndexes, indexes);
 
         // Add entity mappings for authors

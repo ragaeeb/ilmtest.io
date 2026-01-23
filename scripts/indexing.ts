@@ -14,7 +14,7 @@ export type LookupIndexes = {
     /** Map page number → heading ID for that page */
     pageToHeading: Record<number, string>;
 
-    /** Map collection slug → array of heading IDs (for TOC) */
+    /** Map collection ID → array of heading IDs (for TOC) */
     collectionToSections: Record<string, string[]>;
 
     /** Map entity ID → collections they're associated with */
@@ -56,8 +56,10 @@ export const findSectionForExcerpt = (excerpt: Excerpt, headings: Heading[]): st
 
 /**
  * Generate all lookup indexes from excerpts data.
+ * @param data - The excerpts data
+ * @param collectionId - The collection ID (not slug)
  */
-export const generateIndexes = (data: Excerpts, collectionSlug: string): Partial<LookupIndexes> => {
+export const generateIndexes = (data: Excerpts, collectionId: string): Partial<LookupIndexes> => {
     const sectionToExcerpts: Record<string, string[]> = {};
     const excerptToSection: Record<string, string> = {};
     const pageToHeading: Record<number, string> = {};
@@ -70,7 +72,7 @@ export const generateIndexes = (data: Excerpts, collectionSlug: string): Partial
     }
 
     // Map collection to its sections
-    collectionToSections[collectionSlug] = data.headings.map((h) => h.id);
+    collectionToSections[collectionId] = data.headings.map((h) => h.id);
 
     // Map each excerpt to its section
     for (const excerpt of data.excerpts) {

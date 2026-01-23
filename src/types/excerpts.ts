@@ -72,19 +72,12 @@ export type Excerpts = {
     lastUpdatedAt: number;
 };
 
-enum AITranslator {
-    Gemini3 = 890,
-    OpenAIGpt52Thinking = 893,
-    OpenAIGpt5 = 879,
-    Grok4Expert = 895,
-}
-
 type AITranslation = {
     /** The translated nass. */
     text: string;
 
     /** The AI model that translated it. */
-    translator: AITranslator;
+    translator: number;
 
     /** The last time this translation was updated (Unix timestamp in seconds). */
     lastUpdatedAt: number;

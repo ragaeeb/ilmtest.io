@@ -80,7 +80,7 @@ type HeadingNode = Heading & {
     children?: HeadingNode[];
 };
 
-export const mapTitleTreeToHeadingTree = (titleNodes: TitleNode[], headings: Heading[]): HeadingNode[] => {
+export const mapTitleTreeToHeadingTree = (titleNodes: TitleNode[], headings: Heading[]) => {
     // Create a map from title ID to heading
     const titleIdToHeading = new Map<number, Heading>();
 
@@ -102,7 +102,7 @@ export const mapTitleTreeToHeadingTree = (titleNodes: TitleNode[], headings: Hea
         return headingNode;
     };
 
-    return titleNodes.map(convertNode);
+    return titleNodes.filter((t) => titleIdToHeading.has(t.id)).map(convertNode);
 };
 
 export const getTitleTreeForPage = (nodes: TitleNode[], page: number) => {
@@ -128,11 +128,7 @@ export const getTitleTreeForPage = (nodes: TitleNode[], page: number) => {
     return filterTree(activeRoot);
 };
 
-export const getExcerptsUnderTitle = (
-    titles: TitleNode[],
-    excerpts: Excerpt[],
-    selectedTitle: TitleNode,
-): Excerpt[] => {
+export const getExcerptsUnderTitle = (titles: TitleNode[], excerpts: Excerpt[], selectedTitle: TitleNode) => {
     // Find the next title page that "closes" this section
     const nextTitlePage = findNextTitleAtSameLevelOrHigher(titles, selectedTitle);
 
