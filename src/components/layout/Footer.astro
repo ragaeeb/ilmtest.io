@@ -1,0 +1,177 @@
+---
+const currentYear = new Date().getFullYear();
+
+const footerLinks = [
+    {
+        title: 'Resources',
+        links: [
+            { href: '/browse', label: 'Browse Collections' },
+            { href: '/about', label: 'About IlmTest' },
+        ],
+    },
+    {
+        title: 'Legal',
+        links: [
+            { href: '/privacy', label: 'Privacy Policy' },
+            { href: '/terms', label: 'Terms of Use' },
+        ],
+    },
+];
+---
+
+<footer class="footer">
+  <div class="footer-container">
+    <!-- Branding -->
+    <div class="footer-brand">
+      <a href="/" class="footer-logo">
+        <img src="/favicon.svg" alt="" width="24" height="24" />
+        <span class="logo-text">
+          <span class="logo-ilm">Ilm</span><span class="logo-test">Test</span>
+        </span>
+      </a>
+      <p class="footer-tagline">
+        Authentic Islamic content with verification and scholarly sources.
+      </p>
+    </div>
+
+    <!-- Links -->
+    <div class="footer-links">
+      {footerLinks.map((section) => (
+        <div class="footer-section">
+          <h3 class="footer-section-title">{section.title}</h3>
+          <ul class="footer-section-list">
+            {section.links.map((link) => (
+              <li>
+                <a href={link.href} class="footer-link">{link.label}</a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  </div>
+
+  <!-- Copyright -->
+  <div class="footer-bottom">
+    <p class="footer-copyright">
+      © {currentYear} IlmTest. All rights reserved.
+    </p>
+  </div>
+</footer>
+
+<style>
+  .footer {
+    background-color: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+    margin-top: auto;
+  }
+
+  .footer-container {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: var(--space-12);
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--space-12) var(--space-6);
+  }
+
+  /* Branding */
+  .footer-brand {
+    max-width: 300px;
+  }
+
+  .footer-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    text-decoration: none;
+    font-size: var(--text-lg);
+    font-weight: 700;
+    margin-bottom: var(--space-3);
+  }
+
+  .footer-logo img {
+    width: 24px;
+    height: 24px;
+  }
+
+  .logo-ilm {
+    color: var(--color-primary);
+  }
+
+  .logo-test {
+    color: var(--color-secondary);
+  }
+
+  .footer-tagline {
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+    line-height: var(--leading-relaxed);
+  }
+
+  /* Links */
+  .footer-links {
+    display: flex;
+    gap: var(--space-12);
+  }
+
+  .footer-section-title {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-4);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .footer-section-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .footer-link {
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    font-size: var(--text-sm);
+    transition: color var(--duration-fast) var(--ease-out);
+  }
+
+  .footer-link:hover {
+    color: var(--color-primary);
+  }
+
+  /* Copyright */
+  .footer-bottom {
+    border-top: 1px solid var(--color-border);
+    padding: var(--space-6);
+    text-align: center;
+  }
+
+  .footer-copyright {
+    color: var(--color-text-tertiary);
+    font-size: var(--text-sm);
+    margin: 0;
+  }
+
+  /* Mobile responsive */
+  @media (max-width: 768px) {
+    .footer-container {
+      grid-template-columns: 1fr;
+      gap: var(--space-8);
+      padding: var(--space-8) var(--space-4);
+    }
+
+    .footer-links {
+      flex-direction: column;
+      gap: var(--space-6);
+    }
+
+    .footer-bottom {
+      padding: var(--space-4);
+    }
+  }
+</style>

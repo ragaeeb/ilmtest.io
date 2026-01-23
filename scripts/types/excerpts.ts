@@ -56,7 +56,7 @@ export type Collection = {
  */
 export type Excerpts = {
     /** The original data/content the excerpts were segmented from if required to map additional metadata. This is useful in case we need to apply certain things to add proper citations to an excerpt like volume number and page number. Since web pages just have a unique id to the article, generally these won't be available for scraped pages since we don't need that mapping */
-    asl: ScrapeResult | ;
+    sourceDocument?: ScrapeResult;
 
     /** Collection associated with these excerpts */
     collection: Collection;
@@ -139,6 +139,7 @@ export type Heading = ArabicAsl & AITranslation;
  * Similarly if the user were to open a direct link to the P1 excerpt, it should show a heading before its text to signify it is under the C1 chapter title.
  * If they opened up P4 they would see that it is classified under C2.
  */
-export type Excerpt = ArabicAsl & AITranslation & {
-    meta?: BookMeta | HadithMetadata;
-};
+export type Excerpt = ArabicAsl &
+    AITranslation & {
+        meta?: BookMeta | HadithMetadata;
+    };

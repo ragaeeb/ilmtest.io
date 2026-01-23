@@ -1,0 +1,135 @@
+---
+interface Props {
+    variant?: 'primary' | 'secondary' | 'tertiary' | 'success' | 'warning';
+    size?: 'sm' | 'md' | 'lg';
+    href?: string;
+    disabled?: boolean;
+    class?: string;
+}
+
+const { variant = 'primary', size = 'md', href, disabled = false, class: className = '' } = Astro.props;
+
+const Tag = href ? 'a' : 'button';
+
+const sizeClasses = {
+    sm: 'btn-sm',
+    md: 'btn-md',
+    lg: 'btn-lg',
+};
+
+const variantClasses = {
+    primary: 'btn-primary',
+    secondary: 'btn-secondary',
+    tertiary: 'btn-tertiary',
+    success: 'btn-success',
+    warning: 'btn-warning',
+};
+---
+
+<Tag 
+  class:list={['btn', variantClasses[variant], sizeClasses[size], className]}
+  href={href}
+  disabled={disabled}
+  aria-disabled={disabled}
+>
+  <slot />
+</Tag>
+
+<style>
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    font-weight: 500;
+    text-decoration: none;
+    border: 2px solid transparent;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: 
+      background-color var(--duration-fast) var(--ease-out),
+      border-color var(--duration-fast) var(--ease-out),
+      transform var(--duration-fast) var(--ease-out),
+      box-shadow var(--duration-fast) var(--ease-out);
+  }
+
+  .btn:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  .btn:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  .btn:disabled,
+  .btn[aria-disabled="true"] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Sizes */
+  .btn-sm {
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--text-sm);
+  }
+
+  .btn-md {
+    padding: var(--space-3) var(--space-6);
+    font-size: var(--text-base);
+  }
+
+  .btn-lg {
+    padding: var(--space-4) var(--space-8);
+    font-size: var(--text-lg);
+  }
+
+  /* Variants */
+  .btn-primary {
+    background-color: var(--color-primary);
+    color: var(--color-text-inverse);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--color-primary-hover);
+  }
+
+  .btn-secondary {
+    background-color: transparent;
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background-color: var(--color-primary);
+    color: var(--color-text-inverse);
+  }
+
+  .btn-tertiary {
+    background-color: transparent;
+    color: var(--color-primary);
+    border-color: transparent;
+  }
+
+  .btn-tertiary:hover:not(:disabled) {
+    background-color: var(--color-surface);
+  }
+
+  .btn-success {
+    background-color: var(--color-tertiary);
+    color: var(--color-text-inverse);
+  }
+
+  .btn-success:hover:not(:disabled) {
+    background-color: var(--color-tertiary-hover);
+  }
+
+  .btn-warning {
+    background-color: var(--color-secondary);
+    color: var(--color-text-inverse);
+  }
+
+  .btn-warning:hover:not(:disabled) {
+    background-color: var(--color-secondary-hover);
+  }
+</style>
