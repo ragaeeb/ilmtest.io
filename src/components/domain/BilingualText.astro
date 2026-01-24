@@ -1,0 +1,41 @@
+---
+interface Props {
+    text: string;
+    isArabic?: boolean;
+    className?: string;
+    lang?: 'ar' | 'en';
+}
+
+const { text, isArabic = false, className = '', lang = isArabic ? 'ar' : 'en' } = Astro.props;
+---
+
+<div
+  class:list={[
+    "bilingual-text",
+    isArabic ? "is-arabic" : "is-english",
+    className
+  ]}
+  lang={lang}
+  dir={isArabic ? "rtl" : "ltr"}
+>
+  {text}
+</div>
+
+<style>
+  .bilingual-text {
+    /* Base styles */
+  }
+
+  .is-arabic {
+    font-family: var(--font-arabic-content);
+    line-height: var(--leading-arabic);
+    text-align: right;
+    direction: rtl;
+  }
+
+  .is-english {
+    font-family: var(--font-english);
+    text-align: left;
+    direction: ltr;
+  }
+</style>

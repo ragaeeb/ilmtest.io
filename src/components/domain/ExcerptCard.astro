@@ -1,0 +1,98 @@
+---
+import Card from '@/components/ui/Card.astro';
+import { formatCitation } from '@/lib/citations';
+import type { Collection, Excerpt } from '@/types/excerpts';
+import BilingualText from './BilingualText.astro';
+
+interface Props {
+    excerpt: Excerpt;
+    collection: Collection;
+    collectionSlug: string;
+    sectionSlug: string;
+    excerptId: string;
+}
+
+const { excerpt, collection, collectionSlug, sectionSlug, excerptId } = Astro.props;
+
+// Generate clean text preview (strip HTML if needed, though usually just text)
+const previewText = excerpt.nass.length > 200 ? excerpt.nass.substring(0, 200) + '...' : excerpt.nass;
+
+const citation = formatCitation(excerpt, collection);
+---
+
+<Card 
+  href={`/browse/${collectionSlug}/${sectionSlug}/e/${excerptId}`}
+  variant="outlined"
+  hoverable={true}
+  padding="md"
+  class="excerpt-card-override"
+>
+  <div class="excerpt-content">
+    <BilingualText 
+      text={previewText} 
+      isArabic={true} 
+      className="excerpt-text" 
+    />
+    
+    <div class="card-footer">
+      <div class="citation-wrapper">
+        <Fragment set:html={citation} />
+      </div>
+      
+      <span class="read-more">
+        Read Full
+      </span>
+    </div>
+  </div>
+</Card>
+
+<style>
+  .excerpt-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  /* We need to ensure the custom class passed to BilingualText works with its styles */
+  /* But BilingualText uses scoped styles or classes passed to it. It accepts className. */
+  /* In BilingualText, the className is added to classList. */
+  
+  /* We define the style locally here but it needs to apply to the child. 
+     Modulescope won't bubble down unless we use :global or if BilingualText expects utility classes.
+     But BilingualText just applies the class. So we use :global(.excerpt-text) to target it from here 
+     OR strict scoping if we pass a scoped class (which Astro does automatically).
+  */
+  
+  :global(.excerpt-text) {
+    font-size: var(--text-xl);
+    color: var(--color-text-primary);
+    line-height: var(--leading-relaxed);
+  }
+
+  .card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--color-surface-hover); /* slightly lighter border than main */
+  }
+
+  .citation-wrapper {
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 70%;
+  }
+
+  .read-more {
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--color-primary);
+  }
+
+  :global(.card-hoverable:hover) .read-more {
+    text-decoration: underline;
+  }
+</style>

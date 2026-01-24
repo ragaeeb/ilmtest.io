@@ -3,17 +3,18 @@
 export const prerender = false;
 
 import { getCollection } from 'astro:content';
+import BilingualText from '@/components/domain/BilingualText.astro';
+import CitationBlock from '@/components/domain/CitationBlock.astro';
 import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
-// Import data
 import collectionsData from '@/data/collections.json';
 import indexesData from '@/data/indexes.json';
 import translatorsData from '@/data/translators.json';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { formatCitation } from '@/lib/citations';
 import { arabicToWestern } from '@/lib/arabic';
+import { formatCitation } from '@/lib/citations';
 import type { Collection } from '@/types/excerpts';
 
 const { collection: collectionSlug, section, excerpt: excerptId } = Astro.params;
@@ -67,9 +68,7 @@ if (!excerpt) {
 }
 
 // Get the section heading for breadcrumb
-const headingExcerpt = sectionChunks
-    .flatMap((chunk) => chunk.data.excerpts)
-    .find((e: any) => e.id === section);
+const headingExcerpt = sectionChunks.flatMap((chunk) => chunk.data.excerpts).find((e: any) => e.id === section);
 
 const sectionTitle = headingExcerpt?.text || `Section ${section}`;
 
@@ -117,44 +116,26 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
         <Breadcrumb items={breadcrumbItems} />
 
         <div class="excerpt-content">
-            <!-- Arabic Text -->
-            <section class="text-section arabic-section">
-                <h2 class="sr-only">Arabic Text</h2>
-                <div
-                    class="text-content arabic-text"
-                    lang="ar"
-                    dir="rtl"
-                    role="article"
-                    aria-label="Arabic text"
-                >
-                    {excerpt.nass}
-                </div>
-            </section>
-
-            <!-- English Translation -->
-            <section class="text-section english-section">
-                <h2 class="sr-only">English Translation</h2>
-                <div
-                    class="text-content english-text"
-                    lang="en"
-                    dir="ltr"
-                    role="article"
-                    aria-label="English translation"
-                >
-                    {excerpt.text}
-                </div>
-            </section>
+            <!-- Bilingual Text Blocks -->
+            <div class="text-blocks">
+                <BilingualText 
+                  text={excerpt.nass} 
+                  isArabic={true} 
+                  className="text-block arabic-block" 
+                />
+                <BilingualText 
+                  text={excerpt.text} 
+                  isArabic={false} 
+                  className="text-block english-block" 
+                />
+            </div>
 
             <!-- Citation Block -->
-            <section class="citation-section">
-                <h2 class="citation-label">Citation</h2>
-                <div class="citation-block">
-                    <code class="citation-text" set:html={citation} />
-                </div>
-            </section>
+            <CitationBlock excerpt={excerpt} collection={collectionData} />
 
-            <!-- Metadata -->
+            <!-- Metadata Details -->
             <section class="metadata-section">
+                <h2 class="sr-only">Additional Metadata</h2>
                 <dl class="metadata-list">
                     <div class="metadata-item">
                         <dt>Page</dt>
@@ -202,61 +183,29 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
         margin-top: var(--space-8);
         display: flex;
         flex-direction: column;
-        gap: var(--space-8);
+        gap: var(--space-10);
     }
 
-    .text-section {
-        border-radius: var(--radius-lg);
+    .text-blocks {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-6);
+    }
+
+    .text-block {
         padding: var(--space-6);
+        border-radius: var(--radius-lg);
     }
 
-    .arabic-section {
+    .arabic-block {
         background-color: var(--color-arabic-bg);
+        font-size: var(--text-xl);
     }
 
-    .english-section {
+    .english-block {
         background-color: var(--color-english-bg);
-    }
-
-    .text-content {
-        line-height: var(--leading-relaxed);
-    }
-
-    .arabic-text {
-        font-family: var(--font-arabic-content);
         font-size: var(--text-lg);
-        line-height: var(--leading-arabic);
-    }
-
-    .english-text {
-        font-size: var(--text-base);
-    }
-
-    .citation-section {
-        border-top: 2px solid var(--color-border);
-        padding-top: var(--space-6);
-    }
-
-    .citation-label {
-        font-size: var(--text-sm);
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
         color: var(--color-text-secondary);
-        margin-bottom: var(--space-3);
-    }
-
-    .citation-block {
-        background-color: var(--color-surface);
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius-md);
-        padding: var(--space-4);
-    }
-
-    .citation-text {
-        font-family: var(--font-mono);
-        font-size: var(--text-sm);
-        color: var(--color-text-primary);
     }
 
     .metadata-section {
@@ -267,7 +216,7 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
     .metadata-list {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: var(--space-4);
+        gap: var(--space-6);
     }
 
     .metadata-item {
@@ -277,11 +226,11 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
     }
 
     .metadata-item dt {
-        font-size: var(--text-sm);
+        font-size: var(--text-xs);
         font-weight: 600;
-        color: var(--color-text-secondary);
+        color: var(--color-text-tertiary);
         text-transform: uppercase;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.1em;
     }
 
     .metadata-item dd {

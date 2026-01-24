@@ -1,11 +1,10 @@
 ---
 import { getCollection } from 'astro:content';
+import ExcerptCard from '@/components/domain/ExcerptCard.astro';
 import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
-import Card from '@/components/ui/Card.astro';
-// Import data
 import collectionsData from '@/data/collections.json';
 import indexesData from '@/data/indexes.json';
 import BaseLayout from '@/layouts/BaseLayout.astro';
@@ -76,20 +75,10 @@ const excerpts = sectionChunks
     .sort((a, b) => a.from - b.from);
 
 // Get the section heading
-const headingExcerpt = sectionChunks
-    .flatMap((chunk) => chunk.data.excerpts)
-    .find((excerpt) => excerpt.id === section);
+const headingExcerpt = sectionChunks.flatMap((chunk) => chunk.data.excerpts).find((excerpt) => excerpt.id === section);
 
 const sectionTitle = headingExcerpt?.text || `Section ${section}`;
 const sectionTitleArabic = headingExcerpt?.nass || '';
-
-const formatHadithNumber = (num?: string) => {
-    if (!num) {
-        return null;
-    }
-    const western = arabicToWestern(num);
-    return Number.isNaN(western) ? num : western.toString();
-};
 
 const breadcrumbItems = [
     { label: 'Browse', href: '/browse' },
@@ -121,34 +110,13 @@ const breadcrumbItems = [
         <div class="excerpts-list">
             {
                 excerpts.map((excerpt) => (
-                    <Card
-                        variant="outlined"
-                        hoverable
-                        href={`/browse/${collectionSlug}/${section}/e/${excerpt.id}`}
-                    >
-                        <div class="excerpt-preview">
-                            <div class="excerpt-text-arabic" lang="ar" dir="rtl">
-                                {excerpt.nass.slice(0, 150)}
-                                {excerpt.nass.length > 150 ? '...' : ''}
-                            </div>
-                            <div class="excerpt-text-english">
-                                {excerpt.text.slice(0, 150)}
-                                {excerpt.text.length > 150 ? '...' : ''}
-                            </div>
-                            <div class="excerpt-meta">
-                                <span class="page-number">Page {excerpt.from}</span>
-                                {excerpt.meta?.num && (
-                                    <span class="hadith-num">#{formatHadithNumber(excerpt.meta.num)}</span>
-                                )}
-                                {excerpt.meta?.vol && (
-                                    <span class="volume">
-                                        Vol {excerpt.meta.vol}
-                                        {excerpt.meta.vp && `/${excerpt.meta.vp}`}
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                    </Card>
+                    <ExcerptCard
+                        excerpt={excerpt}
+                        collection={collectionData}
+                        collectionSlug={collectionSlug}
+                        sectionSlug={section}
+                        excerptId={excerpt.id}
+                    />
                 ))
             }
         </div>
@@ -191,40 +159,7 @@ const breadcrumbItems = [
     .excerpts-list {
         display: flex;
         flex-direction: column;
-        gap: var(--space-4);
-    }
-
-    .excerpt-preview {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-4);
-    }
-
-    .excerpt-text-arabic {
-        font-family: var(--font-arabic-content);
-        font-size: var(--text-lg);
-        line-height: var(--leading-arabic);
-        color: var(--color-text-primary);
-        background-color: var(--color-arabic-bg);
-        padding: var(--space-4);
-        border-radius: var(--radius-md);
-    }
-
-    .excerpt-text-english {
-        font-size: var(--text-base);
-        line-height: var(--leading-relaxed);
-        color: var(--color-text-secondary);
-        background-color: var(--color-english-bg);
-        padding: var(--space-4);
-        border-radius: var(--radius-md);
-    }
-
-    .excerpt-meta {
-        display: flex;
-        gap: var(--space-4);
-        color: var(--color-text-tertiary);
-        font-size: var(--text-sm);
-        font-family: var(--font-mono);
+        gap: var(--space-6);
     }
 
     @media (max-width: 640px) {

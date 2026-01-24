@@ -1,0 +1,91 @@
+---
+import { ThemeToggle } from '@/components/islands/ThemeToggle';
+import Footer from '@/components/layout/Footer.astro';
+import Header from '@/components/layout/Header.astro';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="About - IlmTest">
+  <Header slot="header" currentPath="/about">
+    <ThemeToggle client:only="react" slot="theme-toggle" />
+  </Header>
+
+  <div class="about-container">
+    <h1 class="page-title">About IlmTest</h1>
+    
+    <div class="content-wrapper">
+      <p class="intro-text">
+        IlmTest is a comprehensive digital library and research tool for Islamic texts, focusing on Hadith and classical scholarship.
+      </p>
+
+      <div class="notice-box">
+        <p class="notice-text">
+          This project is currently in active development (Phase 3).
+        </p>
+      </div>
+
+      <h2 class="section-title">Our Mission</h2>
+      <p class="body-text">
+        To make classical Islamic texts accessible, searchable, and verifiable through modern technology, while maintaining the highest standards of academic rigor.
+      </p>
+    </div>
+  </div>
+
+  <Footer slot="footer" />
+</BaseLayout>
+
+<style>
+  .about-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: var(--space-12) var(--space-6);
+    min-height: 60vh;
+  }
+
+  .page-title {
+    font-size: var(--text-3xl);
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-8);
+  }
+
+  .content-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .intro-text {
+    font-size: var(--text-lg);
+    color: var(--color-text-secondary);
+    line-height: var(--leading-relaxed);
+  }
+
+  .body-text {
+    font-size: var(--text-base);
+    color: var(--color-text-secondary);
+    line-height: var(--leading-relaxed);
+  }
+
+  .section-title {
+    font-size: var(--text-2xl);
+    color: var(--color-text-primary);
+    margin-top: var(--space-8);
+    margin-bottom: var(--space-4);
+  }
+
+  .notice-box {
+    background-color: var(--color-info-bg);
+    border-left: 4px solid var(--color-info);
+    padding: var(--space-4);
+    border-radius: var(--radius-sm);
+  }
+
+  .notice-text {
+    color: var(--color-info);
+    font-weight: 500;
+  }
+  
+  [data-theme="dark"] .notice-text {
+    color: var(--color-text-primary);
+  }
+</style>
