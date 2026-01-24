@@ -1,8 +1,6 @@
 ---
 import Card from '@/components/ui/Card.astro';
-import { getCitationParts } from '@/lib/citations';
 import type { Collection, Excerpt } from '@/types/excerpts';
-import BilingualText from './BilingualText.astro';
 
 interface Props {
     excerpt: Excerpt;
@@ -14,10 +12,8 @@ interface Props {
 
 const { excerpt, collection, collectionSlug, sectionSlug, excerptId } = Astro.props as Props;
 
-// Generate clean text preview (strip HTML if needed, though usually just text)
-const previewText = excerpt.nass.length > 200 ? excerpt.nass.substring(0, 200) + '...' : excerpt.nass;
-
-const citation = getCitationParts(excerpt, collection);
+const previewText = excerpt.nass.length > 150 ? `${excerpt.nass.substring(0, 150)}...` : excerpt.nass;
+const previewEnglish = excerpt.text.length > 150 ? `${excerpt.text.substring(0, 150)}...` : excerpt.text;
 
 // Biome doesn't see template usage in .astro files.
 void excerpt;
@@ -26,10 +22,8 @@ void collectionSlug;
 void sectionSlug;
 void excerptId;
 void previewText;
-void citation;
+void previewEnglish;
 void Card;
-void BilingualText;
-void getCitationParts;
 ---
 
 <Card 
@@ -40,24 +34,19 @@ void getCitationParts;
   class="excerpt-card-override"
 >
   <div class="excerpt-content">
-    <BilingualText 
-      text={previewText} 
-      isArabic={true} 
-      className="excerpt-text" 
-    />
+    <div class="excerpt-preview">
+      <div class="excerpt-text-arabic" lang="ar" dir="rtl">
+        {previewText}
+      </div>
+      <div class="excerpt-text-english">
+        {previewEnglish}
+      </div>
+      <div class="excerpt-meta">
+        <span class="page-number">Page {excerpt.from}</span>
+      </div>
+    </div>
     
     <div class="card-footer">
-      <div class="citation-wrapper">
-        <a
-          class="citation-link"
-          href={citation.url}
-          target="_blank"
-          rel="noreferrer"
-        >
-          [{citation.label}]
-        </a>
-      </div>
-      
       <span class="read-more">
         Read Full
       </span>
@@ -72,47 +61,49 @@ void getCitationParts;
     gap: var(--space-3);
   }
 
-  /* We need to ensure the custom class passed to BilingualText works with its styles */
-  /* But BilingualText uses scoped styles or classes passed to it. It accepts className. */
-  /* In BilingualText, the className is added to classList. */
-  
-  /* We define the style locally here but it needs to apply to the child. 
-     Modulescope won't bubble down unless we use :global or if BilingualText expects utility classes.
-     But BilingualText just applies the class. So we use :global(.excerpt-text) to target it from here 
-     OR strict scoping if we pass a scoped class (which Astro does automatically).
-  */
-  
-  :global(.excerpt-text) {
+  .excerpt-text-arabic {
     font-size: var(--text-xl);
     color: var(--color-text-primary);
     line-height: var(--leading-relaxed);
+    font-family: var(--font-arabic-content);
+    direction: rtl;
+    text-align: right;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-break: strict;
+  }
+
+  .excerpt-text-english {
+    font-size: var(--text-base);
+    color: var(--color-text-secondary);
+    line-height: var(--leading-normal);
+    font-family: var(--font-english);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .excerpt-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+  }
+
+  .page-number,
+  .hadith-num,
+  .volume {
+    font-family: var(--font-mono);
   }
 
   .card-footer {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     padding-top: var(--space-2);
     border-top: 1px solid var(--color-surface-hover); /* slightly lighter border than main */
-  }
-
-  .citation-wrapper {
-    font-size: var(--text-xs);
-    color: var(--color-text-secondary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 70%;
-  }
-
-  .citation-link {
-    color: inherit;
-    text-decoration: none;
-  }
-
-  .citation-link:hover {
-    color: var(--color-primary-text);
-    text-decoration: underline;
   }
 
   .read-more {

@@ -43,7 +43,9 @@ void ariaLabel;
 
 <style>
   .bilingual-text {
-    /* Base styles */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .is-arabic {
@@ -51,6 +53,7 @@ void ariaLabel;
     line-height: var(--leading-arabic);
     text-align: right;
     direction: rtl;
+    line-break: strict;
   }
 
   .is-english {

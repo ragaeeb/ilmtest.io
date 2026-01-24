@@ -3,6 +3,7 @@
 export const prerender = false;
 
 import { getCollection } from 'astro:content';
+import { marked } from 'marked';
 import BilingualText from '@/components/domain/BilingualText.astro';
 import CitationBlock from '@/components/domain/CitationBlock.astro';
 import { ShareButton } from '@/components/islands/ShareButton';
@@ -75,8 +76,11 @@ const sectionTitle = headingExcerpt?.text || `Section ${section}`;
 
 // Format citation using the actual collection data
 const citation = getCitationParts(excerpt, collectionData);
-const citationPlain = `${citation.label} — ${citation.url}`;
+marked.setOptions({ breaks: true });
+
 const citationMarkdown = `[${citation.label}](${citation.url})`;
+const englishHtml = marked.parse(excerpt.text);
+const copyPayload = `${excerpt.nass}\n\n${excerpt.text}\n\n${citationMarkdown}`;
 
 const translators = Array.isArray(translatorsData)
     ? translatorsData
@@ -116,8 +120,9 @@ void translatorsData;
 void BaseLayout;
 void arabicToWestern;
 void getCitationParts;
-void citationPlain;
 void citationMarkdown;
+void englishHtml;
+void copyPayload;
 void translatorName;
 void formatHadithNumber;
 void breadcrumbItems;
@@ -139,25 +144,31 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
         <Breadcrumb items={breadcrumbItems} />
 
         <div class="excerpt-content">
+            <nav class="excerpt-skip-links" aria-label="Skip excerpt content">
+                <a href="#arabic-content">Skip to Arabic text</a>
+                <a href="#english-content">Skip to English translation</a>
+            </nav>
+
             <!-- Bilingual Text Blocks -->
             <div class="text-blocks">
-                <BilingualText 
-                  text={excerpt.nass} 
-                  isArabic={true} 
-                  className="text-block arabic-block" 
-                />
-                <BilingualText 
-                  text={excerpt.text} 
-                  isArabic={false} 
-                  className="text-block english-block" 
-                />
+                <div id="arabic-content" class="text-block arabic-block" role="article" aria-label="Arabic text">
+                    <div class="language-indicator">العربية</div>
+                    <BilingualText 
+                      text={excerpt.nass} 
+                      isArabic={true} 
+                      className="text-block-inner" 
+                    />
+                </div>
+                <div id="english-content" class="text-block english-block" lang="en" dir="ltr" role="article">
+                    <div class="language-indicator">English</div>
+                    <div class="english-markdown" set:html={englishHtml} />
+                </div>
             </div>
 
             <!-- Citation Block -->
             <CitationBlock excerpt={excerpt} collection={collectionData} />
-            <div class="share-actions" aria-label="Share citation options">
-                <ShareButton client:load text={citationPlain} label="Copy citation" />
-                <ShareButton client:load text={citationMarkdown} label="Copy Markdown" />
+            <div class="share-actions" aria-label="Copy excerpt">
+                <ShareButton client:load text={copyPayload} ariaLabel="Copy excerpt and citation" />
             </div>
 
             <!-- Metadata Details -->
@@ -213,6 +224,22 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
         gap: var(--space-10);
     }
 
+    .excerpt-skip-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-3);
+        font-size: var(--text-sm);
+    }
+
+    .excerpt-skip-links a {
+        color: var(--color-primary-text);
+        text-decoration: none;
+    }
+
+    .excerpt-skip-links a:hover {
+        text-decoration: underline;
+    }
+
     .text-blocks {
         display: flex;
         flex-direction: column;
@@ -224,6 +251,19 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
         border-radius: var(--radius-lg);
     }
 
+    .text-block-inner {
+        display: block;
+    }
+
+    .language-indicator {
+        font-size: var(--text-xs);
+        font-weight: 600;
+        color: var(--color-text-tertiary);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: var(--space-3);
+    }
+
     .arabic-block {
         background-color: var(--color-arabic-bg);
         font-size: var(--text-xl);
@@ -233,6 +273,20 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
         background-color: var(--color-english-bg);
         font-size: var(--text-lg);
         color: var(--color-text-secondary);
+    }
+
+    .english-markdown {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .english-markdown :global(p) {
+        margin: 0;
+    }
+
+    .english-markdown :global(p + p) {
+        margin-top: var(--space-3);
     }
 
     .metadata-section {

@@ -20,6 +20,8 @@ const {
 const fullTitle = `${title} | IlmTest`;
 const canonical = canonicalUrl ?? Astro.url?.href;
 const jsonLdContent = jsonLd ? JSON.stringify(jsonLd) : null;
+const ogImagePath = ogImage ?? '/og-image.png';
+const ogImageResolved = Astro.url ? new URL(ogImagePath, Astro.url).href : ogImagePath;
 
 // Biome doesn't see template usage in .astro files.
 void title;
@@ -30,6 +32,8 @@ void jsonLd;
 void fullTitle;
 void canonical;
 void jsonLdContent;
+void ogImagePath;
+void ogImageResolved;
 ---
 <!DOCTYPE html>
 <html lang="en">
@@ -38,17 +42,21 @@ void jsonLdContent;
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     {canonical && <link rel="canonical" href={canonical} />}
     <title>{fullTitle}</title>
     <meta property="og:title" content={fullTitle} />
     <meta property="og:description" content={description} />
     {canonical && <meta property="og:url" content={canonical} />}
     <meta property="og:type" content="website" />
-    {ogImage && <meta property="og:image" content={ogImage} />}
-    <meta name="twitter:card" content={ogImage ? 'summary_large_image' : 'summary'} />
+    {ogImageResolved && <meta property="og:image" content={ogImageResolved} />}
+    <meta name="twitter:card" content={ogImageResolved ? 'summary_large_image' : 'summary'} />
     <meta name="twitter:title" content={fullTitle} />
     <meta name="twitter:description" content={description} />
-    {ogImage && <meta name="twitter:image" content={ogImage} />}
+    {ogImageResolved && <meta name="twitter:image" content={ogImageResolved} />}
     
     <!-- Preload Arabic fonts - uncomment when fonts are added to /public/fonts/
     <link 

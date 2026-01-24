@@ -1,0 +1,103 @@
+---
+import { ThemeToggle } from '@/components/islands/ThemeToggle';
+import Footer from '@/components/layout/Footer.astro';
+import Header from '@/components/layout/Header.astro';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+
+// Biome doesn't see template usage in .astro files.
+void ThemeToggle;
+void Footer;
+void Header;
+void BaseLayout;
+---
+
+<BaseLayout title="Privacy Policy">
+  <Header slot="header" currentPath="/privacy">
+    <ThemeToggle client:only="react" slot="theme-toggle" />
+  </Header>
+
+  <div class="policy-container">
+    <h1 class="page-title">Privacy Policy</h1>
+    <p class="updated-text">Last updated: January 24, 2026</p>
+
+    <section class="policy-section">
+      <h2>Overview</h2>
+      <p>
+        IlmTest is a public, read-only library. We do not require user accounts and do not sell personal data.
+      </p>
+    </section>
+
+    <section class="policy-section">
+      <h2>Information We Collect</h2>
+      <ul>
+        <li>Basic usage data for performance and reliability (aggregated and non-identifying).</li>
+        <li>Technical logs from hosting providers for security and troubleshooting.</li>
+      </ul>
+    </section>
+
+    <section class="policy-section">
+      <h2>How We Use Information</h2>
+      <ul>
+        <li>Maintain site stability and security.</li>
+        <li>Improve content delivery and performance.</li>
+        <li>Understand general traffic patterns (no personal profiling).</li>
+      </ul>
+    </section>
+
+    <section class="policy-section">
+      <h2>Third-Party Services</h2>
+      <p>
+        We may use privacy-respecting analytics provided by our hosting platform. These services
+        process anonymous usage data to help us understand overall site performance.
+      </p>
+    </section>
+
+    <section class="policy-section">
+      <h2>Contact</h2>
+      <p>
+        If you have questions about this policy, contact us at <a href="mailto:hello@ilmtest.io">hello@ilmtest.io</a>.
+      </p>
+    </section>
+  </div>
+
+  <Footer slot="footer" />
+</BaseLayout>
+
+<style>
+  .policy-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: var(--space-12) var(--space-6);
+  }
+
+  .page-title {
+    font-size: var(--text-3xl);
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-2);
+  }
+
+  .updated-text {
+    color: var(--color-text-tertiary);
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-8);
+  }
+
+  .policy-section {
+    margin-bottom: var(--space-8);
+  }
+
+  .policy-section h2 {
+    font-size: var(--text-xl);
+    margin-bottom: var(--space-2);
+  }
+
+  .policy-section p,
+  .policy-section li {
+    color: var(--color-text-secondary);
+    line-height: var(--leading-relaxed);
+  }
+
+  .policy-section ul {
+    padding-left: var(--space-6);
+  }
+</style>

@@ -123,6 +123,10 @@ export const formatWebCitation = (excerpt: Excerpt, collection: Collection): str
 export const formatAnonymousCitation = (excerpt: Excerpt, collection: Collection): string => {
     void excerpt;
     const title = collection.roman;
+    const author = formatAuthorName(collection);
+    if (author) {
+        return `${title}, ${author}`;
+    }
     return `${title}`;
 };
 
