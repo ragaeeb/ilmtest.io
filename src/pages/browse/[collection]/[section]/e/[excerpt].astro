@@ -9,9 +9,11 @@ import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
 // Import data
 import collectionsData from '@/data/collections.json';
-import indexes from '@/data/indexes.json';
+import indexesData from '@/data/indexes.json';
+import translatorsData from '@/data/translators.json';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { formatCitation } from '@/lib/citations';
+import { arabicToWestern } from '@/lib/arabic';
 import type { Collection } from '@/types/excerpts';
 
 const { collection: collectionSlug, section, excerpt: excerptId } = Astro.params;
@@ -21,7 +23,16 @@ if (!collectionSlug || !section || !excerptId) {
 }
 
 // Find collection metadata
-const collections = collectionsData as Collection[];
+const indexes = indexesData as Record<string, any>;
+
+function getCollections(): Collection[] {
+    if (Array.isArray(collectionsData)) {
+        return collectionsData as Collection[];
+    }
+    return (collectionsData as { collections?: Collection[] }).collections ?? [];
+}
+
+const collections = getCollections();
 const collectionData = collections.find((c) => c.slug === collectionSlug);
 
 if (!collectionData) {
@@ -29,15 +40,15 @@ if (!collectionData) {
 }
 
 // Verify this excerpt belongs to this section
-const expectedSection = indexes.excerptToSection?.[excerptId];
-if (expectedSection !== section) {
+const sectionExcerptIds = new Set((indexes.sectionToExcerpts?.[section] || []) as string[]);
+if (!sectionExcerptIds.has(excerptId)) {
     return Astro.redirect('/404');
 }
 
 // Load chunks for this section
 const allChunks = await getCollection('excerpt-chunks');
 const sectionChunks = allChunks.filter(
-    (chunk) => chunk.data.sectionId === section && chunk.id.startsWith(`${collectionData.id}-`),
+    (chunk) => chunk.data.sectionId === section && chunk.id.startsWith(`${collectionData.id}/`),
 );
 
 // Find the specific excerpt
@@ -56,18 +67,35 @@ if (!excerpt) {
 // Get the section heading for breadcrumb
 const headingExcerpt = sectionChunks
     .flatMap((chunk) => chunk.data.excerpts)
-    .find((e: any) => e.meta?.type === 'C' || e.meta?.type === 'B');
+    .find((e: any) => e.id === section);
 
 const sectionTitle = headingExcerpt?.text || `Section ${section}`;
 
 // Format citation using the actual collection data
 const citation = formatCitation(excerpt, collectionData);
 
+const translators = Array.isArray(translatorsData)
+    ? translatorsData
+    : ((translatorsData as { translators?: Array<{ id: number; name: string }> }).translators ?? []);
+const translatorName = translators.find((translator) => translator.id === excerpt.translator)?.name;
+
+const excerptWords = excerpt.text.split(/\s+/).filter(Boolean);
+const excerptPreview = excerptWords.slice(0, 8).join(' ');
+const excerptLabel = excerptWords.length > 8 ? `${excerptPreview}…` : excerptPreview;
+
+const formatHadithNumber = (num?: string) => {
+    if (!num) {
+        return null;
+    }
+    const western = arabicToWestern(num);
+    return Number.isNaN(western) ? num : western.toString();
+};
+
 const breadcrumbItems = [
     { label: 'Browse', href: '/browse' },
     { label: collectionData.roman, href: `/browse/${collectionSlug}` },
     { label: sectionTitle, href: `/browse/${collectionSlug}/${section}` },
-    { label: `Excerpt ${excerptId}` },
+    { label: excerptLabel || 'Excerpt' },
 ];
 
 // Set cache headers for edge caching
@@ -134,7 +162,7 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
                         excerpt.meta?.num && (
                             <div class="metadata-item">
                                 <dt>Hadith Number</dt>
-                                <dd>{excerpt.meta.num}</dd>
+                                <dd>#{formatHadithNumber(excerpt.meta.num)}</dd>
                             </div>
                         )
                     }
@@ -151,7 +179,7 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
                     }
                     <div class="metadata-item">
                         <dt>Translator</dt>
-                        <dd>AI Model #{excerpt.translator}</dd>
+                        <dd>{translatorName || excerpt.translator}</dd>
                     </div>
                 </dl>
             </section>

@@ -1,49 +1,48 @@
 import { mkdir } from 'node:fs/promises';
 import { format, join } from 'node:path';
-import { doApiGet, getCollection, getEntity, getLibrary, init, type Translator } from '@ilmtest/ilmtest-sdk-js';
+import {
+    doApiGet,
+    getCollection,
+    getEntity,
+    getLibrary,
+    init,
+    type Translator as SDKTranslator,
+} from '@ilmtest/ilmtest-sdk-js';
 import type { BookData } from 'shamela';
 import { slugify } from '@/lib/textUtils';
-import type { Collection, Compilation, Excerpt } from '@/types/excerpts';
-import { getChunkFilename, groupAndChunkExcerpts } from './chunking';
+import { chunkExcerpts } from './chunking';
+import { addEntityMappings, generateIndexes, mergeIndexes, type LookupIndexes } from './indexing';
+import type { Collection, Compilation, Excerpt, Heading } from '@/types/excerpts';
 import { HF_ASL_STORE, HF_EXCERPT_STORE, HF_SHAMELA4_STORE, HF_TOKEN, ILMTEST_API_URL, OUTPUT_DIR } from './env';
 import { downloadDataSet } from './huggingface';
-import { addEntityMappings, mergeIndexes } from './indexing';
 import { decompressJson } from './io';
-import {
-    getExcerptsUnderTitle,
-    mapHeadingIdToShamelaTitleId,
-    mapTitlesToTableOfContents,
-    mapTitleTreeToHeadingTree,
-    type TitleNode,
-} from './mapping';
+import { mapHeadingIdToShamelaTitleId, mapTitlesToTableOfContents, type TitleNode } from './mapping';
 
 const SHAMELA4_LIBRARY_ID = '75';
+const OUTPUT_DATA_DIR = 'src/data';
+const CONTENT_CHUNKS_DIR = 'src/content/excerpt-chunks';
+const COLLECTIONS_FILE = 'collections.json';
+const TRANSLATORS_FILE = 'translators.json';
+const INDEXES_FILE = 'indexes.json';
 
-/** Output directories for generated files */
-const INDEXES_DIR = 'src/data';
-const CHUNKS_DIR = 'src/content/excerpt-chunks';
+// ============================================================================
+// Data Loading
+// ============================================================================
 
 const downloadAndUnzipFile = async <T = unknown>(id: string, dataset: string) => {
     const fileName = `${id}.json.br`;
-    const buffer = await downloadDataSet(dataset, fileName, {
-        authToken: HF_TOKEN,
-    });
-
+    const buffer = await downloadDataSet(dataset, fileName, { authToken: HF_TOKEN });
     console.log('Uncompressing...', fileName);
-
     return decompressJson<T>(buffer);
 };
 
 const loadCollection = async (id: string): Promise<Collection> => {
     console.log('Downloading collection...');
-
     const [collection] = await getCollection(parseInt(id, 10));
     const [library] = await getLibrary(collection.library!);
-    library.url_template = library.url_template!.replace('{id}', collection.fid!);
-    library.url_template = library.url_template.replace('{page}', ':page');
+    library.url_template = library.url_template!.replace('{id}', collection.fid!).replace('{page}', ':page');
 
     const [entity] = collection.author ? await getEntity(collection.author) : [];
-
     const slug = slugify(collection.title!, entity.display_name);
 
     return {
@@ -82,299 +81,403 @@ const loadExcerpts = async (collectionId: string): Promise<Compilation> => {
     excerpts.sourceDocument = await downloadAndUnzipFile(excerpts.collection.src.fid, store);
 
     const serialized = JSON.stringify(excerpts, null, 2);
-
     console.log('Saving', excerptsFile, serialized.length, 'bytes');
     await Bun.write(excerptsFile, serialized);
 
     return excerpts;
 };
 
-const loadTranslators = async (): Promise<Translator[]> => {
+const loadTranslators = async (): Promise<SDKTranslator[]> => {
     const jsonFile = join(OUTPUT_DIR, 'translators.json');
 
     if (!(await Bun.file(jsonFile).exists())) {
         console.log('Downloading translators');
-
-        const translators = (await doApiGet<Translator[]>('translators', { limit: -1 })).map((t) => ({
+        const translators = (await doApiGet<SDKTranslator[]>('translators', { limit: -1 })).map((t) => ({
             id: t.id,
             name: t.name,
         }));
-
         await Bun.write(jsonFile, JSON.stringify(translators));
-
         return translators;
     }
 
     return Bun.file(jsonFile).json();
 };
 
-/**
- * Fill in missing translator fields by using the translator from
- * the previous or next excerpt that has one defined.
- */
-const fillMissingTranslators = (excerpts: Excerpt[]): void => {
-    for (let i = 0; i < excerpts.length; i++) {
-        if (excerpts[i].translator === undefined || excerpts[i].translator === null) {
-            // Try previous, then next, then fallback to default
-            const translator = excerpts[i - 1]?.translator ?? excerpts[i + 1]?.translator ?? 890;
-            console.log(`  Filled missing translator for ${excerpts[i].id} with ${translator}`);
-            excerpts[i].translator = translator;
-        }
-    }
+// ============================================================================
+// Heading Range Computation (Migration Pattern)
+// ============================================================================
+
+type HeadingWithRange = Heading & {
+    indexRange: { start: number; end: number };
+    pageRange: { start: number; end: number };
+    range: { start: string; end: string };
 };
 
 /**
- * Generate indexes for Shamela books with hierarchical title structure.
+ * Find the start index for a heading by page number
  */
-const generateShamelaIndexes = (
-    data: Compilation,
-    collectionId: string,
-    titleTree: TitleNode[],
-): {
-    sectionToExcerpts: Record<string, string[]>;
-    excerptToSection: Record<string, string>;
-    pageToHeading: Record<number, string>;
-    collectionToSections: Record<string, string[]>;
-} => {
-    const sectionToExcerpts: Record<string, string[]> = {};
-    const excerptToSection: Record<string, string> = {};
-    const pageToHeading: Record<number, string> = {};
-    const collectionToSections: Record<string, string[]> = {};
+function findHeadingStartIndex(from: number, pageMap: Map<number, number>): number | undefined {
+    let startIndex = pageMap.get(from);
 
-    // Convert title tree to heading tree
-    const headingTree = mapTitleTreeToHeadingTree(titleTree, data.headings);
-    console.log('headingTree', headingTree);
-
-    // Flatten the tree to get all headings
-    const flattenHeadings = (nodes: typeof headingTree, result: typeof data.headings = []): typeof data.headings => {
-        for (const node of nodes) {
-            result.push(node);
-            if (node.children) {
-                flattenHeadings(node.children, result);
-            }
-        }
-        return result;
-    };
-
-    const allHeadings = flattenHeadings(headingTree);
-
-    // Initialize empty arrays for all headings
-    for (const heading of allHeadings) {
-        pageToHeading[heading.from] = heading.id;
-        sectionToExcerpts[heading.id] = [];
-    }
-
-    // Map collection to root-level headings only
-    collectionToSections[collectionId] = headingTree.map((h) => h.id);
-
-    // Create set of valid heading IDs for boundary filtering
-    const validHeadingIds = new Set(data.headings.map((h) => mapHeadingIdToShamelaTitleId(h)));
-
-    // Assign excerpts to headings using hierarchical logic
-    const assignExcerptsToHeading = (node: (typeof headingTree)[0], titleNode: TitleNode) => {
-        const excerpts = getExcerptsUnderTitle(titleTree, data.excerpts, titleNode, validHeadingIds);
-
-        for (const excerpt of excerpts) {
-            excerptToSection[excerpt.id] = node.id;
-            sectionToExcerpts[node.id].push(excerpt.id);
-        }
-
-        // Recursively process children
-        if (node.children && titleNode.children) {
-            for (let i = 0; i < node.children.length; i++) {
-                assignExcerptsToHeading(node.children[i], titleNode.children[i]);
-            }
-        }
-    };
-
-    // Process each root heading
-    for (const headingNode of headingTree) {
-        const titleId = mapHeadingIdToShamelaTitleId(headingNode);
-        const titleNode = titleTree.find((t) => t.id === titleId);
-
-        if (titleNode) {
-            assignExcerptsToHeading(headingNode, titleNode);
-        }
-    }
-
-    return {
-        sectionToExcerpts,
-        excerptToSection,
-        pageToHeading,
-        collectionToSections,
-    };
-};
-
-/**
- * Generate indexes for web-scraped content with flat page structure.
- */
-const generateFlatIndexes = (
-    data: Compilation,
-    collectionId: string,
-): {
-    sectionToExcerpts: Record<string, string[]>;
-    excerptToSection: Record<string, string>;
-    pageToHeading: Record<number, string>;
-    collectionToSections: Record<string, string[]>;
-} => {
-    const sectionToExcerpts: Record<string, string[]> = {};
-    const excerptToSection: Record<string, string> = {};
-    const pageToHeading: Record<number, string> = {};
-    const collectionToSections: Record<string, string[]> = {};
-
-    // Sort headings by page number
-    const sortedHeadings = [...data.headings].sort((a, b) => a.from - b.from);
-
-    // Initialize empty arrays for all headings
-    for (const heading of sortedHeadings) {
-        pageToHeading[heading.from] = heading.id;
-        sectionToExcerpts[heading.id] = [];
-    }
-
-    // Map collection to all headings
-    collectionToSections[collectionId] = sortedHeadings.map((h) => h.id);
-
-    // Assign each excerpt to the appropriate heading
-    // An excerpt belongs to the last heading whose 'from' <= excerpt's 'from'
-    for (const excerpt of data.excerpts) {
-        let assignedHeading: string | null = null;
-
-        for (const heading of sortedHeadings) {
-            if (heading.from <= excerpt.from) {
-                assignedHeading = heading.id;
-            } else {
+    // Fallback: If exact page has no content, try next few pages
+    if (startIndex === undefined) {
+        for (let p = from + 1; p <= from + 10; p++) {
+            if (pageMap.has(p)) {
+                startIndex = pageMap.get(p);
                 break;
             }
         }
+    }
 
-        if (assignedHeading) {
-            excerptToSection[excerpt.id] = assignedHeading;
-            sectionToExcerpts[assignedHeading].push(excerpt.id);
+    return startIndex;
+}
+
+/**
+ * Calculate end index for a heading based on next headings
+ * Following migration logic for parent/child relationships
+ */
+function calculateHeadingEndIndex(
+    headingIndex: number,
+    headings: Array<{ parent?: string; startIndex: number }>,
+    contentLength: number,
+): number {
+    const current = headings[headingIndex];
+    const isBook = !current.parent;
+    let endIndex = contentLength - 1;
+
+    for (let j = headingIndex + 1; j < headings.length; j++) {
+        const next = headings[j];
+        const nextIsBook = !next.parent;
+
+        if (isBook && nextIsBook) {
+            // A Book ends when the next Book starts
+            endIndex = next.startIndex - 1;
+            break;
+        } else if (!isBook) {
+            // A Chapter ends when the next Chapter OR next Book starts
+            if (nextIsBook || next.startIndex > current.startIndex) {
+                endIndex = next.startIndex - 1;
+                break;
+            }
         }
     }
 
-    return {
-        sectionToExcerpts,
-        excerptToSection,
-        pageToHeading,
-        collectionToSections,
-    };
-};
+    // Ensure valid range
+    return Math.max(endIndex, current.startIndex);
+}
 
-export const setup = async (...collectionIds: string[]) => {
-    console.log('Starting setup');
+/**
+ * Compute ranges for Shamela headings
+ * Maps title IDs to heading IDs, preserves parent relationships
+ */
+function computeShamelaHeadingRanges(
+    titleTree: TitleNode[],
+    headings: Heading[],
+    excerpts: Excerpt[],
+): HeadingWithRange[] {
+    // Create map of title ID -> heading
+    const titleIdToHeading = new Map<number, Heading>();
+    for (const heading of headings) {
+        const titleId = mapHeadingIdToShamelaTitleId(heading);
+        titleIdToHeading.set(titleId, heading);
+    }
 
-    init('3', ILMTEST_API_URL!);
+    // Flatten title tree while preserving parent references
+    const flatTitles: Array<{ titleId: number; parent?: number; page: number }> = [];
 
-    // Ensure output directories exist
-    await mkdir(INDEXES_DIR, { recursive: true });
-    await mkdir(CHUNKS_DIR, { recursive: true });
-
-    let allIndexes = mergeIndexes();
-    let translators = await loadTranslators();
-    const usedTranslatorIds = new Set<number>();
-    let totalChunks = 0;
-    const collections: Collection[] = [];
-
-    for (const id of collectionIds) {
-        const data = await loadExcerpts(id);
-
-        // Store collection metadata
-        collections.push(data.collection);
-
-        // Fill in missing translator fields
-        console.log(`Checking and filling missing translators for collection ${id}...`);
-        fillMissingTranslators(data.excerpts);
-        fillMissingTranslators(data.headings);
-
-        // Generate indexes based on data structure type
-        console.log(`Generating indexes for collection ${id}...`);
-        let indexes: any;
-
-        // Check if this is a Shamela book (has titles) or web-scraped (has pages)
-        if ((data.sourceDocument as BookData)?.titles) {
-            const asl = data.sourceDocument as BookData;
-
-            console.log('  Detected Shamela book with hierarchical titles');
-            const titleTree = mapTitlesToTableOfContents(asl.titles);
-            indexes = generateShamelaIndexes(data, id, titleTree);
-        } else {
-            console.log('  Detected web-scraped content with flat pages');
-            indexes = generateFlatIndexes(data, id);
-        }
-
-        // Debug: Print section statistics
-        console.log('  Section statistics:');
-        for (const [sectionId, excerptIds] of Object.entries(indexes.sectionToExcerpts)) {
-            const heading = data.headings.find((h) => h.id === sectionId);
-            console.log(`    ${sectionId}: ${excerptIds.length} excerpts - "${heading?.text || heading?.nass}"`);
-        }
-
-        // Verify all excerpts are assigned
-        const unassignedExcerpts = data.excerpts.filter((e) => !indexes.excerptToSection[e.id]);
-        if (unassignedExcerpts.length > 0) {
-            console.warn(`  ⚠️  ${unassignedExcerpts.length} excerpts not assigned to any section:`);
-            unassignedExcerpts.slice(0, 5).forEach((e) => {
-                console.warn(`    - ${e.id} (page ${e.from})`);
-            });
-        }
-
-        allIndexes = mergeIndexes(allIndexes, indexes);
-
-        // Add entity mappings for authors
-        addEntityMappings(
-            allIndexes,
-            id,
-            data.collection.authors.map((a) => a.id),
-        );
-
-        // Chunk excerpts by section
-        console.log(`Chunking excerpts for collection ${id}...`);
-        const chunks = groupAndChunkExcerpts(data.excerpts, indexes.excerptToSection, id);
-
-        // Write chunks to output directory
-        let chunkCount = 0;
-        for (const [sectionId, sectionChunks] of chunks) {
-            for (const chunk of sectionChunks) {
-                const filename = getChunkFilename(id, sectionId, chunk.chunkIndex);
-                const chunkPath = join(CHUNKS_DIR, filename);
-                await Bun.write(chunkPath, JSON.stringify(chunk));
-                chunkCount++;
+    const flatten = (nodes: TitleNode[], parentId?: number) => {
+        for (const node of nodes) {
+            // Only include titles that have headings
+            if (titleIdToHeading.has(node.id)) {
+                flatTitles.push({ titleId: node.id, parent: parentId, page: node.page });
+            }
+            if (node.children) {
+                flatten(node.children, node.id);
             }
         }
+    };
 
-        totalChunks += chunkCount;
-        console.log(`  Created ${chunks.size} sections, ${chunkCount} chunk files`);
+    flatten(titleTree);
 
-        data.excerpts.concat(data.headings).forEach((e) => {
-            usedTranslatorIds.add(e.translator);
+    // Map page numbers to first excerpt index
+    const pageMap = new Map<number, number>();
+    excerpts.forEach((item, index) => {
+        if (!pageMap.has(item.from)) {
+            pageMap.set(item.from, index);
+        }
+    });
+
+    // Determine start index for each heading
+    const headingsWithIndex = flatTitles
+        .map((t) => {
+            const heading = titleIdToHeading.get(t.titleId)!;
+            const startIndex = findHeadingStartIndex(heading.from, pageMap);
+
+            if (startIndex === undefined) {
+                return null;
+            }
+
+            // Map parent title ID to parent heading ID
+            const parentHeadingId = t.parent ? titleIdToHeading.get(t.parent)?.id : undefined;
+
+            return {
+                ...heading,
+                ...(parentHeadingId ? { parent: parentHeadingId } : {}),
+                startIndex,
+            };
+        })
+        .filter((h): h is NonNullable<typeof h> => h !== null);
+
+    // Sort by index
+    headingsWithIndex.sort((a, b) => a.startIndex - b.startIndex);
+
+    // Calculate ranges
+    return headingsWithIndex.map((h, i, arr) => {
+        const startIndex = h.startIndex;
+        const endIndex = calculateHeadingEndIndex(i, arr, excerpts.length);
+
+        const startId = excerpts[startIndex].id;
+        const endId = excerpts[endIndex].id;
+        const startPage = excerpts[startIndex].from;
+        const endPage = excerpts[endIndex].from;
+
+        return {
+            ...h,
+            indexRange: { start: startIndex, end: endIndex },
+            pageRange: { start: startPage, end: endPage },
+            range: { start: startId, end: endId },
+        };
+    });
+}
+
+/**
+ * Compute ranges for web scraped headings (simple page-based)
+ */
+function computeWebHeadingRanges(headings: Heading[], excerpts: Excerpt[]): HeadingWithRange[] {
+    // Map page to excerpt indices
+    const pageToIndices = new Map<number, number[]>();
+    excerpts.forEach((e, idx) => {
+        if (!pageToIndices.has(e.from)) {
+            pageToIndices.set(e.from, []);
+        }
+        pageToIndices.get(e.from)!.push(idx);
+    });
+
+    return headings.map((heading) => {
+        const indices = pageToIndices.get(heading.from) || [];
+
+        if (indices.length === 0) {
+            // No excerpts on this page - use page number as fallback
+            return {
+                ...heading,
+                indexRange: { start: 0, end: 0 },
+                pageRange: { start: heading.from, end: heading.from },
+                range: { start: heading.id, end: heading.id },
+            };
+        }
+
+        const startIndex = Math.min(...indices);
+        const endIndex = Math.max(...indices);
+        const startId = excerpts[startIndex].id;
+        const endId = excerpts[endIndex].id;
+
+        return {
+            ...heading,
+            indexRange: { start: startIndex, end: endIndex },
+            pageRange: { start: heading.from, end: heading.from },
+            range: { start: startId, end: endId },
+        };
+    });
+}
+
+const buildHeadingMarkers = (headings: Heading[]) => {
+    const headingMarkers = new Map<string, Excerpt>();
+    for (const heading of headings) {
+        headingMarkers.set(heading.id, {
+            id: heading.id,
+            from: heading.from,
+            nass: heading.nass,
+            text: heading.text,
+            translator: heading.translator,
+            lastUpdatedAt: heading.lastUpdatedAt,
         });
     }
 
-    // Write lookup indexes
-    const indexesPath = join(INDEXES_DIR, 'indexes.json');
-    await Bun.write(indexesPath, JSON.stringify(allIndexes, null, 2));
-    console.log(`Generated ${indexesPath}`);
-
-    // Write collections metadata
-    const collectionsPath = join(INDEXES_DIR, 'collections.json');
-    await Bun.write(collectionsPath, JSON.stringify(collections, null, 2));
-    console.log(`Generated ${collectionsPath}`);
-
-    translators = translators.filter((t) => usedTranslatorIds.has(t.id)).map((t) => ({ id: t.id, name: t.name }));
-
-    // Write filtered translators
-    const translatorsPath = join(INDEXES_DIR, 'translators.json');
-    await Bun.write(translatorsPath, JSON.stringify(translators, null, 2));
-    console.log(`Generated ${translatorsPath}`);
-
-    console.log(`\nSetup complete!`);
-    console.log(`  Collections: ${collectionIds.length}`);
-    console.log(`  Total chunks: ${totalChunks}`);
-    console.log(`  Translators: ${translators.length}`);
+    return headingMarkers;
 };
 
-// Run if executed directly
+const buildSectionToExcerptsFromRanges = (headingsWithRanges: HeadingWithRange[], excerpts: Excerpt[]) => {
+    const sectionToExcerpts: Record<string, string[]> = {};
+
+    for (const heading of headingsWithRanges) {
+        if (!heading.indexRange) {
+            continue;
+        }
+
+        const { start, end } = heading.indexRange;
+        const slice = excerpts.slice(start, end + 1);
+        sectionToExcerpts[heading.id] = slice.map((excerpt) => excerpt.id);
+    }
+
+    return sectionToExcerpts;
+};
+
+const backfillMissingTranslators = (items: Array<{ id: string; translator?: number }>, label: string) => {
+    for (let i = 0; i < items.length; i++) {
+        if (items[i].translator !== undefined) {
+            continue;
+        }
+
+        const prevTranslator = i > 0 ? items[i - 1].translator : undefined;
+        const nextTranslator = i + 1 < items.length ? items[i + 1].translator : undefined;
+        const fallback = prevTranslator ?? nextTranslator;
+
+        if (fallback !== undefined) {
+            items[i].translator = fallback;
+            console.warn(
+                `⚠️  Missing translator for ${label} ${items[i].id}; backfilled with ${fallback}.`,
+            );
+        } else {
+            console.warn(
+                `⚠️  Missing translator for ${label} ${items[i].id}; no adjacent value found. Using 0.`,
+            );
+            items[i].translator = 0;
+        }
+    }
+};
+
+const writeSectionChunks = async (
+    collectionId: string,
+    data: Compilation,
+    sectionToExcerpts: Record<string, string[]>,
+    headingMarkers: Map<string, Excerpt>,
+) => {
+    const excerptById = new Map(data.excerpts.map((excerpt) => [excerpt.id, excerpt]));
+    let chunkCount = 0;
+
+    for (const [sectionId, excerptIds] of Object.entries(sectionToExcerpts)) {
+        const sectionExcerpts = excerptIds
+            .map((excerptId) => excerptById.get(excerptId))
+            .filter((e): e is Excerpt => Boolean(e))
+            .sort((a, b) => a.from - b.from);
+
+        const headingMarker = headingMarkers.get(sectionId);
+        if (headingMarker) {
+            const existingIndex = sectionExcerpts.findIndex((excerpt) => excerpt.id === sectionId);
+            if (existingIndex !== -1) {
+                sectionExcerpts.splice(existingIndex, 1);
+            }
+            sectionExcerpts.unshift(headingMarker);
+        }
+
+        const chunks = chunkExcerpts(sectionExcerpts, sectionId);
+        for (const chunk of chunks) {
+            const safeSectionId = sectionId.replace(/[^a-zA-Z0-9]/g, '-');
+            const sectionDir = join(CONTENT_CHUNKS_DIR, collectionId, safeSectionId);
+            await mkdir(sectionDir, { recursive: true });
+            const chunkPath = join(sectionDir, `chunk-${chunk.chunkIndex}.json`);
+            await Bun.write(chunkPath, JSON.stringify(chunk, null, 2));
+            chunkCount += 1;
+        }
+    }
+
+    return chunkCount;
+};
+
+// ============================================================================
+// Main Setup
+// ============================================================================
+
+export const setup = async (...collectionIds: string[]) => {
+    console.log('Starting setup\n');
+
+    init('3', ILMTEST_API_URL!);
+
+    await mkdir(OUTPUT_DATA_DIR, { recursive: true });
+    await mkdir(CONTENT_CHUNKS_DIR, { recursive: true });
+
+    const allTranslators = await loadTranslators();
+    const collections: Collection[] = [];
+    const indexPartials: Partial<LookupIndexes>[] = [];
+
+    for (const id of collectionIds) {
+        console.log(`\n📚 Processing collection ${id}...`);
+        const data = await loadExcerpts(id);
+        collections.push(data.collection);
+
+        backfillMissingTranslators(data.excerpts, 'excerpt');
+        backfillMissingTranslators(data.headings, 'heading');
+
+        // Compute heading ranges based on source type
+        let headingsWithRanges: HeadingWithRange[];
+        let topLevelHeadingIds: string[] = [];
+
+        if ((data.sourceDocument as BookData)?.titles) {
+            console.log('  Type: Shamela book');
+            const titleTree = mapTitlesToTableOfContents((data.sourceDocument as BookData).titles);
+            headingsWithRanges = computeShamelaHeadingRanges(titleTree, data.headings, data.excerpts);
+
+            const rootTitleIds = new Set(titleTree.map((title) => title.id));
+            topLevelHeadingIds = data.headings
+                .filter((heading) => rootTitleIds.has(mapHeadingIdToShamelaTitleId(heading)))
+                .map((heading) => heading.id);
+        } else {
+            console.log('  Type: Web scraped');
+            headingsWithRanges = computeWebHeadingRanges(data.headings, data.excerpts);
+            topLevelHeadingIds = headingsWithRanges.filter((heading) => !heading.parent).map((heading) => heading.id);
+        }
+
+        console.log(`  ✓ ${data.excerpts.length} excerpts`);
+        console.log(`  ✓ ${headingsWithRanges.length} headings with ranges`);
+
+        // Generate lookup indexes for this collection
+        const partialIndexes = generateIndexes(data, id);
+        const rangeSectionToExcerpts = buildSectionToExcerptsFromRanges(headingsWithRanges, data.excerpts);
+
+        // Ensure heading IDs map to themselves (used for section title lookup)
+        partialIndexes.excerptToSection ??= {};
+        for (const heading of data.headings) {
+            partialIndexes.excerptToSection[heading.id] = heading.id;
+        }
+        partialIndexes.sectionToExcerpts = rangeSectionToExcerpts;
+        partialIndexes.collectionToSections = {
+            [id]: topLevelHeadingIds,
+        };
+        indexPartials.push(partialIndexes);
+
+        const sectionToExcerpts = rangeSectionToExcerpts;
+        const headingMarkers = buildHeadingMarkers(data.headings);
+        const chunkCount = await writeSectionChunks(id, data, sectionToExcerpts, headingMarkers);
+        console.log(`  ✓ ${chunkCount} content chunks written to ${CONTENT_CHUNKS_DIR}`);
+    }
+
+    // Merge indexes across collections
+    const indexes = mergeIndexes(...indexPartials);
+    for (const collection of collections) {
+        const authorIds = collection.authors.map((author) => author.id);
+        if (authorIds.length > 0) {
+            addEntityMappings(indexes, collection.id, authorIds);
+        }
+    }
+
+    // Write collections metadata
+    const collectionsPath = join(OUTPUT_DATA_DIR, COLLECTIONS_FILE);
+    await Bun.write(collectionsPath, JSON.stringify(collections, null, 2));
+    console.log(`\n✓ Written ${collectionsPath}`);
+
+    // Write translators
+    const translatorsPath = join(OUTPUT_DATA_DIR, TRANSLATORS_FILE);
+    await Bun.write(translatorsPath, JSON.stringify(allTranslators, null, 2));
+    console.log(`✓ Written ${translatorsPath}`);
+
+    // Write lookup indexes
+    const indexesPath = join(OUTPUT_DATA_DIR, INDEXES_FILE);
+    await Bun.write(indexesPath, JSON.stringify(indexes, null, 2));
+    console.log(`✓ Written ${indexesPath}`);
+
+    console.log('\n✅ Setup complete!');
+};
+
 if (import.meta.main) {
     await setup('1118', '2576');
 }

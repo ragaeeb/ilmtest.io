@@ -7,13 +7,17 @@ import Breadcrumb from '@/components/ui/Breadcrumb.astro';
 import Card from '@/components/ui/Card.astro';
 // Import data
 import collectionsData from '@/data/collections.json';
-import indexes from '@/data/indexes.json';
+import indexesData from '@/data/indexes.json';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import type { Collection } from '@/types/excerpts';
 
+const indexes = indexesData as Record<string, any>;
+
 // Generate static paths for all collections
 export async function getStaticPaths() {
-    const collections = collectionsData as Collection[];
+    const collections = Array.isArray(collectionsData)
+        ? (collectionsData as Collection[])
+        : ((collectionsData as { collections?: Collection[] }).collections ?? []);
     return collections.map((col) => ({
         params: { collection: col.slug },
     }));
@@ -26,7 +30,9 @@ if (!collectionSlug) {
 }
 
 // Find the collection metadata
-const collections = collectionsData as Collection[];
+const collections = Array.isArray(collectionsData)
+    ? (collectionsData as Collection[])
+    : ((collectionsData as { collections?: Collection[] }).collections ?? []);
 const collectionData = collections.find((c) => c.slug === collectionSlug);
 
 if (!collectionData) {
@@ -34,7 +40,7 @@ if (!collectionData) {
 }
 
 // Get sections for this collection
-const sections = indexes.collectionToSections?.[collectionData.id] || [];
+const sections = (indexes.collectionToSections?.[collectionData.id] || []) as string[];
 
 if (sections.length === 0) {
     return Astro.redirect('/browse');
@@ -44,36 +50,26 @@ if (sections.length === 0) {
 const allChunks = await getCollection('excerpt-chunks');
 
 // Filter chunks for this collection and extract headings
-const collectionChunks = allChunks.filter((chunk) => chunk.id.startsWith(`${collectionData.id}-`));
+const collectionChunks = allChunks.filter((chunk) => chunk.id.startsWith(`${collectionData.id}/`));
 
-// Extract headings from chunks
+const sectionIdSet = new Set(sections);
+
+// Extract headings from chunks (by section IDs from indexes)
 const headings = collectionChunks
     .flatMap((chunk) => chunk.data.excerpts)
-    .filter((excerpt) => excerpt.meta?.type === 'C' || excerpt.meta?.type === 'B')
+    .filter((excerpt) => sectionIdSet.has(excerpt.id))
     .map((heading) => ({
         id: heading.id,
         nass: heading.nass,
         text: heading.text,
         from: heading.from,
-        type: heading.meta?.type,
     }));
 
-// Group headings by section
-const sectionHeadings = new Map<string, typeof headings>();
-for (const heading of headings) {
-    const sectionId = indexes.excerptToSection?.[heading.id];
-    if (sectionId) {
-        if (!sectionHeadings.has(sectionId)) {
-            sectionHeadings.set(sectionId, []);
-        }
-        sectionHeadings.get(sectionId)!.push(heading);
-    }
-}
+const headingsById = new Map(headings.map((heading) => [heading.id, heading]));
 
 // Create section items with their primary heading
-const sectionItems = sections.map((sectionId) => {
-    const sectionHeadingList = sectionHeadings.get(sectionId) || [];
-    const primaryHeading = sectionHeadingList[0];
+const sectionItems = sections.map((sectionId: string) => {
+    const primaryHeading = headingsById.get(sectionId);
 
     return {
         id: sectionId,
@@ -109,7 +105,7 @@ const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: collecti
 
         <div class="sections-list">
             {
-                sectionItems.map((section) => (
+                sectionItems.map((section: { id: string; title: string; titleArabic: string; excerptCount: number }) => (
                     <Card variant="outlined" hoverable href={`/browse/${collectionSlug}/${section.id}`}>
                         <div class="section-content">
                             <div class="section-titles">

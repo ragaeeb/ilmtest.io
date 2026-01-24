@@ -7,17 +7,21 @@ import Breadcrumb from '@/components/ui/Breadcrumb.astro';
 import Card from '@/components/ui/Card.astro';
 // Import data
 import collectionsData from '@/data/collections.json';
-import indexes from '@/data/indexes.json';
+import indexesData from '@/data/indexes.json';
 import BaseLayout from '@/layouts/BaseLayout.astro';
+import { arabicToWestern } from '@/lib/arabic';
 import type { Collection } from '@/types/excerpts';
 
 // Generate static paths for all sections in all collections
 export async function getStaticPaths() {
-    const collections = collectionsData as Collection[];
+    const indexes = indexesData as Record<string, any>;
+    const collections = Array.isArray(collectionsData)
+        ? (collectionsData as Collection[])
+        : ((collectionsData as { collections?: Collection[] }).collections ?? []);
     const paths = [];
 
     for (const collection of collections) {
-        const sections = indexes.collectionToSections?.[collection.id] || [];
+        const sections = (indexes.collectionToSections?.[collection.id] || []) as string[];
         for (const section of sections) {
             paths.push({
                 params: {
@@ -38,7 +42,10 @@ if (!collectionSlug || !section) {
 }
 
 // Find collection metadata
-const collections = collectionsData as Collection[];
+const indexes = indexesData as Record<string, any>;
+const collections = Array.isArray(collectionsData)
+    ? (collectionsData as Collection[])
+    : ((collectionsData as { collections?: Collection[] }).collections ?? []);
 const collectionData = collections.find((c) => c.slug === collectionSlug);
 
 if (!collectionData) {
@@ -46,7 +53,7 @@ if (!collectionData) {
 }
 
 // Get excerpts for this section
-const excerptIds = indexes.sectionToExcerpts?.[section] || [];
+const excerptIds = (indexes.sectionToExcerpts?.[section] || []) as string[];
 
 if (excerptIds.length === 0) {
     return Astro.redirect(`/browse/${collectionSlug}`);
@@ -55,22 +62,32 @@ if (excerptIds.length === 0) {
 // Load chunks for this section
 const allChunks = await getCollection('excerpt-chunks');
 const sectionChunks = allChunks.filter(
-    (chunk) => chunk.data.sectionId === section && chunk.id.startsWith(`${collectionData.id}-`),
+    (chunk) => chunk.data.sectionId === section && chunk.id.startsWith(`${collectionData.id}/`),
 );
 
-// Extract all excerpts from chunks and filter out headings
+const headingIdSet = new Set(Object.keys(indexes.sectionToExcerpts ?? {}));
+
+// Extract all excerpts from chunks and filter out heading markers
 const excerpts = sectionChunks
     .flatMap((chunk) => chunk.data.excerpts)
-    .filter((excerpt) => !excerpt.meta?.type) // Exclude headings
+    .filter((excerpt) => !headingIdSet.has(excerpt.id))
     .sort((a, b) => a.from - b.from);
 
 // Get the section heading
 const headingExcerpt = sectionChunks
     .flatMap((chunk) => chunk.data.excerpts)
-    .find((excerpt) => excerpt.meta?.type === 'C' || excerpt.meta?.type === 'B');
+    .find((excerpt) => excerpt.id === section);
 
 const sectionTitle = headingExcerpt?.text || `Section ${section}`;
 const sectionTitleArabic = headingExcerpt?.nass || '';
+
+const formatHadithNumber = (num?: string) => {
+    if (!num) {
+        return null;
+    }
+    const western = arabicToWestern(num);
+    return Number.isNaN(western) ? num : western.toString();
+};
 
 const breadcrumbItems = [
     { label: 'Browse', href: '/browse' },
@@ -118,7 +135,9 @@ const breadcrumbItems = [
                             </div>
                             <div class="excerpt-meta">
                                 <span class="page-number">Page {excerpt.from}</span>
-                                {excerpt.meta?.num && <span class="hadith-num">#{excerpt.meta.num}</span>}
+                                {excerpt.meta?.num && (
+                                    <span class="hadith-num">#{formatHadithNumber(excerpt.meta.num)}</span>
+                                )}
                                 {excerpt.meta?.vol && (
                                     <span class="volume">
                                         Vol {excerpt.meta.vol}

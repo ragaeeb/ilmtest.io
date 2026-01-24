@@ -5,12 +5,20 @@ import Header from '@/components/layout/Header.astro';
 import Card from '@/components/ui/Card.astro';
 // Import collections data
 import collectionsData from '@/data/collections.json';
-import indexes from '@/data/indexes.json';
+import indexesData from '@/data/indexes.json';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import type { Collection } from '@/types/excerpts';
 
-// Type the imported data
-const collections = collectionsData as Collection[];
+const indexes = indexesData as Record<string, any>;
+
+function getCollections(): Collection[] {
+    if (Array.isArray(collectionsData)) {
+        return collectionsData as Collection[];
+    }
+    return (collectionsData as { collections?: Collection[] }).collections ?? [];
+}
+
+const collections = getCollections();
 
 // Enhance with section counts
 const collectionsWithCounts = collections.map((collection) => ({

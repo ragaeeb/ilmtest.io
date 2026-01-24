@@ -1,4 +1,5 @@
 import type { BookData, Page, Title } from 'shamela';
+import { arabicToWestern } from '@/lib/arabic';
 import type { Compilation, Excerpt, Heading } from '@/types/excerpts';
 
 /**
@@ -139,29 +140,20 @@ export const getExcerptsUnderTitle = (
 
     // If no children, return all excerpts in the range
     if (!selectedTitle.children?.length) {
-        if (selectedTitle.id === 184) {
-            console.log(`[DEBUG] T184 (Leaf) Range: [${selectedTitle.page}, ${nextTitlePage})`);
-        }
         return excerpts.filter((e) => e.from >= selectedTitle.page && e.from < nextTitlePage);
     }
 
     const firstChildPage = selectedTitle.children[0].page;
 
-    // Direct level: excerpts between title and first child
-    const directExcerpts = excerpts.filter((e) => e.from >= selectedTitle.page && e.from < firstChildPage);
-
-    // Deep level: excerpts at or after first child (nested content)
-    const deepExcerpts = excerpts.filter((e) => e.from >= firstChildPage && e.from < nextTitlePage);
-
-    if (selectedTitle.id === 184) {
-        console.log(`[DEBUG] T184 (Parent) Range: [${selectedTitle.page}, ${nextTitlePage})`);
-        console.log(`[DEBUG] FirstChild: ${firstChildPage}`);
-        console.log(`[DEBUG] Direct: ${directExcerpts.length} (ids: ${directExcerpts.map((e) => e.id).join(',')})`);
-        console.log(`[DEBUG] Deep: ${deepExcerpts.length} (ids: ${deepExcerpts.map((e) => e.id).join(',')})`);
+    // If parent and first child are on the same page, assign nothing to parent
+    // (all excerpts will be assigned to children via recursive processing)
+    if (firstChildPage === selectedTitle.page) {
+        return [];
     }
 
-    // Return whichever level has more excerpts (prefer direct on tie)
-    return deepExcerpts.length > directExcerpts.length ? deepExcerpts : directExcerpts;
+    // Otherwise, assign excerpts between parent and first child to parent
+    // (excerpts at/after first child will be assigned to children via recursion)
+    return excerpts.filter((e) => e.from >= selectedTitle.page && e.from < firstChildPage);
 };
 
 // Helper: Find the next title at the same level or higher
@@ -213,20 +205,4 @@ export const groundShamelaExcerpts = (data: Compilation, bookData: BookData) => 
     copyCitationDataToMeta(bookData.pages, data.excerpts);
 };
 
-const ARABIC_TO_WESTERN: Record<string, string> = {
-    '٠': '0',
-    '١': '1',
-    '٢': '2',
-    '٣': '3',
-    '٤': '4',
-    '٥': '5',
-    '٦': '6',
-    '٧': '7',
-    '٨': '8',
-    '٩': '9',
-} as const;
-
-export const arabicToWestern = (arabicNum: string) => {
-    const western = arabicNum.replace(/[٠-٩]/g, (d) => ARABIC_TO_WESTERN[d]);
-    return parseInt(western, 10);
-};
+export { arabicToWestern };
