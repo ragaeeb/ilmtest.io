@@ -11,7 +11,7 @@ import {
 import type { BookData } from 'shamela';
 import { slugify } from '@/lib/textUtils';
 import { chunkExcerpts } from './chunking';
-import { addEntityMappings, generateIndexes, mergeIndexes, type LookupIndexes } from './indexing';
+import { addEntityMappings, generateIndexes, type LookupIndexes } from './indexing';
 import type { Collection, Compilation, Excerpt, Heading } from '@/types/excerpts';
 import { HF_ASL_STORE, HF_EXCERPT_STORE, HF_SHAMELA4_STORE, HF_TOKEN, ILMTEST_API_URL, OUTPUT_DIR } from './env';
 import { downloadDataSet } from './huggingface';
@@ -398,7 +398,13 @@ export const setup = async (...collectionIds: string[]) => {
 
     const allTranslators = await loadTranslators();
     const collections: Collection[] = [];
-    const indexPartials: Partial<LookupIndexes>[] = [];
+    const indexes: LookupIndexes = {
+        sectionToExcerpts: {},
+        excerptToSection: {},
+        pageToHeading: {},
+        collectionToSections: {},
+        entityToCollections: {},
+    };
 
     for (const id of collectionIds) {
         console.log(`\n📚 Processing collection ${id}...`);
@@ -439,11 +445,10 @@ export const setup = async (...collectionIds: string[]) => {
         for (const heading of data.headings) {
             partialIndexes.excerptToSection[heading.id] = heading.id;
         }
-        partialIndexes.sectionToExcerpts = rangeSectionToExcerpts;
-        partialIndexes.collectionToSections = {
-            [id]: topLevelHeadingIds,
-        };
-        indexPartials.push(partialIndexes);
+        indexes.sectionToExcerpts[id] = rangeSectionToExcerpts;
+        indexes.excerptToSection[id] = partialIndexes.excerptToSection ?? {};
+        indexes.pageToHeading[id] = partialIndexes.pageToHeading ?? {};
+        indexes.collectionToSections[id] = topLevelHeadingIds;
 
         const sectionToExcerpts = rangeSectionToExcerpts;
         const headingMarkers = buildHeadingMarkers(data.headings);
@@ -451,8 +456,6 @@ export const setup = async (...collectionIds: string[]) => {
         console.log(`  ✓ ${chunkCount} content chunks written to ${CONTENT_CHUNKS_DIR}`);
     }
 
-    // Merge indexes across collections
-    const indexes = mergeIndexes(...indexPartials);
     for (const collection of collections) {
         const authorIds = collection.authors.map((author) => author.id);
         if (authorIds.length > 0) {

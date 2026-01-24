@@ -52,8 +52,10 @@ if (!collectionData) {
     return Astro.redirect('/browse');
 }
 
+const sectionMap = (indexes.sectionToExcerpts?.[collectionData.id] || {}) as Record<string, string[]>;
+
 // Get excerpts for this section
-const excerptIds = (indexes.sectionToExcerpts?.[section] || []) as string[];
+const excerptIds = (sectionMap[section] || []) as string[];
 
 if (excerptIds.length === 0) {
     return Astro.redirect(`/browse/${collectionSlug}`);
@@ -65,7 +67,7 @@ const sectionChunks = allChunks.filter(
     (chunk) => chunk.data.sectionId === section && chunk.id.startsWith(`${collectionData.id}/`),
 );
 
-const headingIdSet = new Set(Object.keys(indexes.sectionToExcerpts ?? {}));
+const headingIdSet = new Set(Object.keys(sectionMap));
 
 // Extract all excerpts from chunks and filter out heading markers
 const excerpts = sectionChunks

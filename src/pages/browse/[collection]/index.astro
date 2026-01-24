@@ -67,6 +67,19 @@ const headings = collectionChunks
 
 const headingsById = new Map(headings.map((heading) => [heading.id, heading]));
 
+const sectionExcerptCounts = new Map<string, number>();
+for (const chunk of collectionChunks) {
+    const sectionId = chunk.data.sectionId as string;
+    if (!sectionIdSet.has(sectionId)) {
+        continue;
+    }
+
+    const excerptIds: string[] = chunk.data.excerptIds ?? chunk.data.excerpts.map((e: any) => e.id);
+    const hasHeadingMarker = excerptIds.includes(sectionId);
+    const count = Math.max(excerptIds.length - (hasHeadingMarker ? 1 : 0), 0);
+    sectionExcerptCounts.set(sectionId, (sectionExcerptCounts.get(sectionId) ?? 0) + count);
+}
+
 // Create section items with their primary heading
 const sectionItems = sections.map((sectionId: string) => {
     const primaryHeading = headingsById.get(sectionId);
@@ -75,7 +88,7 @@ const sectionItems = sections.map((sectionId: string) => {
         id: sectionId,
         title: primaryHeading?.text || `Section ${sectionId}`,
         titleArabic: primaryHeading?.nass || '',
-        excerptCount: indexes.sectionToExcerpts?.[sectionId]?.length || 0,
+        excerptCount: sectionExcerptCounts.get(sectionId) ?? 0,
     };
 });
 
@@ -97,7 +110,15 @@ const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: collecti
             <h1>{collectionData.roman}</h1>
             {collectionData.authors.length > 0 && (
                 <p class="author-name">
-                    by {collectionData.authors.map((a) => a.name).join(', ')}
+                    by{' '}
+                    {collectionData.authors.map((author, index) => (
+                        <>
+                            {index > 0 ? ', ' : ''}
+                            <a class="author-link" href={`/profile/${author.id}`}>
+                                {author.name}
+                            </a>
+                        </>
+                    ))}
                 </p>
             )}
             <p class="subtitle">{sections.length} sections</p>
@@ -159,6 +180,16 @@ const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: collecti
         font-size: var(--text-lg);
         font-style: italic;
         margin-bottom: var(--space-2);
+    }
+
+    .author-link {
+        color: inherit;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+
+    .author-link:hover {
+        color: var(--color-primary);
     }
 
     .subtitle {

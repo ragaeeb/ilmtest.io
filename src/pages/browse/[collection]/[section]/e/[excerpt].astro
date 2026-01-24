@@ -39,8 +39,10 @@ if (!collectionData) {
     return Astro.redirect('/browse');
 }
 
+const sectionMap = (indexes.sectionToExcerpts?.[collectionData.id] || {}) as Record<string, string[]>;
+
 // Verify this excerpt belongs to this section
-const sectionExcerptIds = new Set((indexes.sectionToExcerpts?.[section] || []) as string[]);
+const sectionExcerptIds = new Set((sectionMap[section] || []) as string[]);
 if (!sectionExcerptIds.has(excerptId)) {
     return Astro.redirect('/404');
 }
