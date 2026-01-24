@@ -15,9 +15,10 @@
     "scripts": {
         "dev": "astro dev",
         "build": "astro build",
-        "preview": "astro preview",
-        "astro": "astro",
-        "setup": "bun run scripts/setup.ts"
+        "lint": "biome check .",
+        "format": "biome check --write .",
+        "setup": "bun scripts/setup.ts",
+        "gen-packet": "code2prompt . --include=\"src/**,package.json,astro.config.mjs,README.md,AGENTS.md,docs/deployment.md,scripts/setup.ts,scripts/chunking.ts,scripts/indexing.ts,scripts/mapping.ts,scripts/hierarchy.ts,scripts/env.ts\" -e \"node_modules/**,dist/**,.git/**,bun.lockb,src/data/**,src/content/excerpt-chunks/**,**/*.test.ts\" -O code_packet.txt"
     },
     "dependencies": {
         "@astrojs/react": "^4.4.2",

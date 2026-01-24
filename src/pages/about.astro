@@ -20,29 +20,64 @@ void BaseLayout;
 
   <MotionSection client:load>
     <div class="about-container">
-      <h1 class="page-title">About IlmTest</h1>
+      <header class="about-header">
+        <h1 class="page-title">About IlmTest</h1>
+        <p class="subtitle">A digital research desk for authentic Islamic scholarship.</p>
+      </header>
       
       <div class="content-wrapper">
-        <p class="intro-text">
-          IlmTest is a comprehensive digital library and research tool for Islamic texts, focusing on Hadith and classical scholarship.
-        </p>
+        <section>
+          <h2 class="section-title">The Problem</h2>
+          <p class="body-text">
+            The internet is flooded with translations of Islamic texts. However, for a student or researcher, verifying these translations is difficult.
+            Authentic Arabic sources are often disconnected from their English counterparts, citation standards vary wildy, and verified digital lineage is rare.
+            This leads to a lack of trust and an inability to cross-reference claims with original primary sources.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="section-title">Our Solution</h2>
+          <p class="body-text">
+            IlmTest is built to be a <strong>trust-first</strong> platform. We do not simply host text; we provide a rigorous framework for verifying it.
+          </p>
+          <ul class="feature-list">
+            <li>
+              <strong>Bilingual by Design:</strong> Every excerpt is presented side-by-side with its original Arabic text (Matched Naskh typography).
+            </li>
+            <li>
+              <strong>Traceable Lineage:</strong> We do not use generic citations. Every quote is linked to a specific Volume, Page, and Source URL (e.g., Shamela, Waqfeya).
+            </li>
+            <li>
+              <strong>Scholarly UX:</strong> The interface is designed for deep reading and research, free from the distractions of social media or commercial web design.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="section-title">Technology for Accessibility</h2>
+          <p class="body-text">
+            We believe that access to knowledge should not be limited by bandwidth or device. IlmTest is engineered with a performance-first architecture:
+          </p>
+          <ul class="feature-list">
+            <li><strong>Hybrid Edge Rendering:</strong> Pages load instantly from the edge, regardless of where you are in the world.</li>
+            <li><strong>Optimized Fonts:</strong> We use advanced subsetting to deliver beautiful Arabic typography in kilobytes, not megabytes.</li>
+            <li><strong>Zero-Bloat:</strong> The reading experience ships zero JavaScript to the client, ensuring accessibility on low-end devices.</li>
+          </ul>
+        </section>
 
         <div class="notice-box">
           <p class="notice-text">
-            This project is currently in active development (Phase 3).
+            <strong>Status:</strong> Public Beta (Phase 3). <br/>
+            We are currently indexing core verified collections. If you spot an error, please report it via our repository.
           </p>
         </div>
-
-        <h2 class="section-title">Our Mission</h2>
-        <p class="body-text">
-          To make classical Islamic texts accessible, searchable, and verifiable through modern technology, while maintaining the highest standards of academic rigor.
-        </p>
       </div>
     </div>
   </MotionSection>
 
   <Footer slot="footer" />
 </BaseLayout>
+
 
 <style>
   .about-container {

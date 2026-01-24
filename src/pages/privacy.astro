@@ -20,48 +20,55 @@ void BaseLayout;
     <h1 class="page-title">Privacy Policy</h1>
     <p class="updated-text">Last updated: January 24, 2026</p>
 
-    <section class="policy-section">
-      <h2>Overview</h2>
-      <p>
-        IlmTest is a public, read-only library. We do not require user accounts and do not sell personal data.
-      </p>
-    </section>
+    <div class="content-wrapper">
+        <div class="notice-box">
+        <p class="notice-text">
+            <strong>TL;DR:</strong> We do not track you. We do not use cookies. We do not sell your data.
+        </p>
+        </div>
 
-    <section class="policy-section">
-      <h2>Information We Collect</h2>
-      <ul>
-        <li>Basic usage data for performance and reliability (aggregated and non-identifying).</li>
-        <li>Technical logs from hosting providers for security and troubleshooting.</li>
-      </ul>
-    </section>
+        <section class="policy-section">
+        <h2>1. No Personal Accounts</h2>
+        <p>
+            IlmTest is a public library. You do not need to create an account, log in, or provide any personal information (name, email, etc.) to use the site.
+        </p>
+        </section>
 
-    <section class="policy-section">
-      <h2>How We Use Information</h2>
-      <ul>
-        <li>Maintain site stability and security.</li>
-        <li>Improve content delivery and performance.</li>
-        <li>Understand general traffic patterns (no personal profiling).</li>
-      </ul>
-    </section>
+        <section class="policy-section">
+        <h2>2. Analytics (Privacy-First)</h2>
+        <p>
+            We use <strong>Cloudflare Web Analytics</strong> to measure site performance and general traffic trends (e.g., "Which book is most popular?").
+        </p>
+        <ul>
+            <li>This service is <strong>privacy-first</strong> and does not use client-side fingerprints or cookies.</li>
+            <li>We cannot see your IP address or browse history.</li>
+            <li>We only see aggregated data (e.g., "100 views from the UK").</li>
+        </ul>
+        </section>
 
-    <section class="policy-section">
-      <h2>Third-Party Services</h2>
-      <p>
-        We may use privacy-respecting analytics provided by our hosting platform. These services
-        process anonymous usage data to help us understand overall site performance.
-      </p>
-    </section>
+        <section class="policy-section">
+        <h2>3. Local Storage</h2>
+        <p>
+            We use your browser's "Local Storage" strictly for user interface preferences. This data never leaves your device:
+        </p>
+        <ul>
+            <li><strong>Theme Preference:</strong> To remember if you prefer Light or Dark mode.</li>
+            <li><strong>Reading Direction:</strong> (Planned) To remember if you prefer Arabic on the right or left on mobile.</li>
+        </ul>
+        </section>
 
-    <section class="policy-section">
-      <h2>Contact</h2>
-      <p>
-        If you have questions about this policy, contact us at <a href="mailto:hello@ilmtest.io">hello@ilmtest.io</a>.
-      </p>
-    </section>
+        <section class="policy-section">
+        <h2>4. Hosting & Infrastructure</h2>
+        <p>
+            Our site is hosted on Cloudflare's global edge network. Cloudflare may log basic request data (IP address, User Agent) at the network level for security purposes (DDoS protection, bot mitigation). This is standard for completely virtually all secure websites.
+        </p>
+        </section>
+    </div>
   </div>
 
   <Footer slot="footer" />
 </BaseLayout>
+
 
 <style>
   .policy-container {
