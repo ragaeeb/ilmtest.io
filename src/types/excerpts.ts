@@ -1,3 +1,4 @@
+import type { BookData } from 'shamela';
 import type { ScrapeResult } from './asl';
 
 /**
@@ -49,12 +50,14 @@ export type Collection = {
     id: string;
 };
 
+/** The original data/content the excerpts were segmented from. Useful to rebuild the the table of contents hierarchy and get additional citation metadata. */
+export type SourceDocument = ScrapeResult | BookData;
+
 /**
  * Segmentations from the collection.
  */
-export type Excerpts = {
-    /** The original data/content the excerpts were segmented from. */
-    sourceDocument?: ScrapeResult;
+export type Compilation = {
+    sourceDocument: SourceDocument;
 
     /** Collection associated with these excerpts */
     collection: Collection;

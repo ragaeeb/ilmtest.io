@@ -1,4 +1,4 @@
-import type { Excerpt, Excerpts, Heading } from '@/types/excerpts';
+import type { Compilation, Excerpt, Heading } from '@/types/excerpts';
 
 /**
  * Pre-computed indexes for O(1) lookups.
@@ -59,7 +59,7 @@ export const findSectionForExcerpt = (excerpt: Excerpt, headings: Heading[]): st
  * @param data - The excerpts data
  * @param collectionId - The collection ID (not slug)
  */
-export const generateIndexes = (data: Excerpts, collectionId: string): Partial<LookupIndexes> => {
+export const generateIndexes = (data: Compilation, collectionId: string): Partial<LookupIndexes> => {
     const sectionToExcerpts: Record<string, string[]> = {};
     const excerptToSection: Record<string, string> = {};
     const pageToHeading: Record<number, string> = {};

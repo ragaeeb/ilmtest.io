@@ -1,13 +1,20 @@
 import { mkdir } from 'node:fs/promises';
 import { format, join } from 'node:path';
 import { doApiGet, getCollection, getEntity, getLibrary, init, type Translator } from '@ilmtest/ilmtest-sdk-js';
+import type { BookData } from 'shamela';
 import { slugify } from '@/lib/textUtils';
-import type { Collection, Excerpt, Excerpts } from '@/types/excerpts';
+import type { Collection, Compilation, Excerpt } from '@/types/excerpts';
 import { getChunkFilename, groupAndChunkExcerpts } from './chunking';
 import { HF_ASL_STORE, HF_EXCERPT_STORE, HF_SHAMELA4_STORE, HF_TOKEN, ILMTEST_API_URL, OUTPUT_DIR } from './env';
 import { downloadDataSet } from './huggingface';
-import { addEntityMappings, generateIndexes, mergeIndexes } from './indexing';
+import { addEntityMappings, mergeIndexes } from './indexing';
 import { decompressJson } from './io';
+import {
+    getExcerptsUnderTitle,
+    mapTitlesToTableOfContents,
+    mapTitleTreeToHeadingTree,
+    type TitleNode,
+} from './mapping';
 
 const SHAMELA4_LIBRARY_ID = '75';
 
@@ -56,7 +63,7 @@ const loadCollection = async (id: string): Promise<Collection> => {
     };
 };
 
-const loadExcerpts = async (collectionId: string): Promise<Excerpts> => {
+const loadExcerpts = async (collectionId: string): Promise<Compilation> => {
     const excerptsFile = format({ dir: OUTPUT_DIR, name: collectionId, ext: '.json' });
 
     if (await Bun.file(excerptsFile).exists()) {
@@ -64,16 +71,14 @@ const loadExcerpts = async (collectionId: string): Promise<Excerpts> => {
     }
 
     console.log('Downloading excerpts from HuggingFace...');
-    const excerpts: Excerpts = await downloadAndUnzipFile(collectionId, HF_EXCERPT_STORE);
+    const excerpts: Compilation = await downloadAndUnzipFile(collectionId, HF_EXCERPT_STORE);
 
     console.log('Loading collection metadata...');
     excerpts.collection = await loadCollection(collectionId);
 
     console.log('Downloading asl from HuggingFace...');
-    excerpts.asl = await downloadAndUnzipFile(
-        excerpts.collection.src.fid,
-        excerpts.collection.src.id === SHAMELA4_LIBRARY_ID ? HF_SHAMELA4_STORE : HF_ASL_STORE,
-    );
+    const store = excerpts.collection.src.id === SHAMELA4_LIBRARY_ID ? HF_SHAMELA4_STORE : HF_ASL_STORE;
+    excerpts.sourceDocument = await downloadAndUnzipFile(excerpts.collection.src.fid, store);
 
     const serialized = JSON.stringify(excerpts, null, 2);
 
@@ -117,6 +122,136 @@ const fillMissingTranslators = (excerpts: Excerpt[]): void => {
     }
 };
 
+/**
+ * Generate indexes for Shamela books with hierarchical title structure.
+ */
+const generateShamelaIndexes = (
+    data: Compilation,
+    collectionId: string,
+    titleTree: TitleNode[],
+): {
+    sectionToExcerpts: Record<string, string[]>;
+    excerptToSection: Record<string, string>;
+    pageToHeading: Record<number, string>;
+    collectionToSections: Record<string, string[]>;
+} => {
+    const sectionToExcerpts: Record<string, string[]> = {};
+    const excerptToSection: Record<string, string> = {};
+    const pageToHeading: Record<number, string> = {};
+    const collectionToSections: Record<string, string[]> = {};
+
+    // Convert title tree to heading tree
+    const headingTree = mapTitleTreeToHeadingTree(titleTree, data.headings);
+    console.log('headingTree', headingTree);
+
+    // Flatten the tree to get all headings
+    const flattenHeadings = (nodes: typeof headingTree, result: typeof data.headings = []): typeof data.headings => {
+        for (const node of nodes) {
+            result.push(node);
+            if (node.children) {
+                flattenHeadings(node.children, result);
+            }
+        }
+        return result;
+    };
+
+    const allHeadings = flattenHeadings(headingTree);
+
+    // Initialize empty arrays for all headings
+    for (const heading of allHeadings) {
+        pageToHeading[heading.from] = heading.id;
+        sectionToExcerpts[heading.id] = [];
+    }
+
+    // Map collection to root-level headings only
+    collectionToSections[collectionId] = headingTree.map((h) => h.id);
+
+    // Assign excerpts to headings using hierarchical logic
+    const assignExcerptsToHeading = (node: (typeof headingTree)[0], titleNode: TitleNode) => {
+        const excerpts = getExcerptsUnderTitle(titleTree, data.excerpts, titleNode);
+
+        for (const excerpt of excerpts) {
+            excerptToSection[excerpt.id] = node.id;
+            sectionToExcerpts[node.id].push(excerpt.id);
+        }
+
+        // Recursively process children
+        if (node.children && titleNode.children) {
+            for (let i = 0; i < node.children.length; i++) {
+                assignExcerptsToHeading(node.children[i], titleNode.children[i]);
+            }
+        }
+    };
+
+    // Process each root heading
+    for (let i = 0; i < headingTree.length; i++) {
+        assignExcerptsToHeading(headingTree[i], titleTree[i]);
+    }
+
+    return {
+        sectionToExcerpts,
+        excerptToSection,
+        pageToHeading,
+        collectionToSections,
+    };
+};
+
+/**
+ * Generate indexes for web-scraped content with flat page structure.
+ */
+const generateFlatIndexes = (
+    data: Compilation,
+    collectionId: string,
+): {
+    sectionToExcerpts: Record<string, string[]>;
+    excerptToSection: Record<string, string>;
+    pageToHeading: Record<number, string>;
+    collectionToSections: Record<string, string[]>;
+} => {
+    const sectionToExcerpts: Record<string, string[]> = {};
+    const excerptToSection: Record<string, string> = {};
+    const pageToHeading: Record<number, string> = {};
+    const collectionToSections: Record<string, string[]> = {};
+
+    // Sort headings by page number
+    const sortedHeadings = [...data.headings].sort((a, b) => a.from - b.from);
+
+    // Initialize empty arrays for all headings
+    for (const heading of sortedHeadings) {
+        pageToHeading[heading.from] = heading.id;
+        sectionToExcerpts[heading.id] = [];
+    }
+
+    // Map collection to all headings
+    collectionToSections[collectionId] = sortedHeadings.map((h) => h.id);
+
+    // Assign each excerpt to the appropriate heading
+    // An excerpt belongs to the last heading whose 'from' <= excerpt's 'from'
+    for (const excerpt of data.excerpts) {
+        let assignedHeading: string | null = null;
+
+        for (const heading of sortedHeadings) {
+            if (heading.from <= excerpt.from) {
+                assignedHeading = heading.id;
+            } else {
+                break;
+            }
+        }
+
+        if (assignedHeading) {
+            excerptToSection[excerpt.id] = assignedHeading;
+            sectionToExcerpts[assignedHeading].push(excerpt.id);
+        }
+    }
+
+    return {
+        sectionToExcerpts,
+        excerptToSection,
+        pageToHeading,
+        collectionToSections,
+    };
+};
+
 export const setup = async (...collectionIds: string[]) => {
     console.log('Starting setup');
 
@@ -143,9 +278,38 @@ export const setup = async (...collectionIds: string[]) => {
         fillMissingTranslators(data.excerpts);
         fillMissingTranslators(data.headings);
 
-        // Generate indexes for this collection
+        // Generate indexes based on data structure type
         console.log(`Generating indexes for collection ${id}...`);
-        const indexes = generateIndexes(data, id); // Use ID instead of slug
+        let indexes: any;
+
+        // Check if this is a Shamela book (has titles) or web-scraped (has pages)
+        if ((data.sourceDocument as BookData)?.titles) {
+            const asl = data.sourceDocument as BookData;
+
+            console.log('  Detected Shamela book with hierarchical titles');
+            const titleTree = mapTitlesToTableOfContents(asl.titles);
+            indexes = generateShamelaIndexes(data, id, titleTree);
+        } else {
+            console.log('  Detected web-scraped content with flat pages');
+            indexes = generateFlatIndexes(data, id);
+        }
+
+        // Debug: Print section statistics
+        console.log('  Section statistics:');
+        for (const [sectionId, excerptIds] of Object.entries(indexes.sectionToExcerpts)) {
+            const heading = data.headings.find((h) => h.id === sectionId);
+            console.log(`    ${sectionId}: ${excerptIds.length} excerpts - "${heading?.text || heading?.nass}"`);
+        }
+
+        // Verify all excerpts are assigned
+        const unassignedExcerpts = data.excerpts.filter((e) => !indexes.excerptToSection[e.id]);
+        if (unassignedExcerpts.length > 0) {
+            console.warn(`  ⚠️  ${unassignedExcerpts.length} excerpts not assigned to any section:`);
+            unassignedExcerpts.slice(0, 5).forEach((e) => {
+                console.warn(`    - ${e.id} (page ${e.from})`);
+            });
+        }
+
         allIndexes = mergeIndexes(allIndexes, indexes);
 
         // Add entity mappings for authors
@@ -157,19 +321,21 @@ export const setup = async (...collectionIds: string[]) => {
 
         // Chunk excerpts by section
         console.log(`Chunking excerpts for collection ${id}...`);
-        const chunks = groupAndChunkExcerpts(data.excerpts, indexes.excerptToSection!, id);
+        const chunks = groupAndChunkExcerpts(data.excerpts, indexes.excerptToSection, id);
 
         // Write chunks to output directory
+        let chunkCount = 0;
         for (const [sectionId, sectionChunks] of chunks) {
             for (const chunk of sectionChunks) {
                 const filename = getChunkFilename(id, sectionId, chunk.chunkIndex);
                 const chunkPath = join(CHUNKS_DIR, filename);
                 await Bun.write(chunkPath, JSON.stringify(chunk));
-                totalChunks++;
+                chunkCount++;
             }
         }
 
-        console.log(`  Created ${chunks.size} sections, ${totalChunks} chunk files`);
+        totalChunks += chunkCount;
+        console.log(`  Created ${chunks.size} sections, ${chunkCount} chunk files`);
 
         data.excerpts.concat(data.headings).forEach((e) => {
             usedTranslatorIds.add(e.translator);

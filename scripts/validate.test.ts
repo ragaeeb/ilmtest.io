@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { Excerpt, Excerpts, Heading } from '../src/types/excerpts';
+import type { Compilation, Excerpt, Heading } from '../src/types/excerpts';
 import type { LookupIndexes } from './indexing';
 import {
     type ValidationResult,
@@ -157,7 +157,7 @@ describe('validateIndexIntegrity', () => {
 
 describe('validateExcerpts', () => {
     it('should run all validations and aggregate results', () => {
-        const data: Excerpts = {
+        const data: Compilation = {
             excerpts: [
                 createExcerpt('E1'),
                 createExcerpt('E1'), // duplicate

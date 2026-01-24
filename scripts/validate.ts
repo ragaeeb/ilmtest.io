@@ -1,4 +1,4 @@
-import type { Excerpt, Excerpts, Heading } from '@/types/excerpts';
+import type { Compilation, Excerpt, Heading } from '@/types/excerpts';
 import type { LookupIndexes } from './indexing';
 
 /**
@@ -132,7 +132,7 @@ export const validateIndexIntegrity = (indexes: LookupIndexes, excerpts: Excerpt
 /**
  * Run all validations and aggregate results.
  */
-export const validateExcerpts = (data: Excerpts, indexes: LookupIndexes): ValidationResult[] => {
+export const validateExcerpts = (data: Compilation, indexes: LookupIndexes): ValidationResult[] => {
     const results: ValidationResult[] = [];
 
     results.push(...validateDuplicateIds(data.excerpts, data.headings));

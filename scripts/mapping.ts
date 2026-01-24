@@ -1,5 +1,5 @@
 import type { BookData, Page, Title } from 'shamela';
-import type { Excerpt, Excerpts, Heading } from '@/types/excerpts';
+import type { Compilation, Excerpt, Heading } from '@/types/excerpts';
 
 /**
  * When the user gets a shareable link to an excerpt and they open it, there hould be a hard link to exactly where this excerpt was taken from its original library.
@@ -184,7 +184,7 @@ const findNextTitleAtSameLevelOrHigher = (titles: TitleNode[], selectedTitle: Ti
  * @param excerpt
  * @param bookData
  */
-export const groundShamelaExcerpts = (data: Excerpts, bookData: BookData) => {
+export const groundShamelaExcerpts = (data: Compilation, bookData: BookData) => {
     copyCitationDataToMeta(bookData.pages, data.excerpts);
 };
 
