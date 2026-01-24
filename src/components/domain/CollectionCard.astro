@@ -21,13 +21,14 @@ const authorNames = collection.authors.map((a) => a.name).join(', ');
   <div class="collection-content">
     <div class="header-group">
       <h3 class="collection-title">
-        {collection.title}
+        {collection.roman}
       </h3>
-      <BilingualText 
-        text={collection.arabicTitle} 
-        isArabic={true} 
-        className="collection-arabic-title" 
-      />
+      <div class="collection-arabic-title">
+        <BilingualText 
+          text={collection.unwan} 
+          isArabic={true} 
+        />
+      </div>
     </div>
 
     <div class="meta-group">
@@ -35,9 +36,10 @@ const authorNames = collection.authors.map((a) => a.name).join(', ');
       <span class="meta-value">{authorNames}</span>
     </div>
 
-    {collection.description && (
+    {collection.roman && (
       <p class="collection-description">
-        {collection.description}
+        {/* Placeholder description if none exists in data yet, or just show nothing */}
+        Exploring the depths of scholarly tradition.
       </p>
     )}
     
@@ -55,6 +57,7 @@ const authorNames = collection.authors.map((a) => a.name).join(', ');
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+    height: 100%;
   }
 
   .header-group {
@@ -64,10 +67,12 @@ const authorNames = collection.authors.map((a) => a.name).join(', ');
   }
 
   .collection-title {
-    font-size: var(--text-xl);
-    font-weight: 700;
+    font-size: var(--text-2xl);
+    font-weight: 800;
+    line-height: var(--leading-tight);
     color: var(--color-text-primary);
     transition: color var(--duration-fast) var(--ease-out);
+    margin: 0;
   }
 
   /* Target the card hover state to change title color - relying on group hover pattern might be tricky with Card component encapsulating styles. 
@@ -82,8 +87,9 @@ const authorNames = collection.authors.map((a) => a.name).join(', ');
   /* Since we can't easily rely on global group hover without adding classes, we'll keep it simple or assume native CSS nesting support in Astro/browsers. */
 
   .collection-arabic-title {
-    font-size: var(--text-lg);
+    font-size: calc(var(--text-xl) * 1.1);
     color: var(--color-text-secondary);
+    line-height: var(--leading-relaxed);
   }
 
   .meta-group {
@@ -108,12 +114,13 @@ const authorNames = collection.authors.map((a) => a.name).join(', ');
   }
 
   .action-group {
+    margin-top: auto;
     padding-top: var(--space-4);
     display: flex;
     align-items: center;
     color: var(--color-primary);
-    font-weight: 500;
-    font-size: var(--text-sm);
+    font-weight: 600;
+    font-size: var(--text-base);
   }
 
   .action-icon {
