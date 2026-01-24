@@ -9,7 +9,7 @@ import collectionsData from '@/data/collections.json';
 import indexesData from '@/data/indexes.json';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { arabicToWestern } from '@/lib/arabic';
-import type { Collection } from '@/types/excerpts';
+import type { Collection, Excerpt } from '@/types/excerpts';
 
 // Generate static paths for all sections in all collections
 export async function getStaticPaths() {
@@ -71,7 +71,11 @@ const headingIdSet = new Set(Object.keys(sectionMap));
 // Extract all excerpts from chunks and filter out heading markers
 const excerpts = sectionChunks
     .flatMap((chunk) => chunk.data.excerpts)
-    .filter((excerpt) => !headingIdSet.has(excerpt.id))
+    .filter((excerpt) => {
+        const excerptId = String(excerpt.id);
+        const hasContent = typeof excerpt.nass === 'string' && excerpt.nass.trim().length > 0;
+        return !headingIdSet.has(excerptId) && hasContent;
+    })
     .sort((a, b) => a.from - b.from);
 
 // Get the section heading
@@ -85,6 +89,20 @@ const breadcrumbItems = [
     { label: collectionData.roman, href: `/browse/${collectionSlug}` },
     { label: sectionTitle },
 ];
+
+// Biome doesn't see template usage in .astro files.
+const _typeCheck = null as unknown as Collection | Excerpt;
+void _typeCheck;
+void ExcerptCard;
+void ThemeToggle;
+void Footer;
+void Header;
+void Breadcrumb;
+void BaseLayout;
+void arabicToWestern;
+void excerpts;
+void sectionTitleArabic;
+void breadcrumbItems;
 ---
 
 <BaseLayout title={sectionTitle} description={`Browse excerpts from ${sectionTitle}`}>
@@ -111,7 +129,7 @@ const breadcrumbItems = [
             {
                 excerpts.map((excerpt) => (
                     <ExcerptCard
-                        excerpt={excerpt}
+                        excerpt={excerpt as Excerpt}
                         collection={collectionData}
                         collectionSlug={collectionSlug}
                         sectionSlug={section}

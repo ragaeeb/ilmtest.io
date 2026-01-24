@@ -1,21 +1,25 @@
 ---
 interface Props {
-  currentPath?: string;
+    currentPath?: string;
 }
 
-const { currentPath = '/' } = Astro.props;
+const { currentPath = '/' } = Astro.props as Props;
 
 const navLinks = [
-  { href: '/browse', label: 'Browse' },
-  { href: '/about', label: 'About' },
+    { href: '/browse', label: 'Browse' },
+    { href: '/about', label: 'About' },
 ];
+
+// Biome doesn't see template usage in .astro files.
+void currentPath;
+void navLinks;
 ---
 
 <header class="header">
   <div class="header-container">
     <!-- Logo -->
     <a href="/" class="logo" aria-label="IlmTest Home">
-      <img src="/favicon.svg" alt="" width="32" height="32" />
+      <img class="logo-image" src="/favicon.svg" alt="" width="32" height="32" />
       <span class="logo-text">
         <span class="logo-ilm">Ilm</span><span class="logo-test">Test</span>
       </span>
@@ -95,7 +99,7 @@ const navLinks = [
   }
 
   .logo-ilm {
-    color: var(--color-primary);
+    color: var(--color-primary-text);
   }
 
   .logo-test {
@@ -129,8 +133,12 @@ const navLinks = [
   }
 
   .nav-link.active {
-    color: var(--color-primary);
+    color: var(--color-primary-text);
     background-color: var(--color-surface);
+  }
+
+  .logo-image {
+    display: inline-block;
   }
 
   /* Actions */

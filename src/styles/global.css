@@ -38,6 +38,7 @@
     --color-primary: #309fd6;
     --color-primary-hover: #2889bd;
     --color-primary-active: #236f9a;
+    --color-primary-text: #0c7fb5;
     --color-secondary: #e9692c;
     --color-secondary-hover: #d15a20;
     --color-tertiary: #89be48;
@@ -150,6 +151,7 @@
     --color-primary: #4db3e6;
     --color-primary-hover: #6dc3ed;
     --color-primary-active: #8dd3f4;
+    --color-primary-text: #4db3e6;
     --color-secondary: #ff8a5c;
     --color-secondary-hover: #ffa07a;
     --color-tertiary: #a5d670;
@@ -384,4 +386,55 @@ p {
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border-width: 0;
+}
+
+/* Share buttons */
+.share-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.share-button {
+    appearance: none;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-surface);
+    color: var(--color-text-primary);
+    font-size: var(--text-sm);
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition:
+        color var(--duration-fast) var(--ease-out),
+        background-color var(--duration-fast) var(--ease-out),
+        border-color var(--duration-fast) var(--ease-out);
+}
+
+.share-button:hover {
+    background-color: var(--color-surface-hover);
+    border-color: var(--color-border-hover);
+    color: var(--color-primary-text);
+}
+
+.share-button:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+/* ===================================================
+   Reduced Motion (Accessibility)
+   =================================================== */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        /* biome-ignore lint: reduce motion override */
+        animation-duration: 0.01ms !important;
+        /* biome-ignore lint: reduce motion override */
+        animation-iteration-count: 1 !important;
+        /* biome-ignore lint: reduce motion override */
+        transition-duration: 0.01ms !important;
+        /* biome-ignore lint: reduce motion override */
+        scroll-behavior: auto !important;
+    }
 }

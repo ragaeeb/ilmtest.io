@@ -1,20 +1,33 @@
 ---
-import { formatCitation } from '@/lib/citations';
-import type { CitationMeta, Collection, Excerpt } from '@/types/excerpts';
+import { getCitationParts } from '@/lib/citations';
+import type { Collection, Excerpt } from '@/types/excerpts';
 
 interface Props {
     excerpt: Excerpt;
     collection: Collection;
 }
 
-const { excerpt, collection } = Astro.props;
-const citation = formatCitation(excerpt, collection);
+const { excerpt, collection } = Astro.props as Props;
+const citation = getCitationParts(excerpt, collection);
+
+// Biome doesn't see template usage in .astro files.
+void excerpt;
+void collection;
+void citation;
+void getCitationParts;
 ---
 
 <div class="citation-block">
   <div class="citation-content">
     <span class="citation-label">Source:</span>
-    <Fragment set:html={citation} />
+    <a
+      class="citation-link"
+      href={citation.url}
+      target="_blank"
+      rel="noreferrer"
+    >
+      [{citation.label}]
+    </a>
   </div>
 </div>
 
@@ -36,5 +49,15 @@ const citation = formatCitation(excerpt, collection);
   .citation-label {
     font-weight: 500;
     color: var(--color-text-primary);
+  }
+
+  .citation-link {
+    color: var(--color-text-secondary);
+    text-decoration: none;
+  }
+
+  .citation-link:hover {
+    color: var(--color-primary-text);
+    text-decoration: underline;
   }
 </style>

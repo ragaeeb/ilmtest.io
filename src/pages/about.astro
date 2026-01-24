@@ -1,8 +1,16 @@
 ---
+import { MotionSection } from '@/components/islands/MotionSection';
 import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
+
+// Biome doesn't see template usage in .astro files.
+void ThemeToggle;
+void MotionSection;
+void Footer;
+void Header;
+void BaseLayout;
 ---
 
 <BaseLayout title="About - IlmTest">
@@ -10,26 +18,28 @@ import BaseLayout from '@/layouts/BaseLayout.astro';
     <ThemeToggle client:only="react" slot="theme-toggle" />
   </Header>
 
-  <div class="about-container">
-    <h1 class="page-title">About IlmTest</h1>
-    
-    <div class="content-wrapper">
-      <p class="intro-text">
-        IlmTest is a comprehensive digital library and research tool for Islamic texts, focusing on Hadith and classical scholarship.
-      </p>
+  <MotionSection client:load>
+    <div class="about-container">
+      <h1 class="page-title">About IlmTest</h1>
+      
+      <div class="content-wrapper">
+        <p class="intro-text">
+          IlmTest is a comprehensive digital library and research tool for Islamic texts, focusing on Hadith and classical scholarship.
+        </p>
 
-      <div class="notice-box">
-        <p class="notice-text">
-          This project is currently in active development (Phase 3).
+        <div class="notice-box">
+          <p class="notice-text">
+            This project is currently in active development (Phase 3).
+          </p>
+        </div>
+
+        <h2 class="section-title">Our Mission</h2>
+        <p class="body-text">
+          To make classical Islamic texts accessible, searchable, and verifiable through modern technology, while maintaining the highest standards of academic rigor.
         </p>
       </div>
-
-      <h2 class="section-title">Our Mission</h2>
-      <p class="body-text">
-        To make classical Islamic texts accessible, searchable, and verifiable through modern technology, while maintaining the highest standards of academic rigor.
-      </p>
     </div>
-  </div>
+  </MotionSection>
 
   <Footer slot="footer" />
 </BaseLayout>

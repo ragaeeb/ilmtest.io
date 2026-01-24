@@ -1,6 +1,6 @@
 ---
 import Card from '@/components/ui/Card.astro';
-import { formatCitation } from '@/lib/citations';
+import { getCitationParts } from '@/lib/citations';
 import type { Collection, Excerpt } from '@/types/excerpts';
 import BilingualText from './BilingualText.astro';
 
@@ -12,12 +12,24 @@ interface Props {
     excerptId: string;
 }
 
-const { excerpt, collection, collectionSlug, sectionSlug, excerptId } = Astro.props;
+const { excerpt, collection, collectionSlug, sectionSlug, excerptId } = Astro.props as Props;
 
 // Generate clean text preview (strip HTML if needed, though usually just text)
 const previewText = excerpt.nass.length > 200 ? excerpt.nass.substring(0, 200) + '...' : excerpt.nass;
 
-const citation = formatCitation(excerpt, collection);
+const citation = getCitationParts(excerpt, collection);
+
+// Biome doesn't see template usage in .astro files.
+void excerpt;
+void collection;
+void collectionSlug;
+void sectionSlug;
+void excerptId;
+void previewText;
+void citation;
+void Card;
+void BilingualText;
+void getCitationParts;
 ---
 
 <Card 
@@ -36,7 +48,14 @@ const citation = formatCitation(excerpt, collection);
     
     <div class="card-footer">
       <div class="citation-wrapper">
-        <Fragment set:html={citation} />
+        <a
+          class="citation-link"
+          href={citation.url}
+          target="_blank"
+          rel="noreferrer"
+        >
+          [{citation.label}]
+        </a>
       </div>
       
       <span class="read-more">
@@ -84,6 +103,16 @@ const citation = formatCitation(excerpt, collection);
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 70%;
+  }
+
+  .citation-link {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .citation-link:hover {
+    color: var(--color-primary-text);
+    text-decoration: underline;
   }
 
   .read-more {

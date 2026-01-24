@@ -17,6 +17,10 @@ const footerLinks = [
         ],
     },
 ];
+
+// Biome doesn't see template usage in .astro files.
+void currentYear;
+void footerLinks;
 ---
 
 <footer class="footer">
@@ -24,7 +28,7 @@ const footerLinks = [
     <!-- Branding -->
     <div class="footer-brand">
       <a href="/" class="footer-logo">
-        <img src="/favicon.svg" alt="" width="24" height="24" />
+        <img class="logo-image" src="/favicon.svg" alt="" width="24" height="24" />
         <span class="logo-text">
           <span class="logo-ilm">Ilm</span><span class="logo-test">Test</span>
         </span>
@@ -96,7 +100,7 @@ const footerLinks = [
   }
 
   .logo-ilm {
-    color: var(--color-primary);
+    color: var(--color-primary-text);
   }
 
   .logo-test {
@@ -141,7 +145,11 @@ const footerLinks = [
   }
 
   .footer-link:hover {
-    color: var(--color-primary);
+    color: var(--color-primary-text);
+  }
+
+  .logo-image {
+    display: inline-block;
   }
 
   /* Copyright */

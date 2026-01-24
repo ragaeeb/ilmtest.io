@@ -1,10 +1,20 @@
 ---
+import { MotionSection } from '../components/islands/MotionSection';
 import { ThemeToggle } from '../components/islands/ThemeToggle';
 import Footer from '../components/layout/Footer.astro';
 import Header from '../components/layout/Header.astro';
 import Button from '../components/ui/Button.astro';
 import Card from '../components/ui/Card.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
+
+// Biome doesn't see template usage in .astro files.
+void ThemeToggle;
+void MotionSection;
+void Footer;
+void Header;
+void Button;
+void Card;
+void BaseLayout;
 ---
 
 <BaseLayout title="Home" description="Authentic Islamic content with verification and scholarly sources.">
@@ -12,52 +22,56 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     <ThemeToggle client:only="react" slot="theme-toggle" />
   </Header>
 
-  <div class="hero">
-    <div class="hero-content">
-      <h1 class="hero-title text-4xl font-bold text-blue-500">
-        <span class="hero-ilm">Ilm</span><span class="hero-test">Test</span>
-      </h1>
-      <p class="hero-tagline">
-        Authentic Islamic content with verification and scholarly sources.
-      </p>
-      <div class="hero-actions">
-        <Button href="/browse" variant="primary" size="lg">
-          Browse Collections
-        </Button>
-        <Button href="/about" variant="secondary" size="lg">
-          Learn More
-        </Button>
+  <MotionSection client:load>
+    <div class="hero">
+      <div class="hero-content">
+        <h1 class="hero-title text-4xl font-bold text-blue-500">
+          <span class="hero-ilm">Ilm</span><span class="hero-test">Test</span>
+        </h1>
+        <p class="hero-tagline">
+          Authentic Islamic content with verification and scholarly sources.
+        </p>
+        <div class="hero-actions">
+          <Button href="/browse" variant="primary" size="lg">
+            Browse Collections
+          </Button>
+          <Button href="/about" variant="secondary" size="lg">
+            Learn More
+          </Button>
+        </div>
       </div>
     </div>
-  </div>
+  </MotionSection>
 
-  <section class="features">
-    <div class="features-grid">
-      <Card variant="elevated" hoverable>
-        <div class="feature-icon">📚</div>
-        <h3 class="feature-title">Curated Collections</h3>
-        <p class="feature-desc">
-          Access carefully curated Islamic texts with authentic translations.
-        </p>
-      </Card>
+  <MotionSection client:load delay={0.1}>
+    <section class="features">
+      <div class="features-grid">
+        <Card variant="elevated" hoverable>
+          <div class="feature-icon">📚</div>
+          <h3 class="feature-title">Curated Collections</h3>
+          <p class="feature-desc">
+            Access carefully curated Islamic texts with authentic translations.
+          </p>
+        </Card>
 
-      <Card variant="elevated" hoverable>
-        <div class="feature-icon">✓</div>
-        <h3 class="feature-title">Verified Sources</h3>
-        <p class="feature-desc">
-          Every citation linked to its original source for verification.
-        </p>
-      </Card>
+        <Card variant="elevated" hoverable>
+          <div class="feature-icon">✓</div>
+          <h3 class="feature-title">Verified Sources</h3>
+          <p class="feature-desc">
+            Every citation linked to its original source for verification.
+          </p>
+        </Card>
 
-      <Card variant="elevated" hoverable>
-        <div class="feature-icon">🌍</div>
-        <h3 class="feature-title">Bilingual Display</h3>
-        <p class="feature-desc">
-          Side-by-side Arabic and English for comparative study.
-        </p>
-      </Card>
-    </div>
-  </section>
+        <Card variant="elevated" hoverable>
+          <div class="feature-icon">🌍</div>
+          <h3 class="feature-title">Bilingual Display</h3>
+          <p class="feature-desc">
+            Side-by-side Arabic and English for comparative study.
+          </p>
+        </Card>
+      </div>
+    </section>
+  </MotionSection>
 
   <Footer slot="footer" />
 </BaseLayout>

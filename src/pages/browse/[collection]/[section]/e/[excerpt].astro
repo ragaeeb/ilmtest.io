@@ -5,6 +5,7 @@ export const prerender = false;
 import { getCollection } from 'astro:content';
 import BilingualText from '@/components/domain/BilingualText.astro';
 import CitationBlock from '@/components/domain/CitationBlock.astro';
+import { ShareButton } from '@/components/islands/ShareButton';
 import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
@@ -14,7 +15,7 @@ import indexesData from '@/data/indexes.json';
 import translatorsData from '@/data/translators.json';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { arabicToWestern } from '@/lib/arabic';
-import { formatCitation } from '@/lib/citations';
+import { getCitationParts } from '@/lib/citations';
 import type { Collection } from '@/types/excerpts';
 
 const { collection: collectionSlug, section, excerpt: excerptId } = Astro.params;
@@ -73,7 +74,9 @@ const headingExcerpt = sectionChunks.flatMap((chunk) => chunk.data.excerpts).fin
 const sectionTitle = headingExcerpt?.text || `Section ${section}`;
 
 // Format citation using the actual collection data
-const citation = formatCitation(excerpt, collectionData);
+const citation = getCitationParts(excerpt, collectionData);
+const citationPlain = `${citation.label} — ${citation.url}`;
+const citationMarkdown = `[${citation.label}](${citation.url})`;
 
 const translators = Array.isArray(translatorsData)
     ? translatorsData
@@ -98,6 +101,26 @@ const breadcrumbItems = [
     { label: sectionTitle, href: `/browse/${collectionSlug}/${section}` },
     { label: excerptLabel || 'Excerpt' },
 ];
+
+// Biome doesn't see template usage in .astro files.
+void BilingualText;
+void CitationBlock;
+void ShareButton;
+void ThemeToggle;
+void Footer;
+void Header;
+void Breadcrumb;
+void collectionsData;
+void indexesData;
+void translatorsData;
+void BaseLayout;
+void arabicToWestern;
+void getCitationParts;
+void citationPlain;
+void citationMarkdown;
+void translatorName;
+void formatHadithNumber;
+void breadcrumbItems;
 
 // Set cache headers for edge caching
 Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
@@ -132,6 +155,10 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
 
             <!-- Citation Block -->
             <CitationBlock excerpt={excerpt} collection={collectionData} />
+            <div class="share-actions" aria-label="Share citation options">
+                <ShareButton client:load text={citationPlain} label="Copy citation" />
+                <ShareButton client:load text={citationMarkdown} label="Copy Markdown" />
+            </div>
 
             <!-- Metadata Details -->
             <section class="metadata-section">
