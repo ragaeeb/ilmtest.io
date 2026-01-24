@@ -17,6 +17,12 @@ export type LookupIndexes = {
     /** Map collection ID → array of heading IDs (for TOC) */
     collectionToSections: Record<string, string[]>;
 
+    /** Map collection ID → section ID → ordered chunk IDs for that section */
+    sectionToChunks: Record<string, Record<string, string[]>>;
+
+    /** Map collection ID → excerpt ID → chunk ID that contains it */
+    excerptToChunk: Record<string, Record<string, string>>;
+
     /** Map entity ID → collections they're associated with */
     entityToCollections: Record<
         string,
@@ -105,6 +111,8 @@ export const mergeIndexes = (...partials: Partial<LookupIndexes>[]): LookupIndex
         excerptToSection: {},
         pageToHeading: {},
         collectionToSections: {},
+        sectionToChunks: {},
+        excerptToChunk: {},
         entityToCollections: {},
     };
 
@@ -113,6 +121,8 @@ export const mergeIndexes = (...partials: Partial<LookupIndexes>[]): LookupIndex
         Object.assign(merged.excerptToSection, partial.excerptToSection);
         Object.assign(merged.pageToHeading, partial.pageToHeading);
         Object.assign(merged.collectionToSections, partial.collectionToSections);
+        Object.assign(merged.sectionToChunks, partial.sectionToChunks);
+        Object.assign(merged.excerptToChunk, partial.excerptToChunk);
         Object.assign(merged.entityToCollections, partial.entityToCollections);
     }
 

@@ -353,6 +353,8 @@ const writeSectionChunks = async (
     headingMarkers: Map<string, Excerpt>,
 ) => {
     const excerptById = new Map(data.excerpts.map((excerpt) => [excerpt.id, excerpt]));
+    const sectionToChunks: Record<string, string[]> = {};
+    const excerptToChunk: Record<string, string> = {};
     let chunkCount = 0;
 
     for (const [sectionId, excerptIds] of Object.entries(sectionToExcerpts)) {
@@ -373,15 +375,21 @@ const writeSectionChunks = async (
         const chunks = chunkExcerpts(sectionExcerpts, sectionId);
         for (const chunk of chunks) {
             const safeSectionId = sectionId.replace(/[^a-zA-Z0-9]/g, '-');
+            const chunkId = `${collectionId}/${safeSectionId}/chunk-${chunk.chunkIndex}`;
             const sectionDir = join(CONTENT_CHUNKS_DIR, collectionId, safeSectionId);
             await mkdir(sectionDir, { recursive: true });
             const chunkPath = join(sectionDir, `chunk-${chunk.chunkIndex}.json`);
             await Bun.write(chunkPath, JSON.stringify(chunk, null, 2));
+            sectionToChunks[sectionId] ??= [];
+            sectionToChunks[sectionId].push(chunkId);
+            for (const excerptId of chunk.excerptIds) {
+                excerptToChunk[excerptId] = chunkId;
+            }
             chunkCount += 1;
         }
     }
 
-    return chunkCount;
+    return { chunkCount, sectionToChunks, excerptToChunk };
 };
 
 // ============================================================================
@@ -403,6 +411,8 @@ export const setup = async (...collectionIds: string[]) => {
         excerptToSection: {},
         pageToHeading: {},
         collectionToSections: {},
+        sectionToChunks: {},
+        excerptToChunk: {},
         entityToCollections: {},
     };
 
@@ -452,8 +462,10 @@ export const setup = async (...collectionIds: string[]) => {
 
         const sectionToExcerpts = rangeSectionToExcerpts;
         const headingMarkers = buildHeadingMarkers(data.headings);
-        const chunkCount = await writeSectionChunks(id, data, sectionToExcerpts, headingMarkers);
-        console.log(`  ✓ ${chunkCount} content chunks written to ${CONTENT_CHUNKS_DIR}`);
+        const chunkResult = await writeSectionChunks(id, data, sectionToExcerpts, headingMarkers);
+        indexes.sectionToChunks[id] = chunkResult.sectionToChunks;
+        indexes.excerptToChunk[id] = chunkResult.excerptToChunk;
+        console.log(`  ✓ ${chunkResult.chunkCount} content chunks written to ${CONTENT_CHUNKS_DIR}`);
     }
 
     for (const collection of collections) {

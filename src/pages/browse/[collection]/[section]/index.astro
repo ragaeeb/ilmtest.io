@@ -1,5 +1,5 @@
 ---
-import { getCollection } from 'astro:content';
+import { getCollection, getEntry } from 'astro:content';
 import ExcerptCard from '@/components/domain/ExcerptCard.astro';
 import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
@@ -61,10 +61,23 @@ if (excerptIds.length === 0) {
 }
 
 // Load chunks for this section
-const allChunks = await getCollection('excerpt-chunks');
-const sectionChunks = allChunks.filter(
-    (chunk) => chunk.data.sectionId === section && chunk.id.startsWith(`${collectionData.id}/`),
+const sectionChunkIds = (indexes.sectionToChunks?.[collectionData.id] || {}) as Record<string, string[]>;
+const chunkIds = sectionChunkIds[section] || [];
+
+let sectionChunks = (await Promise.all(chunkIds.map((chunkId) => getEntry('excerpt-chunks', chunkId)))).filter(
+    (chunk): chunk is NonNullable<typeof chunk> => Boolean(chunk)
 );
+
+if (sectionChunks.length === 0) {
+    const allChunks = await getCollection('excerpt-chunks');
+    sectionChunks = allChunks.filter(
+        (chunk) => chunk.data.sectionId === section && chunk.id.startsWith(`${collectionData.id}/`),
+    );
+}
+
+if (sectionChunks.length === 0) {
+    return Astro.redirect(`/browse/${collectionSlug}`);
+}
 
 const headingIdSet = new Set(Object.keys(sectionMap));
 

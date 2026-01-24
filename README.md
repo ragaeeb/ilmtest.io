@@ -56,6 +56,8 @@ All commands are run from the root of the project:
 | `bun dev`                 | Starts local dev server at `localhost:4321`      |
 | `bun build`               | Build your production site to `./dist/`          |
 | `bun preview`             | Preview your build locally, before deploying     |
+| `bun run setup`           | Runs the ETL pipeline to generate content/data   |
+| `bun run clean`           | Removes generated content, data, and build files |
 | `bun astro ...`           | Run CLI commands like `astro add`, `astro check` |
 
 ## 📚 Documentation

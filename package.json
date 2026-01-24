@@ -18,6 +18,7 @@
         "lint": "biome check .",
         "format": "biome check --write .",
         "setup": "bun scripts/setup.ts",
+        "clean": "rm -rf src/data src/content/excerpt-chunks dist code_packet.txt",
         "gen-packet": "code2prompt . --include=\"src/**,package.json,astro.config.mjs,README.md,AGENTS.md,docs/deployment.md,scripts/setup.ts,scripts/chunking.ts,scripts/indexing.ts,scripts/mapping.ts,scripts/hierarchy.ts,scripts/env.ts\" -e \"node_modules/**,dist/**,.git/**,bun.lockb,src/data/**,src/content/excerpt-chunks/**,**/*.test.ts\" -O code_packet.txt"
     },
     "dependencies": {

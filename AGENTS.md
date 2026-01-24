@@ -117,6 +117,8 @@ To generate a full codebase dump for an AI review session, run the following com
 bun run gen-packet
 ```
 
+**Note**: Use `bun run clean` if you need to remove old generated data, content chunks, or build artifacts before a fresh start or a new packet generation.
+
 ### Maintenance Note: Keeping Context High-Signal
 As the codebase grows, providing the entire repository to an AI agent becomes counter-productive ("Context Drift"). We must prioritize **Signal over Noise**.
 

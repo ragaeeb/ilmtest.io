@@ -2,7 +2,7 @@
 // Enable SSR for this route
 export const prerender = false;
 
-import { getCollection } from 'astro:content';
+import { getCollection, getEntry } from 'astro:content';
 import { marked } from 'marked';
 import BilingualText from '@/components/domain/BilingualText.astro';
 import CitationBlock from '@/components/domain/CitationBlock.astro';
@@ -17,7 +17,7 @@ import translatorsData from '@/data/translators.json';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { arabicToWestern } from '@/lib/arabic';
 import { getCitationParts } from '@/lib/citations';
-import type { Collection } from '@/types/excerpts';
+import type { Collection, Excerpt } from '@/types/excerpts';
 
 const { collection: collectionSlug, section, excerpt: excerptId } = Astro.params;
 
@@ -50,18 +50,22 @@ if (!sectionExcerptIds.has(excerptId)) {
     return Astro.redirect('/404');
 }
 
-// Load chunks for this section
-const allChunks = await getCollection('excerpt-chunks');
-const sectionChunks = allChunks.filter(
-    (chunk) => chunk.data.sectionId === section && chunk.id.startsWith(`${collectionData.id}/`),
-);
+const excerptToChunk = (indexes.excerptToChunk?.[collectionData.id] || {}) as Record<string, string>;
+const chunkId = excerptToChunk[excerptId];
 
-// Find the specific excerpt
-let excerpt: any = null;
-for (const chunk of sectionChunks) {
-    excerpt = chunk.data.excerpts.find((e: any) => e.id === excerptId);
-    if (excerpt) {
-        break;
+const initialChunkEntry = chunkId ? await getEntry('excerpt-chunks', chunkId) : undefined;
+let excerpt = initialChunkEntry?.data.excerpts.find((e: any) => e.id === excerptId) as Excerpt | undefined;
+
+if (!excerpt) {
+    const allChunks = await getCollection('excerpt-chunks');
+    const sectionChunks = allChunks.filter(
+        (chunk) => chunk.data.sectionId === section && chunk.id.startsWith(`${collectionData.id}/`),
+    );
+    for (const chunk of sectionChunks) {
+        excerpt = chunk.data.excerpts.find((e: any) => e.id === excerptId) as Excerpt | undefined;
+        if (excerpt) {
+            break;
+        }
     }
 }
 
@@ -69,8 +73,11 @@ if (!excerpt) {
     return Astro.redirect(`/browse/${collectionSlug}/${section}`);
 }
 
-// Get the section heading for breadcrumb
-const headingExcerpt = sectionChunks.flatMap((chunk) => chunk.data.excerpts).find((e: any) => e.id === section);
+// Get the section heading for breadcrumb (heading marker is stored in the first chunk)
+const headingChunkId =
+    ((indexes.sectionToChunks?.[collectionData.id] || {}) as Record<string, string[]>)[section]?.[0] ?? chunkId;
+const headingChunk = headingChunkId ? await getEntry('excerpt-chunks', headingChunkId) : undefined;
+const headingExcerpt = headingChunk?.data.excerpts.find((e: any) => e.id === section) as Excerpt | undefined;
 
 const sectionTitle = headingExcerpt?.text || `Section ${section}`;
 
@@ -90,6 +97,10 @@ const translatorName = translators.find((translator) => translator.id === excerp
 const excerptWords = excerpt.text.split(/\s+/).filter(Boolean);
 const excerptPreview = excerptWords.slice(0, 8).join(' ');
 const excerptLabel = excerptWords.length > 8 ? `${excerptPreview}…` : excerptPreview;
+
+const meta = excerpt.meta;
+const hadithMeta = meta && 'num' in meta ? meta : null;
+const bookMeta = meta && 'vol' in meta ? meta : null;
 
 const formatHadithNumber = (num?: string) => {
     if (!num) {
@@ -124,6 +135,9 @@ void citationMarkdown;
 void englishHtml;
 void copyPayload;
 void translatorName;
+void meta;
+void hadithMeta;
+void bookMeta;
 void formatHadithNumber;
 void breadcrumbItems;
 
@@ -144,11 +158,6 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
         <Breadcrumb items={breadcrumbItems} />
 
         <div class="excerpt-content">
-            <nav class="excerpt-skip-links" aria-label="Skip excerpt content">
-                <a href="#arabic-content">Skip to Arabic text</a>
-                <a href="#english-content">Skip to English translation</a>
-            </nav>
-
             <!-- Bilingual Text Blocks -->
             <div class="text-blocks">
                 <div id="arabic-content" class="text-block arabic-block" role="article" aria-label="Arabic text">
@@ -180,20 +189,20 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
                         <dd>{excerpt.from}</dd>
                     </div>
                     {
-                        excerpt.meta?.num && (
+                        hadithMeta && (
                             <div class="metadata-item">
                                 <dt>Hadith Number</dt>
-                                <dd>#{formatHadithNumber(excerpt.meta.num)}</dd>
+                                <dd>#{formatHadithNumber(hadithMeta.num)}</dd>
                             </div>
                         )
                     }
                     {
-                        excerpt.meta?.vol && (
+                        bookMeta && (
                             <div class="metadata-item">
                                 <dt>Volume</dt>
                                 <dd>
-                                    {excerpt.meta.vol}
-                                    {excerpt.meta.vp && ` / Page ${excerpt.meta.vp}`}
+                                    {bookMeta.vol}
+                                    {bookMeta.vp && ` / Page ${bookMeta.vp}`}
                                 </dd>
                             </div>
                         )
