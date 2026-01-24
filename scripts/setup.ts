@@ -11,6 +11,7 @@ import { addEntityMappings, mergeIndexes } from './indexing';
 import { decompressJson } from './io';
 import {
     getExcerptsUnderTitle,
+    mapHeadingIdToShamelaTitleId,
     mapTitlesToTableOfContents,
     mapTitleTreeToHeadingTree,
     type TitleNode,
@@ -166,9 +167,12 @@ const generateShamelaIndexes = (
     // Map collection to root-level headings only
     collectionToSections[collectionId] = headingTree.map((h) => h.id);
 
+    // Create set of valid heading IDs for boundary filtering
+    const validHeadingIds = new Set(data.headings.map((h) => mapHeadingIdToShamelaTitleId(h)));
+
     // Assign excerpts to headings using hierarchical logic
     const assignExcerptsToHeading = (node: (typeof headingTree)[0], titleNode: TitleNode) => {
-        const excerpts = getExcerptsUnderTitle(titleTree, data.excerpts, titleNode);
+        const excerpts = getExcerptsUnderTitle(titleTree, data.excerpts, titleNode, validHeadingIds);
 
         for (const excerpt of excerpts) {
             excerptToSection[excerpt.id] = node.id;
@@ -184,8 +188,13 @@ const generateShamelaIndexes = (
     };
 
     // Process each root heading
-    for (let i = 0; i < headingTree.length; i++) {
-        assignExcerptsToHeading(headingTree[i], titleTree[i]);
+    for (const headingNode of headingTree) {
+        const titleId = mapHeadingIdToShamelaTitleId(headingNode);
+        const titleNode = titleTree.find((t) => t.id === titleId);
+
+        if (titleNode) {
+            assignExcerptsToHeading(headingNode, titleNode);
+        }
     }
 
     return {

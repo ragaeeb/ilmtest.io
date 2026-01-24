@@ -128,12 +128,20 @@ export const getTitleTreeForPage = (nodes: TitleNode[], page: number) => {
     return filterTree(activeRoot);
 };
 
-export const getExcerptsUnderTitle = (titles: TitleNode[], excerpts: Excerpt[], selectedTitle: TitleNode) => {
+export const getExcerptsUnderTitle = (
+    titles: TitleNode[],
+    excerpts: Excerpt[],
+    selectedTitle: TitleNode,
+    validTitleIds?: Set<number>,
+) => {
     // Find the next title page that "closes" this section
-    const nextTitlePage = findNextTitleAtSameLevelOrHigher(titles, selectedTitle);
+    const nextTitlePage = findNextTitleAtSameLevelOrHigher(titles, selectedTitle, validTitleIds);
 
     // If no children, return all excerpts in the range
     if (!selectedTitle.children?.length) {
+        if (selectedTitle.id === 184) {
+            console.log(`[DEBUG] T184 (Leaf) Range: [${selectedTitle.page}, ${nextTitlePage})`);
+        }
         return excerpts.filter((e) => e.from >= selectedTitle.page && e.from < nextTitlePage);
     }
 
@@ -145,12 +153,23 @@ export const getExcerptsUnderTitle = (titles: TitleNode[], excerpts: Excerpt[], 
     // Deep level: excerpts at or after first child (nested content)
     const deepExcerpts = excerpts.filter((e) => e.from >= firstChildPage && e.from < nextTitlePage);
 
+    if (selectedTitle.id === 184) {
+        console.log(`[DEBUG] T184 (Parent) Range: [${selectedTitle.page}, ${nextTitlePage})`);
+        console.log(`[DEBUG] FirstChild: ${firstChildPage}`);
+        console.log(`[DEBUG] Direct: ${directExcerpts.length} (ids: ${directExcerpts.map((e) => e.id).join(',')})`);
+        console.log(`[DEBUG] Deep: ${deepExcerpts.length} (ids: ${deepExcerpts.map((e) => e.id).join(',')})`);
+    }
+
     // Return whichever level has more excerpts (prefer direct on tie)
     return deepExcerpts.length > directExcerpts.length ? deepExcerpts : directExcerpts;
 };
 
 // Helper: Find the next title at the same level or higher
-const findNextTitleAtSameLevelOrHigher = (titles: TitleNode[], selectedTitle: TitleNode): number => {
+const findNextTitleAtSameLevelOrHigher = (
+    titles: TitleNode[],
+    selectedTitle: TitleNode,
+    validTitleIds?: Set<number>,
+): number => {
     // Flatten all titles with their depth
     const flatTitles: Array<{ node: TitleNode; depth: number }> = [];
 
@@ -172,6 +191,12 @@ const findNextTitleAtSameLevelOrHigher = (titles: TitleNode[], selectedTitle: Ti
     // Find next title at same or higher level (lower depth number)
     for (let i = selectedIndex + 1; i < flatTitles.length; i++) {
         if (flatTitles[i].depth <= selectedDepth) {
+            // Include effective boundary logic:
+            // If validTitleIds is provided, we ONLY stop at titles that are valid headings.
+            // If the title is NOT a valid heading, we skip it (it's transparent).
+            if (validTitleIds && !validTitleIds.has(flatTitles[i].node.id)) {
+                continue;
+            }
             return flatTitles[i].node.page;
         }
     }
