@@ -12,7 +12,8 @@ const collectionsData = loadCollectionsData();
 const indexes = loadIndexesData() as Record<string, any>;
 
 export async function getStaticPaths() {
-    const entityIds = Object.keys(indexes.entityToCollections || {});
+    const indexesForPaths = loadIndexesData() as Record<string, any>;
+    const entityIds = Object.keys(indexesForPaths.entityToCollections || {});
     return entityIds.map((id) => ({
         params: { slug: id },
     }));
