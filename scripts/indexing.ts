@@ -6,13 +6,13 @@ import type { Compilation, Excerpt, Heading } from '@/types/excerpts';
  */
 export type LookupIndexes = {
     /** Map section/heading ID → array of excerpt IDs under that section */
-    sectionToExcerpts: Record<string, string[]>;
+    sectionToExcerpts: Record<string, Record<string, string[]>>;
 
     /** Map excerpt ID → section/heading ID it belongs to */
-    excerptToSection: Record<string, string>;
+    excerptToSection: Record<string, Record<string, string>>;
 
     /** Map page number → heading ID for that page */
-    pageToHeading: Record<number, string>;
+    pageToHeading: Record<string, Record<number, string>>;
 
     /** Map collection ID → array of heading IDs (for TOC) */
     collectionToSections: Record<string, string[]>;
@@ -69,7 +69,6 @@ export const generateIndexes = (data: Compilation, collectionId: string): Partia
     const sectionToExcerpts: Record<string, string[]> = {};
     const excerptToSection: Record<string, string> = {};
     const pageToHeading: Record<number, string> = {};
-    const collectionToSections: Record<string, string[]> = {};
 
     // Map each heading's page to heading ID
     for (const heading of data.headings) {
@@ -78,8 +77,6 @@ export const generateIndexes = (data: Compilation, collectionId: string): Partia
     }
 
     // Map collection to its sections
-    collectionToSections[collectionId] = data.headings.map((h) => h.id);
-
     // Map each excerpt to its section
     for (const excerpt of data.excerpts) {
         const sectionId = findSectionForExcerpt(excerpt, data.headings);
@@ -95,10 +92,10 @@ export const generateIndexes = (data: Compilation, collectionId: string): Partia
     }
 
     return {
-        sectionToExcerpts,
-        excerptToSection,
-        pageToHeading,
-        collectionToSections,
+        sectionToExcerpts: { [collectionId]: sectionToExcerpts },
+        excerptToSection: { [collectionId]: excerptToSection },
+        pageToHeading: { [collectionId]: pageToHeading },
+        collectionToSections: { [collectionId]: data.headings.map((h) => h.id) },
     };
 };
 

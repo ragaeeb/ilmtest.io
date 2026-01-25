@@ -1,14 +1,56 @@
 /**
  * Generate a URL-safe slug
  */
-export const slugify = (...texts: string[]) => {
-    return texts
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .replace(/\s+/g, '-') // Replace spaces with hyphens
-        .replace(/[^\w-]+/g, '') // Remove non-word chars except hyphens
-        .replace(/--+/g, '-') // Replace multiple hyphens with single hyphen
-        .replace(/^-+/, '') // Trim hyphens from start
-        .replace(/-+$/, ''); // Trim hyphens from end
+import { normalizeSpaces, normalizeTransliteratedEnglish } from 'bitaboom';
+
+const TITLE_STOPWORDS = new Set(['al', 'wa', 'w', 'fi', 'bi', 'li', 'l']);
+
+const toSlugTokens = (text: string): string[] => {
+    const normalized = normalizeTransliteratedEnglish(text);
+    const cleaned = normalized.replace(/[^a-zA-Z0-9]+/g, ' ');
+    const compact = normalizeSpaces(cleaned).trim();
+    if (!compact) {
+        return [];
+    }
+    return compact
+        .split(' ')
+        .map((token) => token.toLowerCase())
+        .filter(Boolean);
+};
+
+const pickTitleTokens = (title: string): string[] => {
+    const tokens = toSlugTokens(title);
+    if (tokens.length === 0) {
+        return [];
+    }
+    const filtered = tokens.filter((token) => !TITLE_STOPWORDS.has(token));
+    const base = filtered.length >= 2 ? filtered : tokens;
+    return base.slice(0, Math.min(2, base.length));
+};
+
+const pickAuthorToken = (author: string): string | null => {
+    const rawTokens = normalizeSpaces(author).split(' ').filter(Boolean);
+    if (rawTokens.length === 0) {
+        return null;
+    }
+    const last = rawTokens[rawTokens.length - 1];
+    const normalizedLast = toSlugTokens(last).join('-');
+    return normalizedLast || null;
+};
+
+export const slugify = (title?: string, author?: string) => {
+    const parts: string[] = [];
+
+    if (title) {
+        parts.push(...pickTitleTokens(title));
+    }
+
+    if (author) {
+        const authorToken = pickAuthorToken(author);
+        if (authorToken) {
+            parts.push(authorToken);
+        }
+    }
+
+    return parts.join('-');
 };

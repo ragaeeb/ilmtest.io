@@ -66,18 +66,18 @@ describe('generateIndexes', () => {
         const indexes = generateIndexes(data, 'test-collection');
 
         // sectionToExcerpts mapping
-        expect(indexes.sectionToExcerpts!['H1']).toEqual(['P1', 'P2']);
-        expect(indexes.sectionToExcerpts!['H2']).toEqual(['P3', 'P4']);
+        expect(indexes.sectionToExcerpts!['test-collection']['H1']).toEqual(['P1', 'P2']);
+        expect(indexes.sectionToExcerpts!['test-collection']['H2']).toEqual(['P3', 'P4']);
 
         // excerptToSection mapping
-        expect(indexes.excerptToSection!['P1']).toBe('H1');
-        expect(indexes.excerptToSection!['P2']).toBe('H1');
-        expect(indexes.excerptToSection!['P3']).toBe('H2');
-        expect(indexes.excerptToSection!['P4']).toBe('H2');
+        expect(indexes.excerptToSection!['test-collection']['P1']).toBe('H1');
+        expect(indexes.excerptToSection!['test-collection']['P2']).toBe('H1');
+        expect(indexes.excerptToSection!['test-collection']['P3']).toBe('H2');
+        expect(indexes.excerptToSection!['test-collection']['P4']).toBe('H2');
 
         // pageToHeading mapping
-        expect(indexes.pageToHeading![1]).toBe('H1');
-        expect(indexes.pageToHeading![10]).toBe('H2');
+        expect(indexes.pageToHeading!['test-collection'][1]).toBe('H1');
+        expect(indexes.pageToHeading!['test-collection'][10]).toBe('H2');
 
         // collectionToSections mapping
         expect(indexes.collectionToSections!['test-collection']).toEqual(['H1', 'H2']);
@@ -87,20 +87,20 @@ describe('generateIndexes', () => {
 describe('mergeIndexes', () => {
     it('should merge multiple partial indexes', () => {
         const partial1 = {
-            sectionToExcerpts: { H1: ['P1'] },
-            excerptToSection: { P1: 'H1' },
+            sectionToExcerpts: { colA: { H1: ['P1'] } },
+            excerptToSection: { colA: { P1: 'H1' } },
         };
         const partial2 = {
-            sectionToExcerpts: { H2: ['P2'] },
-            excerptToSection: { P2: 'H2' },
+            sectionToExcerpts: { colA: { H2: ['P2'] } },
+            excerptToSection: { colA: { P2: 'H2' } },
         };
 
         const merged = mergeIndexes(partial1, partial2);
 
-        expect(merged.sectionToExcerpts['H1']).toEqual(['P1']);
-        expect(merged.sectionToExcerpts['H2']).toEqual(['P2']);
-        expect(merged.excerptToSection['P1']).toBe('H1');
-        expect(merged.excerptToSection['P2']).toBe('H2');
+        expect(merged.sectionToExcerpts['colA']['H1']).toEqual(['P1']);
+        expect(merged.sectionToExcerpts['colA']['H2']).toEqual(['P2']);
+        expect(merged.excerptToSection['colA']['P1']).toBe('H1');
+        expect(merged.excerptToSection['colA']['P2']).toBe('H2');
     });
 });
 

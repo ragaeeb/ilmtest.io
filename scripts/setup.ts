@@ -10,11 +10,11 @@ import {
 } from '@ilmtest/ilmtest-sdk-js';
 import type { BookData } from 'shamela';
 import { slugify } from '@/lib/textUtils';
-import { chunkExcerpts } from './chunking';
-import { addEntityMappings, generateIndexes, type LookupIndexes } from './indexing';
 import type { Collection, Compilation, Excerpt, Heading } from '@/types/excerpts';
+import { chunkExcerpts } from './chunking';
 import { HF_ASL_STORE, HF_EXCERPT_STORE, HF_SHAMELA4_STORE, HF_TOKEN, ILMTEST_API_URL, OUTPUT_DIR } from './env';
 import { downloadDataSet } from './huggingface';
+import { addEntityMappings, generateIndexes, type LookupIndexes } from './indexing';
 import { decompressJson } from './io';
 import { mapHeadingIdToShamelaTitleId, mapTitlesToTableOfContents, type TitleNode } from './mapping';
 
@@ -25,11 +25,7 @@ const COLLECTIONS_FILE = 'collections.json';
 const TRANSLATORS_FILE = 'translators.json';
 const INDEXES_FILE = 'indexes.json';
 
-// ============================================================================
-// Data Loading
-// ============================================================================
-
-const downloadAndUnzipFile = async <T = unknown>(id: string, dataset: string) => {
+const downloadAndUnzipFile = async <T = unknown>({ id, dataset }: { id: string; dataset: string }) => {
     const fileName = `${id}.json.br`;
     const buffer = await downloadDataSet(dataset, fileName, { authToken: HF_TOKEN });
     console.log('Uncompressing...', fileName);
@@ -63,6 +59,20 @@ const loadCollection = async (id: string): Promise<Collection> => {
     };
 };
 
+const getDataSetPropsForCollection = (c: Collection) => {
+    if (c.src.id === SHAMELA4_LIBRARY_ID) {
+        return {
+            dataset: HF_SHAMELA4_STORE,
+            id: c.src.fid,
+        };
+    }
+
+    return {
+        dataset: HF_ASL_STORE,
+        id: c.id,
+    };
+};
+
 const loadExcerpts = async (collectionId: string): Promise<Compilation> => {
     const excerptsFile = format({ dir: OUTPUT_DIR, name: collectionId, ext: '.json' });
 
@@ -71,14 +81,13 @@ const loadExcerpts = async (collectionId: string): Promise<Compilation> => {
     }
 
     console.log('Downloading excerpts from HuggingFace...');
-    const excerpts: Compilation = await downloadAndUnzipFile(collectionId, HF_EXCERPT_STORE);
+    const excerpts: Compilation = await downloadAndUnzipFile({ id: collectionId, dataset: HF_EXCERPT_STORE });
 
     console.log('Loading collection metadata...');
     excerpts.collection = await loadCollection(collectionId);
 
     console.log('Downloading asl from HuggingFace...');
-    const store = excerpts.collection.src.id === SHAMELA4_LIBRARY_ID ? HF_SHAMELA4_STORE : HF_ASL_STORE;
-    excerpts.sourceDocument = await downloadAndUnzipFile(excerpts.collection.src.fid, store);
+    excerpts.sourceDocument = await downloadAndUnzipFile(getDataSetPropsForCollection(excerpts.collection));
 
     const serialized = JSON.stringify(excerpts, null, 2);
     console.log('Saving', excerptsFile, serialized.length, 'bytes');
@@ -111,6 +120,7 @@ type HeadingWithRange = Heading & {
     indexRange: { start: number; end: number };
     pageRange: { start: number; end: number };
     range: { start: string; end: string };
+    parent?: string;
 };
 
 /**
@@ -334,13 +344,9 @@ const backfillMissingTranslators = (items: Array<{ id: string; translator?: numb
 
         if (fallback !== undefined) {
             items[i].translator = fallback;
-            console.warn(
-                `⚠️  Missing translator for ${label} ${items[i].id}; backfilled with ${fallback}.`,
-            );
+            console.warn(`⚠️  Missing translator for ${label} ${items[i].id}; backfilled with ${fallback}.`);
         } else {
-            console.warn(
-                `⚠️  Missing translator for ${label} ${items[i].id}; no adjacent value found. Using 0.`,
-            );
+            console.warn(`⚠️  Missing translator for ${label} ${items[i].id}; no adjacent value found. Using 0.`);
             items[i].translator = 0;
         }
     }
@@ -375,10 +381,11 @@ const writeSectionChunks = async (
         const chunks = chunkExcerpts(sectionExcerpts, sectionId);
         for (const chunk of chunks) {
             const safeSectionId = sectionId.replace(/[^a-zA-Z0-9]/g, '-');
-            const chunkId = `${collectionId}/${safeSectionId}/chunk-${chunk.chunkIndex}`;
+            const chunkFileName = `chunk-${chunk.chunkIndex}.json`;
+            const chunkId = `${collectionId}/${safeSectionId}/${chunkFileName}`;
             const sectionDir = join(CONTENT_CHUNKS_DIR, collectionId, safeSectionId);
             await mkdir(sectionDir, { recursive: true });
-            const chunkPath = join(sectionDir, `chunk-${chunk.chunkIndex}.json`);
+            const chunkPath = join(sectionDir, chunkFileName);
             await Bun.write(chunkPath, JSON.stringify(chunk, null, 2));
             sectionToChunks[sectionId] ??= [];
             sectionToChunks[sectionId].push(chunkId);
@@ -401,8 +408,11 @@ export const setup = async (...collectionIds: string[]) => {
 
     init('3', ILMTEST_API_URL!);
 
-    await mkdir(OUTPUT_DATA_DIR, { recursive: true });
-    await mkdir(CONTENT_CHUNKS_DIR, { recursive: true });
+    await Promise.all([
+        mkdir(OUTPUT_DIR, { recursive: true }),
+        mkdir(OUTPUT_DATA_DIR, { recursive: true }),
+        mkdir(CONTENT_CHUNKS_DIR, { recursive: true }),
+    ]);
 
     const allTranslators = await loadTranslators();
     const collections: Collection[] = [];
@@ -451,13 +461,13 @@ export const setup = async (...collectionIds: string[]) => {
         const rangeSectionToExcerpts = buildSectionToExcerptsFromRanges(headingsWithRanges, data.excerpts);
 
         // Ensure heading IDs map to themselves (used for section title lookup)
-        partialIndexes.excerptToSection ??= {};
+        const excerptToSection = partialIndexes.excerptToSection?.[id] ?? {};
         for (const heading of data.headings) {
-            partialIndexes.excerptToSection[heading.id] = heading.id;
+            excerptToSection[heading.id] = heading.id;
         }
         indexes.sectionToExcerpts[id] = rangeSectionToExcerpts;
-        indexes.excerptToSection[id] = partialIndexes.excerptToSection ?? {};
-        indexes.pageToHeading[id] = partialIndexes.pageToHeading ?? {};
+        indexes.excerptToSection[id] = excerptToSection;
+        indexes.pageToHeading[id] = partialIndexes.pageToHeading?.[id] ?? {};
         indexes.collectionToSections[id] = topLevelHeadingIds;
 
         const sectionToExcerpts = rangeSectionToExcerpts;

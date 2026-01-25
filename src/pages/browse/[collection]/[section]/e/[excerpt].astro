@@ -3,6 +3,7 @@
 export const prerender = false;
 
 import { getCollection, getEntry } from 'astro:content';
+import type { CollectionEntry } from 'astro:content';
 import { marked } from 'marked';
 import BilingualText from '@/components/domain/BilingualText.astro';
 import CitationBlock from '@/components/domain/CitationBlock.astro';
@@ -50,10 +51,28 @@ if (!sectionExcerptIds.has(excerptId)) {
     return Astro.redirect('/404');
 }
 
+const safeGetEntry = async (entryId: string): Promise<CollectionEntry<'excerpt-chunks'> | null> => {
+    const normalizedId = entryId.endsWith('.json') ? entryId : `${entryId}.json`;
+    try {
+        return (await getEntry('excerpt-chunks', normalizedId)) as CollectionEntry<'excerpt-chunks'>;
+    } catch (error) {
+        void error;
+        if (normalizedId !== entryId) {
+            try {
+                return (await getEntry('excerpt-chunks', entryId)) as CollectionEntry<'excerpt-chunks'>;
+            } catch (fallbackError) {
+                void fallbackError;
+                return null;
+            }
+        }
+        return null;
+    }
+};
+
 const excerptToChunk = (indexes.excerptToChunk?.[collectionData.id] || {}) as Record<string, string>;
 const chunkId = excerptToChunk[excerptId];
 
-const initialChunkEntry = chunkId ? await getEntry('excerpt-chunks', chunkId) : undefined;
+const initialChunkEntry = chunkId ? await safeGetEntry(chunkId) : undefined;
 let excerpt = initialChunkEntry?.data.excerpts.find((e: any) => e.id === excerptId) as Excerpt | undefined;
 
 if (!excerpt) {
@@ -76,7 +95,7 @@ if (!excerpt) {
 // Get the section heading for breadcrumb (heading marker is stored in the first chunk)
 const headingChunkId =
     ((indexes.sectionToChunks?.[collectionData.id] || {}) as Record<string, string[]>)[section]?.[0] ?? chunkId;
-const headingChunk = headingChunkId ? await getEntry('excerpt-chunks', headingChunkId) : undefined;
+const headingChunk = headingChunkId ? await safeGetEntry(headingChunkId) : undefined;
 const headingExcerpt = headingChunk?.data.excerpts.find((e: any) => e.id === section) as Excerpt | undefined;
 
 const sectionTitle = headingExcerpt?.text || `Section ${section}`;
