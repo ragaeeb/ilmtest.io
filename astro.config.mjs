@@ -14,15 +14,12 @@ export default defineConfig({
     integrations: [
         // React for interactive islands (Motion animations, theme toggle, share button)
         react(),
-        tailwindcss({
-            applyBaseStyles: false,
-        }),
     ],
 
     site: 'https://ilmtest.io',
 
     vite: {
-        // Vite 7 compatibility
+        plugins: [tailwindcss()],
     },
 
     build: {

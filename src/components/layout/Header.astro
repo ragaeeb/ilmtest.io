@@ -1,0 +1,184 @@
+---
+interface Props {
+    currentPath?: string;
+}
+
+const { currentPath = '/' } = Astro.props as Props;
+
+const navLinks = [
+    { href: '/browse', label: 'Browse' },
+    { href: '/about', label: 'About' },
+];
+
+// Biome doesn't see template usage in .astro files.
+void currentPath;
+void navLinks;
+---
+
+<header class="header">
+  <div class="header-container">
+    <!-- Logo -->
+    <a href="/" class="logo" aria-label="IlmTest Home">
+      <img class="logo-image" src="/favicon.svg" alt="" width="32" height="32" />
+      <span class="logo-text">
+        <span class="logo-ilm">Ilm</span><span class="logo-test">Test</span>
+      </span>
+    </a>
+
+    <!-- Navigation -->
+    <nav class="nav" aria-label="Main navigation">
+      <ul class="nav-list">
+        {navLinks.map((link) => (
+          <li>
+            <a 
+              href={link.href} 
+              class:list={['nav-link', { active: currentPath.startsWith(link.href) }]}
+              aria-current={currentPath.startsWith(link.href) ? 'page' : undefined}
+            >
+              {link.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+
+    <!-- Actions -->
+    <div class="header-actions">
+      <!-- Search placeholder (post-MVP) -->
+      <button 
+        class="search-button" 
+        aria-label="Search (coming soon)"
+        title="Search coming soon"
+        disabled
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <path d="m21 21-4.3-4.3"></path>
+        </svg>
+      </button>
+
+      <!-- Theme toggle slot for React island -->
+      <slot name="theme-toggle" />
+    </div>
+  </div>
+</header>
+
+<style>
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: var(--z-sticky);
+    background-color: var(--color-background);
+    border-bottom: 1px solid var(--color-border);
+    backdrop-filter: blur(8px);
+  }
+
+  .header-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--space-4) var(--space-6);
+    gap: var(--space-6);
+  }
+
+  /* Logo */
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    text-decoration: none;
+    font-size: var(--text-xl);
+    font-weight: 700;
+  }
+
+  .logo img {
+    width: 32px;
+    height: 32px;
+  }
+
+  .logo-ilm {
+    color: var(--color-primary-text);
+  }
+
+  .logo-test {
+    color: var(--color-secondary);
+  }
+
+  /* Navigation */
+  .nav-list {
+    display: flex;
+    gap: var(--space-2);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .nav-link {
+    display: block;
+    padding: var(--space-2) var(--space-4);
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    font-weight: 500;
+    border-radius: var(--radius-md);
+    transition: 
+      color var(--duration-fast) var(--ease-out),
+      background-color var(--duration-fast) var(--ease-out);
+  }
+
+  .nav-link:hover {
+    color: var(--color-text-primary);
+    background-color: var(--color-surface);
+  }
+
+  .nav-link.active {
+    color: var(--color-primary-text);
+    background-color: var(--color-surface);
+  }
+
+  .logo-image {
+    display: inline-block;
+  }
+
+  /* Actions */
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .search-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--color-text-secondary);
+    cursor: not-allowed;
+    opacity: 0.5;
+    transition: 
+      color var(--duration-fast) var(--ease-out),
+      background-color var(--duration-fast) var(--ease-out);
+  }
+
+  /* Mobile responsive */
+  @media (max-width: 640px) {
+    .header-container {
+      padding: var(--space-3) var(--space-4);
+    }
+
+    .logo-text {
+      display: none;
+    }
+
+    .nav-link {
+      padding: var(--space-2) var(--space-3);
+      font-size: var(--text-sm);
+    }
+  }
+</style>

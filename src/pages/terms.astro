@@ -1,0 +1,117 @@
+---
+import { ThemeToggle } from '@/components/islands/ThemeToggle';
+import Footer from '@/components/layout/Footer.astro';
+import Header from '@/components/layout/Header.astro';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+
+// Biome doesn't see template usage in .astro files.
+void ThemeToggle;
+void Footer;
+void Header;
+void BaseLayout;
+---
+
+<BaseLayout title="Terms of Use">
+  <Header slot="header" currentPath="/terms">
+    <ThemeToggle client:only="react" slot="theme-toggle" />
+  </Header>
+
+  <div class="policy-container">
+    <h1 class="page-title">Terms of Use</h1>
+    <p class="updated-text">Last updated: January 24, 2026</p>
+
+    <div class="content-wrapper">
+        <section class="policy-section">
+        <h2>1. Nature of Service</h2>
+        <p>
+            IlmTest is a digital research tool and archive. It provides access to classical Islamic texts and translations for educational and research purposes.
+            <strong>We are not a religious authority, Dar al-Ifta, or a substitute for qualified scholarly instruction.</strong>
+        </p>
+        </section>
+
+        <section class="policy-section">
+        <h2>2. Content Accuracy & Translations</h2>
+        <p>
+            While we strive for accuracy by linking to primary sources:
+        </p>
+        <ul>
+            <li>Translations are human efforts and may contain errors or interpretive choices.</li>
+            <li>We do not claim that any translation is perfect or definitive.</li>
+            <li>Users are encouraged to verify critical texts against the original Arabic sources linked on each page.</li>
+        </ul>
+        </section>
+
+        <section class="policy-section">
+        <h2>3. External Links & Sources</h2>
+        <p>
+            Our "Verification" system relies on linking to external Repositories (such as Shamela.ws, Waqfeya, or Archive.org).
+            We do not control these external sites and are not responsible for their availability, content changes, or security.
+        </p>
+        </section>
+
+        <section class="policy-section">
+        <h2>4. Usage of Data</h2>
+        <p>
+            You are free to use citations and excerpts for personal research, academic papers, or educational content.
+            However, mass scraping or automated extraction that burdens our infrastructure is prohibited without prior permission.
+        </p>
+        </section>
+
+        <section class="policy-section">
+        <h2>5. Disclaimer of Warranties</h2>
+        <p>
+            The service is provided "as is". We make no warranties regarding the continuity of the service or the absolute accuracy of the digitized texts.
+        </p>
+        </section>
+
+        <section class="policy-section">
+        <h2>Contact</h2>
+        <p>
+            For corrections or takedown requests regarding copyrighted translations, please contact <a href="mailto:legal@ilmtest.io">legal@ilmtest.io</a>.
+        </p>
+        </section>
+    </div>
+  </div>
+
+  <Footer slot="footer" />
+</BaseLayout>
+
+
+<style>
+  .policy-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: var(--space-12) var(--space-6);
+  }
+
+  .page-title {
+    font-size: var(--text-3xl);
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-2);
+  }
+
+  .updated-text {
+    color: var(--color-text-tertiary);
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-8);
+  }
+
+  .policy-section {
+    margin-bottom: var(--space-8);
+  }
+
+  .policy-section h2 {
+    font-size: var(--text-xl);
+    margin-bottom: var(--space-2);
+  }
+
+  .policy-section p,
+  .policy-section li {
+    color: var(--color-text-secondary);
+    line-height: var(--leading-relaxed);
+  }
+
+  .policy-section ul {
+    padding-left: var(--space-6);
+  }
+</style>

@@ -1,1 +1,440 @@
 @import "tailwindcss";
+
+/* ===================================================
+   IlmTest Design System - CSS Custom Properties
+   Based on Brand Guidelines Synthesis
+   =================================================== */
+
+/* --- Font Imports --- */
+/* Arabic content: Noto Naskh Arabic (traditional, authentic)
+   Arabic UI: IBM Plex Sans Arabic (modern, clean)
+   Subset versions for performance */
+
+@font-face {
+    font-family: "Noto Naskh Arabic";
+    src: url("/fonts/NotoNaskhArabic-subset.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF;
+}
+
+/* ===================================================
+   Light Mode (Default)
+   =================================================== */
+:root {
+    /* --- Core Brand Colors --- */
+    --color-primary: #309fd6;
+    --color-primary-hover: #2889bd;
+    --color-primary-active: #236f9a;
+    --color-primary-text: #0c7fb5;
+    --color-secondary: #e9692c;
+    --color-secondary-hover: #d15a20;
+    --color-tertiary: #89be48;
+    --color-tertiary-hover: #76a83d;
+    --color-quaternary: #f1c232;
+
+    /* --- Backgrounds --- */
+    --color-background: #ffffff;
+    --color-surface: #f8f9fa;
+    --color-surface-hover: #f1f3f5;
+    --color-border: #e2e8f0;
+    --color-border-hover: #cbd5e1;
+
+    /* --- Text --- */
+    --color-text-primary: #343a40;
+    --color-text-secondary: #6c757d;
+    --color-text-tertiary: #adb5bd;
+    --color-text-inverse: #ffffff;
+
+    /* --- Bilingual Backgrounds --- */
+    --color-arabic-bg: #fff9f0;
+    --color-english-bg: #f0f8ff;
+
+    /* --- Semantic Colors --- */
+    --color-success: #28a745;
+    --color-success-bg: #d4edda;
+    --color-warning: #ffc107;
+    --color-warning-bg: #fff3cd;
+    --color-error: #dc3545;
+    --color-error-bg: #f8d7da;
+    --color-info: #17a2b8;
+    --color-info-bg: #d1ecf1;
+
+    /* --- Shadows --- */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+    --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.15);
+
+    /* --- Typography --- */
+    --font-english: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    /* Fallback to system fonts until custom fonts are added */
+    --font-arabic-content: "Noto Naskh Arabic", "Traditional Arabic", "Geeza Pro", "Arabic Typesetting", serif;
+    --font-arabic-ui: "Noto Naskh Arabic", "SF Arabic", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+
+    /* Font Sizes */
+    --text-xs: 0.75rem; /* 12px */
+    --text-sm: 0.875rem; /* 14px */
+    --text-base: 1rem; /* 16px */
+    --text-lg: 1.125rem; /* 18px - Arabic body */
+    --text-xl: 1.25rem; /* 20px */
+    --text-2xl: 1.5rem; /* 24px */
+    --text-3xl: 2rem; /* 32px */
+    --text-4xl: 2.5rem; /* 40px */
+
+    /* Line Heights */
+    --leading-tight: 1.25;
+    --leading-normal: 1.6;
+    --leading-relaxed: 1.8;
+    --leading-arabic: 2;
+
+    /* --- Spacing (8-point grid) --- */
+    --space-1: 0.25rem; /* 4px */
+    --space-2: 0.5rem; /* 8px */
+    --space-3: 0.75rem; /* 12px */
+    --space-4: 1rem; /* 16px */
+    --space-5: 1.25rem; /* 20px */
+    --space-6: 1.5rem; /* 24px */
+    --space-8: 2rem; /* 32px */
+    --space-10: 2.5rem; /* 40px */
+    --space-12: 3rem; /* 48px */
+    --space-16: 4rem; /* 64px */
+
+    /* --- Border Radius --- */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 12px;
+    --radius-full: 9999px;
+
+    /* --- Animation Durations --- */
+    --duration-fast: 150ms;
+    --duration-normal: 250ms;
+    --duration-slow: 350ms;
+
+    /* --- Easing --- */
+    --ease-out: cubic-bezier(0, 0, 0.2, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* --- Z-Index Scale --- */
+    --z-dropdown: 100;
+    --z-sticky: 200;
+    --z-modal: 300;
+    --z-toast: 400;
+
+    /* --- Component Tokens --- */
+    --button-padding-x: var(--space-6);
+    --button-padding-y: var(--space-3);
+    --card-padding: var(--space-6);
+    --input-padding-x: var(--space-4);
+    --input-padding-y: var(--space-3);
+}
+
+/* ===================================================
+   Dark Mode
+   =================================================== */
+[data-theme="dark"] {
+    /* --- Core Brand Colors (brighter for dark backgrounds) --- */
+    --color-primary: #4db3e6;
+    --color-primary-hover: #6dc3ed;
+    --color-primary-active: #8dd3f4;
+    --color-primary-text: #4db3e6;
+    --color-secondary: #ff8a5c;
+    --color-secondary-hover: #ffa07a;
+    --color-tertiary: #a5d670;
+    --color-tertiary-hover: #b8e08a;
+
+    /* --- Backgrounds (Slate tones, not pure black) --- */
+    --color-background: #0f172a;
+    --color-surface: #1e293b;
+    --color-surface-hover: #334155;
+    --color-border: #334155;
+    --color-border-hover: #475569;
+
+    /* --- Text --- */
+    --color-text-primary: #f8fafc;
+    --color-text-secondary: #94a3b8;
+    --color-text-tertiary: #64748b;
+    --color-text-inverse: #0f172a;
+
+    /* --- Bilingual Backgrounds --- */
+    --color-arabic-bg: #2d2820;
+    --color-english-bg: #1a2530;
+
+    /* --- Semantic Colors --- */
+    --color-success: #5fd68a;
+    --color-success-bg: #1a3d2a;
+    --color-warning: #ffd966;
+    --color-warning-bg: #3d3520;
+    --color-error: #ff6b7a;
+    --color-error-bg: #3d1a20;
+    --color-info: #5ec4d9;
+    --color-info-bg: #1a2d35;
+
+    /* --- Shadows (stronger for dark mode) --- */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
+    --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+/* ===================================================
+   Base Styles
+   =================================================== */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    font-family: var(--font-english);
+    font-size: 16px;
+    line-height: var(--leading-normal);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--color-background);
+    color: var(--color-text-primary);
+    transition:
+        background-color var(--duration-normal) var(--ease-in-out),
+        color var(--duration-normal) var(--ease-in-out);
+}
+
+/* ===================================================
+   Typography
+   =================================================== */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    margin: 0;
+    font-weight: 700;
+    line-height: var(--leading-tight);
+}
+
+h1 {
+    font-size: var(--text-3xl);
+}
+h2 {
+    font-size: var(--text-2xl);
+}
+h3 {
+    font-size: var(--text-xl);
+    font-weight: 600;
+}
+h4 {
+    font-size: var(--text-lg);
+    font-weight: 600;
+}
+
+p {
+    margin: 0;
+    line-height: var(--leading-normal);
+}
+
+/* Arabic Content Typography */
+.arabic-content,
+[lang="ar"] {
+    font-family: var(--font-arabic-content);
+    font-size: var(--text-lg);
+    line-height: var(--leading-arabic);
+    direction: rtl;
+    text-align: right;
+}
+
+/* Arabic UI Typography */
+.arabic-ui {
+    font-family: var(--font-arabic-ui);
+    direction: rtl;
+}
+
+/* Monospace for citations */
+.citation-ref,
+.page-number {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+}
+
+/* ===================================================
+   Focus States (Accessibility)
+   =================================================== */
+:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+/* Skip link for accessibility */
+.skip-link {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: var(--color-primary);
+    color: var(--color-text-inverse);
+    padding: var(--space-2) var(--space-4);
+    z-index: var(--z-toast);
+    transition: top var(--duration-fast) var(--ease-out);
+}
+
+.skip-link:focus {
+    top: 0;
+}
+
+/* ===================================================
+   Selection
+   =================================================== */
+::selection {
+    background-color: var(--color-primary);
+    color: var(--color-text-inverse);
+}
+
+/* ===================================================
+   Scrollbar (subtle styling)
+   =================================================== */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--color-surface);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--color-border-hover);
+}
+
+/* ===================================================
+   Utility Classes
+   =================================================== */
+
+/* Bilingual backgrounds */
+.bg-arabic {
+    background-color: var(--color-arabic-bg);
+}
+
+.bg-english {
+    background-color: var(--color-english-bg);
+}
+
+/* Text colors */
+.text-primary {
+    color: var(--color-text-primary);
+}
+.text-secondary {
+    color: var(--color-text-secondary);
+}
+.text-tertiary {
+    color: var(--color-text-tertiary);
+}
+
+/* Brand colors */
+.text-brand-primary {
+    color: var(--color-primary);
+}
+.text-brand-secondary {
+    color: var(--color-secondary);
+}
+.text-brand-tertiary {
+    color: var(--color-tertiary);
+}
+
+/* Semantic colors */
+.text-success {
+    color: var(--color-success);
+}
+.text-warning {
+    color: var(--color-warning);
+}
+.text-error {
+    color: var(--color-error);
+}
+
+/* Screen reader only */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+/* Share buttons */
+.share-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.share-button {
+    appearance: none;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-surface);
+    color: var(--color-text-primary);
+    font-size: var(--text-sm);
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition:
+        color var(--duration-fast) var(--ease-out),
+        background-color var(--duration-fast) var(--ease-out),
+        border-color var(--duration-fast) var(--ease-out),
+        transform var(--duration-fast) var(--ease-out);
+}
+
+.share-button:hover {
+    background-color: var(--color-surface-hover);
+    border-color: var(--color-border-hover);
+    color: var(--color-primary-text);
+}
+
+.share-button svg {
+    display: block;
+}
+
+.share-button.is-copied {
+    color: var(--color-success);
+    border-color: var(--color-success);
+    transform: scale(1.03);
+}
+
+.share-button:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+/* ===================================================
+   Reduced Motion (Accessibility)
+   =================================================== */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        /* biome-ignore lint: reduce motion override */
+        animation-duration: 0.01ms !important;
+        /* biome-ignore lint: reduce motion override */
+        animation-iteration-count: 1 !important;
+        /* biome-ignore lint: reduce motion override */
+        transition-duration: 0.01ms !important;
+        /* biome-ignore lint: reduce motion override */
+        scroll-behavior: auto !important;
+    }
+}

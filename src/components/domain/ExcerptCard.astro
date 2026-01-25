@@ -1,0 +1,118 @@
+---
+import Card from '@/components/ui/Card.astro';
+import type { Collection, Excerpt } from '@/types/excerpts';
+
+interface Props {
+    excerpt: Excerpt;
+    collection: Collection;
+    collectionSlug: string;
+    sectionSlug: string;
+    excerptId: string;
+}
+
+const { excerpt, collection, collectionSlug, sectionSlug, excerptId } = Astro.props as Props;
+
+const previewText = excerpt.nass.length > 150 ? `${excerpt.nass.substring(0, 150)}...` : excerpt.nass;
+const previewEnglish = excerpt.text.length > 150 ? `${excerpt.text.substring(0, 150)}...` : excerpt.text;
+
+// Biome doesn't see template usage in .astro files.
+void excerpt;
+void collection;
+void collectionSlug;
+void sectionSlug;
+void excerptId;
+void previewText;
+void previewEnglish;
+void Card;
+---
+
+<Card 
+  href={`/browse/${collectionSlug}/${sectionSlug}/e/${excerptId}`}
+  variant="outlined"
+  hoverable={true}
+  padding="md"
+  class="excerpt-card-override"
+>
+  <div class="excerpt-content">
+    <div class="excerpt-preview">
+      <div class="excerpt-text-arabic" lang="ar" dir="rtl">
+        {previewText}
+      </div>
+      <div class="excerpt-text-english">
+        {previewEnglish}
+      </div>
+      <div class="excerpt-meta">
+        <span class="page-number">Page {excerpt.from}</span>
+      </div>
+    </div>
+    
+    <div class="card-footer">
+      <span class="read-more">
+        Read Full
+      </span>
+    </div>
+  </div>
+</Card>
+
+<style>
+  .excerpt-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .excerpt-text-arabic {
+    font-size: var(--text-xl);
+    color: var(--color-text-primary);
+    line-height: var(--leading-relaxed);
+    font-family: var(--font-arabic-content);
+    direction: rtl;
+    text-align: right;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-break: strict;
+  }
+
+  .excerpt-text-english {
+    font-size: var(--text-base);
+    color: var(--color-text-secondary);
+    line-height: var(--leading-normal);
+    font-family: var(--font-english);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .excerpt-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+  }
+
+  .page-number,
+  .hadith-num,
+  .volume {
+    font-family: var(--font-mono);
+  }
+
+  .card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--color-surface-hover); /* slightly lighter border than main */
+  }
+
+  .read-more {
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--color-primary);
+  }
+
+  :global(.card-hoverable:hover) .read-more {
+    text-decoration: underline;
+  }
+</style>

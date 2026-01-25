@@ -22,3 +22,8 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
+
+src/content/**
+src/data/**
+.wrangler
+tmp/excerpt-chunks

@@ -1,5 +1,6 @@
 import type { BookData, Page, Title } from 'shamela';
-import type { Excerpt, Excerpts, Heading } from './types/excerpts';
+import { arabicToWestern } from '@/lib/arabic';
+import type { Compilation, Excerpt, Heading } from '@/types/excerpts';
 
 /**
  * When the user gets a shareable link to an excerpt and they open it, there hould be a hard link to exactly where this excerpt was taken from its original library.
@@ -80,7 +81,7 @@ type HeadingNode = Heading & {
     children?: HeadingNode[];
 };
 
-export const mapTitleTreeToHeadingTree = (titleNodes: TitleNode[], headings: Heading[]): HeadingNode[] => {
+export const mapTitleTreeToHeadingTree = (titleNodes: TitleNode[], headings: Heading[]) => {
     // Create a map from title ID to heading
     const titleIdToHeading = new Map<number, Heading>();
 
@@ -102,7 +103,7 @@ export const mapTitleTreeToHeadingTree = (titleNodes: TitleNode[], headings: Hea
         return headingNode;
     };
 
-    return titleNodes.map(convertNode);
+    return titleNodes.filter((t) => titleIdToHeading.has(t.id)).map(convertNode);
 };
 
 export const getTitleTreeForPage = (nodes: TitleNode[], page: number) => {
@@ -132,9 +133,10 @@ export const getExcerptsUnderTitle = (
     titles: TitleNode[],
     excerpts: Excerpt[],
     selectedTitle: TitleNode,
-): Excerpt[] => {
+    validTitleIds?: Set<number>,
+) => {
     // Find the next title page that "closes" this section
-    const nextTitlePage = findNextTitleAtSameLevelOrHigher(titles, selectedTitle);
+    const nextTitlePage = findNextTitleAtSameLevelOrHigher(titles, selectedTitle, validTitleIds);
 
     // If no children, return all excerpts in the range
     if (!selectedTitle.children?.length) {
@@ -143,18 +145,23 @@ export const getExcerptsUnderTitle = (
 
     const firstChildPage = selectedTitle.children[0].page;
 
-    // Direct level: excerpts between title and first child
-    const directExcerpts = excerpts.filter((e) => e.from >= selectedTitle.page && e.from < firstChildPage);
+    // If parent and first child are on the same page, assign nothing to parent
+    // (all excerpts will be assigned to children via recursive processing)
+    if (firstChildPage === selectedTitle.page) {
+        return [];
+    }
 
-    // Deep level: excerpts at or after first child (nested content)
-    const deepExcerpts = excerpts.filter((e) => e.from >= firstChildPage && e.from < nextTitlePage);
-
-    // Return whichever level has more excerpts (prefer direct on tie)
-    return deepExcerpts.length > directExcerpts.length ? deepExcerpts : directExcerpts;
+    // Otherwise, assign excerpts between parent and first child to parent
+    // (excerpts at/after first child will be assigned to children via recursion)
+    return excerpts.filter((e) => e.from >= selectedTitle.page && e.from < firstChildPage);
 };
 
 // Helper: Find the next title at the same level or higher
-const findNextTitleAtSameLevelOrHigher = (titles: TitleNode[], selectedTitle: TitleNode): number => {
+const findNextTitleAtSameLevelOrHigher = (
+    titles: TitleNode[],
+    selectedTitle: TitleNode,
+    validTitleIds?: Set<number>,
+): number => {
     // Flatten all titles with their depth
     const flatTitles: Array<{ node: TitleNode; depth: number }> = [];
 
@@ -176,6 +183,12 @@ const findNextTitleAtSameLevelOrHigher = (titles: TitleNode[], selectedTitle: Ti
     // Find next title at same or higher level (lower depth number)
     for (let i = selectedIndex + 1; i < flatTitles.length; i++) {
         if (flatTitles[i].depth <= selectedDepth) {
+            // Include effective boundary logic:
+            // If validTitleIds is provided, we ONLY stop at titles that are valid headings.
+            // If the title is NOT a valid heading, we skip it (it's transparent).
+            if (validTitleIds && !validTitleIds.has(flatTitles[i].node.id)) {
+                continue;
+            }
             return flatTitles[i].node.page;
         }
     }
@@ -188,24 +201,8 @@ const findNextTitleAtSameLevelOrHigher = (titles: TitleNode[], selectedTitle: Ti
  * @param excerpt
  * @param bookData
  */
-export const groundShamelaExcerpts = (data: Excerpts, bookData: BookData) => {
+export const groundShamelaExcerpts = (data: Compilation, bookData: BookData) => {
     copyCitationDataToMeta(bookData.pages, data.excerpts);
 };
 
-const ARABIC_TO_WESTERN: Record<string, string> = {
-    '٠': '0',
-    '١': '1',
-    '٢': '2',
-    '٣': '3',
-    '٤': '4',
-    '٥': '5',
-    '٦': '6',
-    '٧': '7',
-    '٨': '8',
-    '٩': '9',
-} as const;
-
-export const arabicToWestern = (arabicNum: string) => {
-    const western = arabicNum.replace(/[٠-٩]/g, (d) => ARABIC_TO_WESTERN[d]);
-    return parseInt(western, 10);
-};
+export { arabicToWestern };

@@ -1,0 +1,225 @@
+---
+import { ThemeToggle } from '@/components/islands/ThemeToggle';
+import Footer from '@/components/layout/Footer.astro';
+import Header from '@/components/layout/Header.astro';
+import Breadcrumb from '@/components/ui/Breadcrumb.astro';
+import Card from '@/components/ui/Card.astro';
+import collectionsData from '@/data/collections.json';
+// Import indexes
+import indexes from '@/data/indexes.json';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import type { Collection } from '@/types/excerpts';
+
+export async function getStaticPaths() {
+    const entityIds = Object.keys(indexes.entityToCollections || {});
+    return entityIds.map((id) => ({
+        params: { slug: id },
+    }));
+}
+
+const { slug } = Astro.params;
+
+if (!slug) {
+    return Astro.redirect('/404');
+}
+
+// Get entity information from indexes
+const entityData = indexes.entityToCollections?.[slug];
+
+if (!entityData) {
+    return Astro.redirect('/404');
+}
+
+const collections = Array.isArray(collectionsData)
+    ? (collectionsData as Collection[])
+    : ((collectionsData as { collections?: Collection[] }).collections ?? []);
+const collectionsById = new Map(collections.map((collection) => [collection.id, collection]));
+
+const entityRecord =
+    collections.flatMap((collection) => collection.authors).find((author) => author.id === slug) || null;
+
+// Profile details (fallback to ID when missing)
+const entity = {
+    id: slug,
+    name: entityRecord?.name ?? `Entity ${slug}`,
+    nameArabic: entityRecord?.ism ?? `الكيان ${slug}`,
+    avatarUrl: entityRecord?.img ?? null,
+    bio: 'Biographical information about this scholar would appear here.',
+    collections: entityData.authorOf || [],
+};
+
+const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: entity.name }];
+---
+
+<BaseLayout title={entity.name} description={`Profile of ${entity.name}`}>
+    <Header slot="header" currentPath="/profile">
+        <ThemeToggle client:only="react" slot="theme-toggle" />
+    </Header>
+
+    <div class="profile-container">
+        <Breadcrumb items={breadcrumbItems} />
+
+        <header class="profile-header">
+            <div class="profile-hero">
+                <div class="profile-avatar" aria-hidden="true">
+                    {entity.avatarUrl ? (
+                        <img src={entity.avatarUrl} alt="" loading="lazy" />
+                    ) : (
+                        <span class="profile-avatar-fallback">{entity.name.slice(0, 1)}</span>
+                    )}
+                </div>
+                <div class="profile-names">
+                    <h1 class="profile-name-arabic" lang="ar" dir="rtl">
+                        {entity.nameArabic}
+                    </h1>
+                    <h1 class="profile-name">{entity.name}</h1>
+                </div>
+            </div>
+            <p class="profile-bio">{entity.bio}</p>
+        </header>
+
+        <section class="profile-section">
+            <h2 class="section-title">Works as Author</h2>
+            {
+                entity.collections.length > 0 ? (
+                    <div class="collections-list">
+                        {entity.collections.map((collectionId) => {
+                            const collection = collectionsById.get(collectionId);
+                            const href = collection ? `/browse/${collection.slug}` : `/browse/${collectionId}`;
+                            const title = collection?.roman ?? `Collection ${collectionId}`;
+                            return (
+                                <Card variant="outlined" hoverable href={href}>
+                                    <h3 class="collection-title">{title}</h3>
+                                <p class="collection-meta">
+                                    {indexes.collectionToSections?.[collectionId]?.length || 0} sections
+                                </p>
+                                </Card>
+                            );
+                        })}
+                    </div>
+                ) : (
+                    <p class="empty-state">No collections found.</p>
+                )
+            }
+        </section>
+    </div>
+
+    <Footer slot="footer" />
+</BaseLayout>
+
+<style>
+    .profile-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: var(--space-8) var(--space-6);
+    }
+
+    .profile-header {
+        margin: var(--space-8) 0 var(--space-12);
+        text-align: center;
+    }
+
+    .profile-hero {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--space-4);
+        margin-bottom: var(--space-6);
+    }
+
+    .profile-avatar {
+        width: 96px;
+        height: 96px;
+        border-radius: 50%;
+        background-color: var(--color-surface);
+        border: 1px solid var(--color-border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .profile-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .profile-avatar-fallback {
+        font-size: var(--text-3xl);
+        font-weight: 600;
+        color: var(--color-text-secondary);
+    }
+
+    .profile-names {
+        margin-bottom: 0;
+    }
+
+    .profile-name-arabic {
+        font-family: var(--font-arabic-content);
+        font-size: var(--text-4xl);
+        line-height: var(--leading-arabic);
+        margin-bottom: var(--space-3);
+        color: var(--color-text-primary);
+    }
+
+    .profile-name {
+        font-size: var(--text-3xl);
+        color: var(--color-text-primary);
+    }
+
+    .profile-bio {
+        max-width: 600px;
+        margin: 0 auto;
+        font-size: var(--text-lg);
+        line-height: var(--leading-relaxed);
+        color: var(--color-text-secondary);
+    }
+
+    .profile-section {
+        margin-bottom: var(--space-12);
+    }
+
+    .section-title {
+        font-size: var(--text-2xl);
+        margin-bottom: var(--space-6);
+        color: var(--color-text-primary);
+    }
+
+    .collections-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+    }
+
+    .collection-title {
+        font-size: var(--text-lg);
+        font-weight: 600;
+        margin-bottom: var(--space-2);
+        color: var(--color-text-primary);
+    }
+
+    .collection-meta {
+        font-size: var(--text-sm);
+        color: var(--color-text-tertiary);
+        font-family: var(--font-mono);
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: var(--space-12);
+        color: var(--color-text-tertiary);
+        font-style: italic;
+    }
+
+    @media (max-width: 640px) {
+        .profile-name-arabic {
+            font-size: var(--text-3xl);
+        }
+
+        .profile-name {
+            font-size: var(--text-2xl);
+        }
+    }
+</style>

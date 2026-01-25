@@ -1,0 +1,64 @@
+---
+type BilingualRole = 'article' | 'region' | 'note' | 'group';
+
+interface Props {
+    text: string;
+    isArabic?: boolean;
+    className?: string;
+    lang?: 'ar' | 'en';
+    role?: BilingualRole;
+    ariaLabel?: string;
+}
+
+const {
+    text,
+    isArabic = false,
+    className = '',
+    lang = isArabic ? 'ar' : 'en',
+    role = 'article',
+    ariaLabel = isArabic ? 'Arabic text' : 'English translation',
+} = Astro.props as Props;
+
+// Biome doesn't see template usage in .astro files.
+void text;
+void className;
+void lang;
+void role;
+void ariaLabel;
+---
+
+<div
+  class:list={[
+    "bilingual-text",
+    isArabic ? "is-arabic" : "is-english",
+    className
+  ]}
+  lang={lang}
+  dir={isArabic ? "rtl" : "ltr"}
+  role={role}
+  aria-label={ariaLabel}
+>
+  {text}
+</div>
+
+<style>
+  .bilingual-text {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .is-arabic {
+    font-family: var(--font-arabic-content);
+    line-height: var(--leading-arabic);
+    text-align: right;
+    direction: rtl;
+    line-break: strict;
+  }
+
+  .is-english {
+    font-family: var(--font-english);
+    text-align: left;
+    direction: ltr;
+  }
+</style>

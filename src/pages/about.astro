@@ -1,0 +1,176 @@
+---
+import { MotionSection } from '@/components/islands/MotionSection';
+import { ThemeToggle } from '@/components/islands/ThemeToggle';
+import Footer from '@/components/layout/Footer.astro';
+import Header from '@/components/layout/Header.astro';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+
+// Biome doesn't see template usage in .astro files.
+void ThemeToggle;
+void MotionSection;
+void Footer;
+void Header;
+void BaseLayout;
+---
+
+<BaseLayout title="About - IlmTest">
+  <Header slot="header" currentPath="/about">
+    <ThemeToggle client:only="react" slot="theme-toggle" />
+  </Header>
+
+  <MotionSection client:load>
+    <div class="about-container">
+      <header class="about-header">
+        <h1 class="page-title">About IlmTest</h1>
+        <p class="subtitle">A digital research desk for authentic Islamic scholarship.</p>
+      </header>
+      
+      <div class="content-wrapper">
+        <section>
+          <h2 class="section-title">The Problem</h2>
+          <p class="body-text">
+            The internet is flooded with translations of Islamic texts. However, for a student or researcher, verifying these translations is difficult.
+            Authentic Arabic sources are often disconnected from their English counterparts, citation standards vary wildy, and verified digital lineage is rare.
+            This leads to a lack of trust and an inability to cross-reference claims with original primary sources.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="section-title">Our Solution</h2>
+          <p class="body-text">
+            IlmTest is built to be a <strong>trust-first</strong> platform. We do not simply host text; we provide a rigorous framework for verifying it.
+          </p>
+          <ul class="feature-list">
+            <li>
+              <strong>Bilingual by Design:</strong> Every excerpt is presented side-by-side with its original Arabic text (Matched Naskh typography).
+            </li>
+            <li>
+              <strong>Traceable Lineage:</strong> We do not use generic citations. Every quote is linked to a specific Volume, Page, and Source URL (e.g., Shamela, Waqfeya).
+            </li>
+            <li>
+              <strong>Scholarly UX:</strong> The interface is designed for deep reading and research, free from the distractions of social media or commercial web design.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="section-title">Technology for Accessibility</h2>
+          <p class="body-text">
+            We believe that access to knowledge should not be limited by bandwidth or device. IlmTest is engineered with a performance-first architecture:
+          </p>
+          <ul class="feature-list">
+            <li><strong>Hybrid Edge Rendering:</strong> Pages load instantly from the edge, regardless of where you are in the world.</li>
+            <li><strong>Optimized Fonts:</strong> We use advanced subsetting to deliver beautiful Arabic typography in kilobytes, not megabytes.</li>
+            <li><strong>Zero-Bloat:</strong> The reading experience ships zero JavaScript to the client, ensuring accessibility on low-end devices.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="section-title">Coming Soon</h2>
+          <p class="body-text">
+            We are actively working on the following features for future releases:
+          </p>
+          <ul class="feature-list">
+            <li><strong>Narrator Linking:</strong> Explore chains of transmission by clicking on individual narrator names within texts.</li>
+            <li><strong>Expanded Library:</strong> Adding major works in <em>Tafsīr</em> (exegesis), the Qurʾān, Biographies, and <em>Jarḥ wa-Taʿdīl</em> (criticism and praise), with deep interconnectivity.</li>
+            <li><strong>Professional Translations:</strong> Replacing AI-generated placeholders with verified, high-quality human translations.</li>
+            <li><strong>Community Feedback:</strong> A built-in system for reporting typos and data corrections.</li>
+          </ul>
+        </section>
+
+        <div class="notice-box warning">
+          <p class="notice-text">
+            <strong>🚧 Alpha Release Status</strong><br/>
+            IlmTest is currently in <strong>Alpha</strong>. This means the platform is active development.
+            <br />
+            Please expect <strong>breaking changes</strong> to URLs and data structures. Do not rely on deep links blindly, as routes may shift as we optimize our architecture.
+          </p>
+        </div>
+      </div>
+    </div>
+  </MotionSection>
+
+  <Footer slot="footer" />
+</BaseLayout>
+
+
+<style>
+  .about-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: var(--space-12) var(--space-6);
+    min-height: 60vh;
+  }
+
+  .page-title {
+    font-size: var(--text-3xl);
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-8);
+  }
+
+  .content-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .intro-text {
+    font-size: var(--text-lg);
+    color: var(--color-text-secondary);
+    line-height: var(--leading-relaxed);
+  }
+
+  .body-text {
+    font-size: var(--text-base);
+    color: var(--color-text-secondary);
+    line-height: var(--leading-relaxed);
+  }
+
+  .section-title {
+    font-size: var(--text-2xl);
+    color: var(--color-text-primary);
+    margin-top: var(--space-8);
+    margin-bottom: var(--space-4);
+  }
+
+  .notice-box {
+    background-color: var(--color-info-bg);
+    border-left: 4px solid var(--color-info);
+    padding: var(--space-4);
+    border-radius: var(--radius-sm);
+  }
+
+  .notice-box.warning {
+    background-color: var(--color-warning-bg);
+    border-left-color: var(--color-warning);
+  }
+
+  .notice-text {
+    color: var(--color-info);
+    font-weight: 500;
+  }
+
+  .warning .notice-text {
+    color: var(--color-text-primary); /* Better readability on warning bg */
+  }
+  
+  [data-theme="dark"] .notice-text {
+    color: var(--color-text-primary);
+  }
+
+  .feature-list {
+    margin-top: var(--space-4);
+    padding-left: var(--space-4);
+    list-style-type: disc;
+    color: var(--color-text-secondary);
+    line-height: var(--leading-relaxed);
+  }
+
+  .feature-list li + li {
+    margin-top: var(--space-2);
+  }
+
+  .feature-list strong {
+    color: var(--color-text-primary);
+  }
+</style>

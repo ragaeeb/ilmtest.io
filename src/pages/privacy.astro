@@ -1,0 +1,110 @@
+---
+import { ThemeToggle } from '@/components/islands/ThemeToggle';
+import Footer from '@/components/layout/Footer.astro';
+import Header from '@/components/layout/Header.astro';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+
+// Biome doesn't see template usage in .astro files.
+void ThemeToggle;
+void Footer;
+void Header;
+void BaseLayout;
+---
+
+<BaseLayout title="Privacy Policy">
+  <Header slot="header" currentPath="/privacy">
+    <ThemeToggle client:only="react" slot="theme-toggle" />
+  </Header>
+
+  <div class="policy-container">
+    <h1 class="page-title">Privacy Policy</h1>
+    <p class="updated-text">Last updated: January 24, 2026</p>
+
+    <div class="content-wrapper">
+        <div class="notice-box">
+        <p class="notice-text">
+            <strong>TL;DR:</strong> We do not track you. We do not use cookies. We do not sell your data.
+        </p>
+        </div>
+
+        <section class="policy-section">
+        <h2>1. No Personal Accounts</h2>
+        <p>
+            IlmTest is a public library. You do not need to create an account, log in, or provide any personal information (name, email, etc.) to use the site.
+        </p>
+        </section>
+
+        <section class="policy-section">
+        <h2>2. Analytics (Privacy-First)</h2>
+        <p>
+            We use <strong>Cloudflare Web Analytics</strong> to measure site performance and general traffic trends (e.g., "Which book is most popular?").
+        </p>
+        <ul>
+            <li>This service is <strong>privacy-first</strong> and does not use client-side fingerprints or cookies.</li>
+            <li>We cannot see your IP address or browse history.</li>
+            <li>We only see aggregated data (e.g., "100 views from the UK").</li>
+        </ul>
+        </section>
+
+        <section class="policy-section">
+        <h2>3. Local Storage</h2>
+        <p>
+            We use your browser's "Local Storage" strictly for user interface preferences. This data never leaves your device:
+        </p>
+        <ul>
+            <li><strong>Theme Preference:</strong> To remember if you prefer Light or Dark mode.</li>
+            <li><strong>Reading Direction:</strong> (Planned) To remember if you prefer Arabic on the right or left on mobile.</li>
+        </ul>
+        </section>
+
+        <section class="policy-section">
+        <h2>4. Hosting & Infrastructure</h2>
+        <p>
+            Our site is hosted on Cloudflare's global edge network. Cloudflare may log basic request data (IP address, User Agent) at the network level for security purposes (DDoS protection, bot mitigation). This is standard for completely virtually all secure websites.
+        </p>
+        </section>
+    </div>
+  </div>
+
+  <Footer slot="footer" />
+</BaseLayout>
+
+
+<style>
+  .policy-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: var(--space-12) var(--space-6);
+  }
+
+  .page-title {
+    font-size: var(--text-3xl);
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-2);
+  }
+
+  .updated-text {
+    color: var(--color-text-tertiary);
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-8);
+  }
+
+  .policy-section {
+    margin-bottom: var(--space-8);
+  }
+
+  .policy-section h2 {
+    font-size: var(--text-xl);
+    margin-bottom: var(--space-2);
+  }
+
+  .policy-section p,
+  .policy-section li {
+    color: var(--color-text-secondary);
+    line-height: var(--leading-relaxed);
+  }
+
+  .policy-section ul {
+    padding-left: var(--space-6);
+  }
+</style>

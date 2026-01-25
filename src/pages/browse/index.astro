@@ -1,0 +1,100 @@
+---
+import CollectionCard from '@/components/domain/CollectionCard.astro';
+import { ThemeToggle } from '@/components/islands/ThemeToggle';
+import Footer from '@/components/layout/Footer.astro';
+import Header from '@/components/layout/Header.astro';
+import collectionsData from '@/data/collections.json';
+import indexesData from '@/data/indexes.json';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import type { Collection } from '@/types/excerpts';
+
+const indexes = indexesData as Record<string, any>;
+
+function getCollections(): Collection[] {
+    if (Array.isArray(collectionsData)) {
+        return collectionsData as Collection[];
+    }
+    return (collectionsData as { collections?: Collection[] }).collections ?? [];
+}
+
+const collections = getCollections();
+
+// Enhance with section counts
+const collectionsWithCounts = collections.map((collection) => ({
+    ...collection,
+    sectionCount: indexes.collectionToSections?.[collection.id]?.length || 0,
+}));
+---
+
+<BaseLayout
+    title="Browse Collections"
+    description="Explore Islamic texts with verified translations and scholarly sources."
+>
+    <Header slot="header" currentPath="/browse">
+        <ThemeToggle client:only="react" slot="theme-toggle" />
+    </Header>
+
+    <div class="browse-container">
+        <header class="browse-header">
+            <h1>Browse Collections</h1>
+            <p class="subtitle">
+                Explore carefully curated Islamic texts with authentic translations.
+            </p>
+        </header>
+
+        <div class="collections-grid">
+            {
+                collectionsWithCounts.map((collection) => (
+                    <CollectionCard 
+                        collection={collection} 
+                        slug={collection.slug} 
+                    />
+                ))
+            }
+        </div>
+    </div>
+
+    <Footer slot="footer" />
+</BaseLayout>
+
+<style>
+    .browse-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: var(--space-12) var(--space-6);
+    }
+
+    .browse-header {
+        text-align: center;
+        margin-bottom: var(--space-12);
+    }
+
+    .browse-header h1 {
+        font-size: var(--text-4xl);
+        margin-bottom: var(--space-4);
+        color: var(--color-text-primary);
+    }
+
+    .subtitle {
+        font-size: var(--text-lg);
+        color: var(--color-text-secondary);
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    .collections-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: var(--space-8);
+    }
+
+    @media (max-width: 768px) {
+        .browse-header h1 {
+            font-size: var(--text-3xl);
+        }
+
+        .collections-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>

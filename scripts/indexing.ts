@@ -1,0 +1,183 @@
+import type { Compilation, Excerpt, Heading } from '@/types/excerpts';
+
+/**
+ * Pre-computed indexes for O(1) lookups.
+ * Generated during setup and stored as JSON for runtime use.
+ */
+export type LookupIndexes = {
+    /** Map section/heading ID → array of excerpt IDs under that section */
+    sectionToExcerpts: Record<string, Record<string, string[]>>;
+
+    /** Map excerpt ID → section/heading ID it belongs to */
+    excerptToSection: Record<string, Record<string, string>>;
+
+    /** Map page number → heading ID for that page */
+    pageToHeading: Record<string, Record<number, string>>;
+
+    /** Map collection ID → array of heading IDs (for TOC) */
+    collectionToSections: Record<string, string[]>;
+
+    /** Map collection ID → section ID → ordered chunk IDs for that section */
+    sectionToChunks: Record<string, Record<string, string[]>>;
+
+    /** Map collection ID → excerpt ID → chunk ID that contains it */
+    excerptToChunk: Record<string, Record<string, string>>;
+
+    /** Map entity ID → collections they're associated with */
+    entityToCollections: Record<
+        string,
+        {
+            authorOf: string[];
+            mentionedIn?: string[];
+        }
+    >;
+};
+
+/**
+ * Find which heading/section a given excerpt belongs to.
+ * An excerpt belongs to a heading if its `from` page is >= heading's `from` page
+ * and < the next heading's `from` page.
+ */
+export const findSectionForExcerpt = (excerpt: Excerpt, headings: Heading[]): string | null => {
+    if (headings.length === 0) {
+        return null;
+    }
+
+    // Sort headings by their `from` page
+    const sortedHeadings = [...headings].sort((a, b) => a.from - b.from);
+
+    // Find the last heading whose `from` is <= excerpt's `from`
+    let matchedHeading: Heading | null = null;
+
+    for (const heading of sortedHeadings) {
+        if (heading.from <= excerpt.from) {
+            matchedHeading = heading;
+        } else {
+            break;
+        }
+    }
+
+    return matchedHeading?.id ?? null;
+};
+
+/**
+ * Generate all lookup indexes from excerpts data.
+ * @param data - The excerpts data
+ * @param collectionId - The collection ID (not slug)
+ */
+export const generateIndexes = (data: Compilation, collectionId: string): Partial<LookupIndexes> => {
+    const sectionToExcerpts: Record<string, string[]> = {};
+    const excerptToSection: Record<string, string> = {};
+    const pageToHeading: Record<number, string> = {};
+
+    // Map each heading's page to heading ID
+    for (const heading of data.headings) {
+        pageToHeading[heading.from] = heading.id;
+        sectionToExcerpts[heading.id] = []; // Initialize empty array
+    }
+
+    // Map collection to its sections
+    // Map each excerpt to its section
+    for (const excerpt of data.excerpts) {
+        const sectionId = findSectionForExcerpt(excerpt, data.headings);
+
+        if (sectionId) {
+            excerptToSection[excerpt.id] = sectionId;
+
+            if (!sectionToExcerpts[sectionId]) {
+                sectionToExcerpts[sectionId] = [];
+            }
+            sectionToExcerpts[sectionId].push(excerpt.id);
+        }
+    }
+
+    return {
+        sectionToExcerpts: { [collectionId]: sectionToExcerpts },
+        excerptToSection: { [collectionId]: excerptToSection },
+        pageToHeading: { [collectionId]: pageToHeading },
+        collectionToSections: { [collectionId]: data.headings.map((h) => h.id) },
+    };
+};
+
+/**
+ * Merge multiple partial indexes into a complete index.
+ */
+export const mergeIndexes = (...partials: Partial<LookupIndexes>[]): LookupIndexes => {
+    const merged: LookupIndexes = {
+        sectionToExcerpts: {},
+        excerptToSection: {},
+        pageToHeading: {},
+        collectionToSections: {},
+        sectionToChunks: {},
+        excerptToChunk: {},
+        entityToCollections: {},
+    };
+
+    for (const partial of partials) {
+        // Deep merge sectionToExcerpts
+        for (const [collectionId, sections] of Object.entries(partial.sectionToExcerpts || {})) {
+            merged.sectionToExcerpts[collectionId] ??= {};
+            Object.assign(merged.sectionToExcerpts[collectionId], sections);
+        }
+
+        // Deep merge excerptToSection
+        for (const [collectionId, excerpts] of Object.entries(partial.excerptToSection || {})) {
+            merged.excerptToSection[collectionId] ??= {};
+            Object.assign(merged.excerptToSection[collectionId], excerpts);
+        }
+
+        // Deep merge pageToHeading
+        for (const [collectionId, pages] of Object.entries(partial.pageToHeading || {})) {
+            merged.pageToHeading[collectionId] ??= {};
+            Object.assign(merged.pageToHeading[collectionId], pages);
+        }
+
+        // Deep merge collectionToSections
+        for (const [collectionId, sections] of Object.entries(partial.collectionToSections || {})) {
+            merged.collectionToSections[collectionId] ??= [];
+            merged.collectionToSections[collectionId].push(...sections);
+        }
+
+        // Deep merge sectionToChunks
+        for (const [collectionId, sections] of Object.entries(partial.sectionToChunks || {})) {
+            merged.sectionToChunks[collectionId] ??= {};
+            Object.assign(merged.sectionToChunks[collectionId], sections);
+        }
+
+        // Deep merge excerptToChunk
+        for (const [collectionId, excerpts] of Object.entries(partial.excerptToChunk || {})) {
+            merged.excerptToChunk[collectionId] ??= {};
+            Object.assign(merged.excerptToChunk[collectionId], excerpts);
+        }
+
+        // Deep merge entityToCollections
+        for (const [entityId, data] of Object.entries(partial.entityToCollections || {})) {
+            if (!merged.entityToCollections[entityId]) {
+                merged.entityToCollections[entityId] = { authorOf: [], mentionedIn: [] };
+            }
+            if (data.authorOf) {
+                merged.entityToCollections[entityId].authorOf.push(...data.authorOf);
+            }
+            if (data.mentionedIn) {
+                merged.entityToCollections[entityId].mentionedIn = [
+                    ...(merged.entityToCollections[entityId].mentionedIn || []),
+                    ...data.mentionedIn,
+                ];
+            }
+        }
+    }
+
+    return merged;
+};
+
+/**
+ * Add entity-collection mappings to indexes.
+ */
+export const addEntityMappings = (indexes: LookupIndexes, collectionId: string, authorIds: string[]): void => {
+    for (const authorId of authorIds) {
+        if (!indexes.entityToCollections[authorId]) {
+            indexes.entityToCollections[authorId] = { authorOf: [] };
+        }
+        indexes.entityToCollections[authorId].authorOf.push(collectionId);
+    }
+};

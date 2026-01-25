@@ -1,0 +1,335 @@
+---
+// Enable SSR for this route
+export const prerender = false;
+
+import { ThemeToggle } from '@/components/islands/ThemeToggle';
+import Footer from '@/components/layout/Footer.astro';
+import Header from '@/components/layout/Header.astro';
+import Breadcrumb from '@/components/ui/Breadcrumb.astro';
+import Card from '@/components/ui/Card.astro';
+// Import data
+import collectionsData from '@/data/collections.json';
+import indexesData from '@/data/indexes.json';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import type { Collection, Excerpt } from '@/types/excerpts';
+
+const indexes = indexesData as Record<string, any>;
+
+const { collection: collectionSlug } = Astro.params;
+
+if (!collectionSlug) {
+    return Astro.redirect('/404');
+}
+
+// Find the collection metadata
+const collections = Array.isArray(collectionsData)
+    ? (collectionsData as Collection[])
+    : ((collectionsData as { collections?: Collection[] }).collections ?? []);
+const collectionData = collections.find((c) => c.slug === collectionSlug);
+
+if (!collectionData) {
+    return Astro.redirect('/browse');
+}
+
+// Get sections for this collection
+const sections = (indexes.collectionToSections?.[collectionData.id] || []) as string[];
+
+if (sections.length === 0) {
+    return Astro.redirect('/browse');
+}
+
+const PAGE_SIZE = 100;
+const url = new URL(Astro.request.url);
+const pageParam = Number(url.searchParams.get('page') ?? '1');
+const normalizedPage = Number.isFinite(pageParam) ? Math.max(1, Math.floor(pageParam)) : 1;
+const totalPages = Math.max(1, Math.ceil(sections.length / PAGE_SIZE));
+const currentPage = Math.min(normalizedPage, totalPages);
+const startIndex = (currentPage - 1) * PAGE_SIZE;
+const pageSections = sections.slice(startIndex, startIndex + PAGE_SIZE);
+const pageSectionIdSet = new Set(pageSections);
+
+const buildPageHref = (page: number) =>
+    page <= 1 ? `/browse/${collectionSlug}` : `/browse/${collectionSlug}?page=${page}`;
+
+type ChunkPayload = { sectionId: string; excerptIds: string[]; excerpts: Excerpt[] };
+const bucket = (Astro.locals as { runtime?: { env?: { EXCERPT_BUCKET?: { get: (key: string) => Promise<any> } } } })
+    ?.runtime?.env?.EXCERPT_BUCKET;
+
+const fetchChunk = async (chunkId: string): Promise<ChunkPayload | null> => {
+    if (bucket) {
+        const object = await bucket.get(chunkId);
+        if (!object) {
+            return null;
+        }
+        const text = await object.text();
+        return JSON.parse(text) as ChunkPayload;
+    }
+
+    if (import.meta.env.DEV) {
+        const filePath = `tmp/excerpt-chunks/${chunkId}`;
+        if (await Bun.file(filePath).exists()) {
+            return Bun.file(filePath).json();
+        }
+    }
+
+    return null;
+};
+
+const sectionIdSet = pageSectionIdSet;
+const sectionChunkIds = (indexes.sectionToChunks?.[collectionData.id] || {}) as Record<string, string[]>;
+
+const chunksForPage = await Promise.all(
+    pageSections.flatMap((sectionId) => (sectionChunkIds[sectionId] ?? []).map((chunkId) => fetchChunk(chunkId))),
+);
+const pageChunks = chunksForPage.filter((chunk): chunk is NonNullable<typeof chunk> => Boolean(chunk));
+
+// Extract headings from chunks (by section IDs from indexes)
+const headings = pageChunks
+    .flatMap((chunk) => chunk.excerpts)
+    .filter((excerpt) => sectionIdSet.has(excerpt.id))
+    .map((heading) => ({
+        id: heading.id,
+        nass: heading.nass,
+        text: heading.text,
+        from: heading.from,
+    }));
+
+const headingsById = new Map(headings.map((heading) => [heading.id, heading]));
+
+const sectionExcerptCounts = new Map<string, number>();
+for (const chunk of pageChunks) {
+    const sectionId = chunk.sectionId as string;
+    if (!sectionIdSet.has(sectionId)) {
+        continue;
+    }
+
+    const excerptIds: string[] = chunk.excerptIds ?? chunk.excerpts.map((e: any) => e.id);
+    const hasHeadingMarker = excerptIds.includes(sectionId);
+    const count = Math.max(excerptIds.length - (hasHeadingMarker ? 1 : 0), 0);
+    sectionExcerptCounts.set(sectionId, (sectionExcerptCounts.get(sectionId) ?? 0) + count);
+}
+
+// Create section items with their primary heading
+const sectionItems = pageSections.map((sectionId: string) => {
+    const primaryHeading = headingsById.get(sectionId);
+
+    return {
+        id: sectionId,
+        title: primaryHeading?.text || `Section ${sectionId}`,
+        titleArabic: primaryHeading?.nass || '',
+        excerptCount: sectionExcerptCounts.get(sectionId) ?? 0,
+    };
+});
+
+const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: collectionData.roman }];
+const hasPrevPage = currentPage > 1;
+const hasNextPage = currentPage < totalPages;
+
+// Set cache headers for edge caching
+Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
+---
+
+<BaseLayout title={collectionData.roman} description={`Browse ${collectionData.roman}`}>
+    <Header slot="header" currentPath="/browse">
+        <ThemeToggle client:only="react" slot="theme-toggle" />
+    </Header>
+
+    <div class="collection-container">
+        <Breadcrumb items={breadcrumbItems} />
+
+        <header class="collection-header">
+            <h1 class="collection-title-arabic" lang="ar" dir="rtl">
+                {collectionData.unwan}
+            </h1>
+            <h1>{collectionData.roman}</h1>
+            {collectionData.authors.length > 0 && (
+                <p class="author-name">
+                    by{' '}
+                    {collectionData.authors.map((author, index) => (
+                        <>
+                            {index > 0 ? ', ' : ''}
+                            <a class="author-link" href={`/profile/${author.id}`}>
+                                {author.name}
+                            </a>
+                        </>
+                    ))}
+                </p>
+            )}
+            <p class="subtitle">
+                {sections.length} sections · Page {currentPage} of {totalPages}
+            </p>
+        </header>
+
+        <div class="sections-list">
+            {
+                sectionItems.map((section: { id: string; title: string; titleArabic: string; excerptCount: number }) => (
+                    <Card variant="outlined" hoverable href={`/browse/${collectionSlug}/${section.id}`}>
+                        <div class="section-content">
+                            <div class="section-titles">
+                                {section.titleArabic && (
+                                    <h3 class="section-title-arabic" lang="ar" dir="rtl">
+                                        {section.titleArabic}
+                                    </h3>
+                                )}
+                                <h3 class="section-title">{section.title}</h3>
+                            </div>
+                            <div class="section-meta">
+                                <span>{section.excerptCount} excerpts</span>
+                            </div>
+                        </div>
+                    </Card>
+                ))
+            }
+        </div>
+
+        <nav class="pagination" aria-label="Section pages">
+            <a
+                class:list={["pagination-link", !hasPrevPage && "is-disabled"]}
+                href={hasPrevPage ? buildPageHref(currentPage - 1) : undefined}
+                aria-disabled={!hasPrevPage}
+            >
+                Previous
+            </a>
+            <span class="pagination-info">Page {currentPage} of {totalPages}</span>
+            <a
+                class:list={["pagination-link", !hasNextPage && "is-disabled"]}
+                href={hasNextPage ? buildPageHref(currentPage + 1) : undefined}
+                aria-disabled={!hasNextPage}
+            >
+                Next
+            </a>
+        </nav>
+    </div>
+
+    <Footer slot="footer" />
+</BaseLayout>
+
+<style>
+    .collection-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: var(--space-8) var(--space-6);
+    }
+
+    .collection-header {
+        margin: var(--space-8) 0;
+        text-align: center;
+    }
+
+    .collection-title-arabic {
+        font-family: var(--font-arabic-content);
+        font-size: var(--text-3xl);
+        line-height: var(--leading-arabic);
+        margin-bottom: var(--space-3);
+        color: var(--color-text-primary);
+    }
+
+    .collection-header h1 {
+        font-size: var(--text-3xl);
+        margin-bottom: var(--space-3);
+    }
+
+    .author-name {
+        color: var(--color-text-secondary);
+        font-size: var(--text-lg);
+        font-style: italic;
+        margin-bottom: var(--space-2);
+    }
+
+    .author-link {
+        color: inherit;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+
+    .author-link:hover {
+        color: var(--color-primary);
+    }
+
+    .subtitle {
+        color: var(--color-text-secondary);
+        font-size: var(--text-lg);
+    }
+
+    .sections-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+    }
+
+    .section-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: var(--space-4);
+    }
+
+    .section-titles {
+        flex: 1;
+    }
+
+    .section-title-arabic {
+        font-family: var(--font-arabic-content);
+        font-size: var(--text-xl);
+        margin-bottom: var(--space-2);
+        color: var(--color-text-primary);
+    }
+
+    .section-title {
+        font-size: var(--text-lg);
+        font-weight: 600;
+        color: var(--color-text-primary);
+    }
+
+    .section-meta {
+        color: var(--color-text-tertiary);
+        font-size: var(--text-sm);
+        white-space: nowrap;
+    }
+
+  .pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--space-4);
+    margin-top: var(--space-8);
+  }
+
+  .pagination-link {
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    font-size: var(--text-sm);
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    transition:
+      color var(--duration-fast) var(--ease-out),
+      border-color var(--duration-fast) var(--ease-out);
+  }
+
+  .pagination-link:hover {
+    color: var(--color-primary-text);
+    border-color: var(--color-border-hover);
+  }
+
+  .pagination-link.is-disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .pagination-info {
+    color: var(--color-text-tertiary);
+    font-size: var(--text-sm);
+  }
+
+    @media (max-width: 640px) {
+        .section-content {
+            flex-direction: column;
+        }
+
+        .section-meta {
+            align-self: flex-start;
+        }
+    }
+</style>

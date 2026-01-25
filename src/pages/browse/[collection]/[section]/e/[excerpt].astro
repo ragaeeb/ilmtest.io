@@ -1,0 +1,347 @@
+---
+// Enable SSR for this route
+export const prerender = false;
+
+import { marked } from 'marked';
+import BilingualText from '@/components/domain/BilingualText.astro';
+import CitationBlock from '@/components/domain/CitationBlock.astro';
+import { ShareButton } from '@/components/islands/ShareButton';
+import { ThemeToggle } from '@/components/islands/ThemeToggle';
+import Footer from '@/components/layout/Footer.astro';
+import Header from '@/components/layout/Header.astro';
+import Breadcrumb from '@/components/ui/Breadcrumb.astro';
+import collectionsData from '@/data/collections.json';
+import indexesData from '@/data/indexes.json';
+import translatorsData from '@/data/translators.json';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { arabicToWestern } from '@/lib/arabic';
+import { getCitationParts } from '@/lib/citations';
+import type { Collection, Excerpt } from '@/types/excerpts';
+
+const { collection: collectionSlug, section, excerpt: excerptId } = Astro.params;
+
+if (!collectionSlug || !section || !excerptId) {
+    return Astro.redirect('/404');
+}
+
+// Find collection metadata
+const indexes = indexesData as Record<string, any>;
+
+function getCollections(): Collection[] {
+    if (Array.isArray(collectionsData)) {
+        return collectionsData as Collection[];
+    }
+    return (collectionsData as { collections?: Collection[] }).collections ?? [];
+}
+
+const collections = getCollections();
+const collectionData = collections.find((c) => c.slug === collectionSlug);
+
+if (!collectionData) {
+    return Astro.redirect('/browse');
+}
+
+const sectionMap = (indexes.sectionToExcerpts?.[collectionData.id] || {}) as Record<string, string[]>;
+
+// Verify this excerpt belongs to this section
+const sectionExcerptIds = new Set((sectionMap[section] || []) as string[]);
+if (!sectionExcerptIds.has(excerptId)) {
+    return Astro.redirect('/404');
+}
+
+type ChunkPayload = { sectionId: string; excerptIds: string[]; excerpts: Excerpt[] };
+const bucket = (Astro.locals as { runtime?: { env?: { EXCERPT_BUCKET?: { get: (key: string) => Promise<any> } } } })
+    ?.runtime?.env?.EXCERPT_BUCKET;
+
+const fetchChunk = async (chunkId: string): Promise<ChunkPayload | null> => {
+    if (bucket) {
+        const object = await bucket.get(chunkId);
+        if (!object) {
+            return null;
+        }
+        const text = await object.text();
+        return JSON.parse(text) as ChunkPayload;
+    }
+
+    if (import.meta.env.DEV) {
+        const filePath = `tmp/excerpt-chunks/${chunkId}`;
+        if (await Bun.file(filePath).exists()) {
+            return Bun.file(filePath).json();
+        }
+    }
+
+    return null;
+};
+
+const excerptToChunk = (indexes.excerptToChunk?.[collectionData.id] || {}) as Record<string, string>;
+const chunkId = excerptToChunk[excerptId];
+
+const initialChunk = chunkId ? await fetchChunk(chunkId) : null;
+let excerpt = initialChunk?.excerpts.find((e) => e.id === excerptId);
+
+if (!excerpt) {
+    return Astro.redirect(`/browse/${collectionSlug}/${section}`);
+}
+
+// Get the section heading for breadcrumb (heading marker is stored in the first chunk)
+const headingChunkId =
+    ((indexes.sectionToChunks?.[collectionData.id] || {}) as Record<string, string[]>)[section]?.[0] ?? chunkId;
+const headingChunk = headingChunkId ? await fetchChunk(headingChunkId) : null;
+const headingExcerpt = headingChunk?.excerpts.find((e) => e.id === section) as Excerpt | undefined;
+
+const sectionTitle = headingExcerpt?.text || `Section ${section}`;
+
+// Format citation using the actual collection data
+const citation = getCitationParts(excerpt, collectionData);
+marked.setOptions({ breaks: true });
+
+const citationMarkdown = `[${citation.label}](${citation.url})`;
+const englishHtml = marked.parse(excerpt.text);
+const copyPayload = `${excerpt.nass}\n\n${excerpt.text}\n\n${citationMarkdown}`;
+
+const translators = Array.isArray(translatorsData)
+    ? translatorsData
+    : ((translatorsData as { translators?: Array<{ id: number; name: string }> }).translators ?? []);
+const translatorName = translators.find((translator) => translator.id === excerpt.translator)?.name;
+
+const excerptWords = excerpt.text.split(/\s+/).filter(Boolean);
+const excerptPreview = excerptWords.slice(0, 8).join(' ');
+const excerptLabel = excerptWords.length > 8 ? `${excerptPreview}…` : excerptPreview;
+
+const meta = excerpt.meta;
+const hadithMeta = meta && 'num' in meta ? meta : null;
+const bookMeta = meta && 'vol' in meta ? meta : null;
+
+const formatHadithNumber = (num?: string) => {
+    if (!num) {
+        return null;
+    }
+    const western = arabicToWestern(num);
+    return Number.isNaN(western) ? num : western.toString();
+};
+
+const breadcrumbItems = [
+    { label: 'Browse', href: '/browse' },
+    { label: collectionData.roman, href: `/browse/${collectionSlug}` },
+    { label: sectionTitle, href: `/browse/${collectionSlug}/${section}` },
+    { label: excerptLabel || 'Excerpt' },
+];
+
+// Biome doesn't see template usage in .astro files.
+void BilingualText;
+void CitationBlock;
+void ShareButton;
+void ThemeToggle;
+void Footer;
+void Header;
+void Breadcrumb;
+void collectionsData;
+void indexesData;
+void translatorsData;
+void BaseLayout;
+void arabicToWestern;
+void getCitationParts;
+void citationMarkdown;
+void englishHtml;
+void copyPayload;
+void translatorName;
+void meta;
+void hadithMeta;
+void bookMeta;
+void formatHadithNumber;
+void breadcrumbItems;
+
+// Set cache headers for edge caching
+Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
+---
+
+<BaseLayout
+    title={`Excerpt ${excerptId}`}
+    description={excerpt.text.slice(0, 160)}
+>
+    <Header slot="header" currentPath="/browse">
+        <ThemeToggle client:only="react" slot="theme-toggle" />
+    </Header>
+
+    <article class="excerpt-container">
+        <Breadcrumb items={breadcrumbItems} />
+
+        <div class="excerpt-content">
+            <!-- Bilingual Text Blocks -->
+            <div class="text-blocks">
+                <div id="arabic-content" class="text-block arabic-block" role="article" aria-label="Arabic text">
+                    <div class="language-indicator">العربية</div>
+                    <BilingualText 
+                      text={excerpt.nass} 
+                      isArabic={true} 
+                      className="text-block-inner" 
+                    />
+                </div>
+                <div id="english-content" class="text-block english-block" lang="en" dir="ltr" role="article">
+                    <div class="language-indicator">English</div>
+                    <div class="english-markdown" set:html={englishHtml} />
+                </div>
+            </div>
+
+            <!-- Citation Block -->
+            <CitationBlock excerpt={excerpt} collection={collectionData} />
+            <div class="share-actions" aria-label="Copy excerpt">
+                <ShareButton client:load text={copyPayload} ariaLabel="Copy excerpt and citation" />
+            </div>
+
+            <!-- Metadata Details -->
+            <section class="metadata-section">
+                <h2 class="sr-only">Additional Metadata</h2>
+                <dl class="metadata-list">
+                    <div class="metadata-item">
+                        <dt>Page</dt>
+                        <dd>{excerpt.from}</dd>
+                    </div>
+                    {
+                        hadithMeta && (
+                            <div class="metadata-item">
+                                <dt>Hadith Number</dt>
+                                <dd>#{formatHadithNumber(hadithMeta.num)}</dd>
+                            </div>
+                        )
+                    }
+                    {
+                        bookMeta && (
+                            <div class="metadata-item">
+                                <dt>Volume</dt>
+                                <dd>
+                                    {bookMeta.vol}
+                                    {bookMeta.vp && ` / Page ${bookMeta.vp}`}
+                                </dd>
+                            </div>
+                        )
+                    }
+                    <div class="metadata-item">
+                        <dt>Translator</dt>
+                        <dd>{translatorName || excerpt.translator}</dd>
+                    </div>
+                </dl>
+            </section>
+        </div>
+    </article>
+
+    <Footer slot="footer" />
+</BaseLayout>
+
+<style>
+    .excerpt-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: var(--space-8) var(--space-6);
+    }
+
+    .excerpt-content {
+        margin-top: var(--space-8);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-10);
+    }
+
+    .excerpt-skip-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-3);
+        font-size: var(--text-sm);
+    }
+
+    .excerpt-skip-links a {
+        color: var(--color-primary-text);
+        text-decoration: none;
+    }
+
+    .excerpt-skip-links a:hover {
+        text-decoration: underline;
+    }
+
+    .text-blocks {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-6);
+    }
+
+    .text-block {
+        padding: var(--space-6);
+        border-radius: var(--radius-lg);
+    }
+
+    .text-block-inner {
+        display: block;
+    }
+
+    .language-indicator {
+        font-size: var(--text-xs);
+        font-weight: 600;
+        color: var(--color-text-tertiary);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: var(--space-3);
+    }
+
+    .arabic-block {
+        background-color: var(--color-arabic-bg);
+        font-size: var(--text-xl);
+    }
+
+    .english-block {
+        background-color: var(--color-english-bg);
+        font-size: var(--text-lg);
+        color: var(--color-text-secondary);
+    }
+
+    .english-markdown {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .english-markdown :global(p) {
+        margin: 0;
+    }
+
+    .english-markdown :global(p + p) {
+        margin-top: var(--space-3);
+    }
+
+    .metadata-section {
+        border-top: 1px solid var(--color-border);
+        padding-top: var(--space-6);
+    }
+
+    .metadata-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: var(--space-6);
+    }
+
+    .metadata-item {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+    }
+
+    .metadata-item dt {
+        font-size: var(--text-xs);
+        font-weight: 600;
+        color: var(--color-text-tertiary);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+    }
+
+    .metadata-item dd {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        color: var(--color-text-primary);
+    }
+
+    @media (max-width: 640px) {
+        .metadata-list {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>

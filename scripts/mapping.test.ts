@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import type { Heading } from '../src/types/excerpts';
 import {
     arabicToWestern,
     getExcerptsUnderTitle,
@@ -7,7 +8,6 @@ import {
     mapTitleTreeToHeadingTree,
     type TitleNode,
 } from './mapping';
-import type { Heading } from './types/excerpts';
 
 describe('mapTitlesToTableOfContents', () => {
     it('should return empty array for empty input', () => {
@@ -37,6 +37,70 @@ describe('mapTitlesToTableOfContents', () => {
         expect(result[0].id).toBe(1);
         expect(result[1].id).toBe(2);
         expect(result[2].id).toBe(3);
+    });
+
+    it('should handle Sahih al-Bukhari', () => {
+        const titles = [
+            {
+                content: 'بيان الشيخ حسونة ﵀',
+                id: 1,
+                page: 1,
+            },
+            {
+                content: 'مقدمة مصححي الطبعة',
+                id: 2,
+                page: 5,
+            },
+            {
+                content: 'بدء الوحي',
+                id: 3,
+                page: 9,
+            },
+            {
+                content: 'باب كيف كان بدء الوحي إلى رسول الله',
+                id: 4,
+                page: 9,
+                parent: 3,
+            },
+            {
+                content: 'كتاب الإيمان',
+                id: 5,
+                page: 17,
+            },
+            {
+                content: 'باب قول النبي ﷺ بني الإسلام على خمس',
+                id: 6,
+                page: 17,
+                parent: 5,
+            },
+            {
+                content: 'باب دعاؤكم إيمانكم',
+                id: 7,
+                page: 18,
+                parent: 5,
+            },
+        ];
+        const result = mapTitlesToTableOfContents(titles);
+
+        expect(result).toEqual([
+            { content: 'بيان الشيخ حسونة ﵀', id: 1, page: 1 },
+            { content: 'مقدمة مصححي الطبعة', id: 2, page: 5 },
+            {
+                content: 'بدء الوحي',
+                id: 3,
+                page: 9,
+                children: [{ content: 'باب كيف كان بدء الوحي إلى رسول الله', id: 4, page: 9, parent: 3 }],
+            },
+            {
+                content: 'كتاب الإيمان',
+                id: 5,
+                page: 17,
+                children: [
+                    { content: 'باب قول النبي ﷺ بني الإسلام على خمس', id: 6, page: 17, parent: 5 },
+                    { content: 'باب دعاؤكم إيمانكم', id: 7, page: 18, parent: 5 },
+                ],
+            },
+        ]);
     });
 
     it('should nest single child under parent', () => {
@@ -341,6 +405,28 @@ describe('getExcerptsUnderTitle', () => {
         expect(actual).toEqual(excerpts); // because all excerpts end BEFORE the next heading (who's page=3) and all the excerpts.from < 3
     });
 
+    it.only('should handle Sahih al-Bukhari', () => {
+        const titles = [
+            { content: 'بيان الشيخ حسونة ﵀', id: 1, page: 1 },
+            { content: 'مقدمة مصححي الطبعة', id: 2, page: 5 },
+            {
+                content: 'بدء الوحي',
+                id: 3,
+                page: 9,
+                children: [{ content: 'باب كيف كان بدء الوحي إلى رسول الله', id: 4, page: 9, parent: 3 }],
+            },
+            {
+                content: 'كتاب الإيمان',
+                id: 5,
+                page: 17,
+                children: [
+                    { content: 'باب قول النبي ﷺ بني الإسلام على خمس', id: 6, page: 17, parent: 5 },
+                    { content: 'باب دعاؤكم إيمانكم', id: 7, page: 18, parent: 5 },
+                ],
+            },
+        ];
+    });
+
     it('should list all the excerpts under the heading', () => {
         const excerpts = [
             { id: 'P1', from: 1, nass: 'A' },
@@ -472,6 +558,120 @@ describe('mapTitleTreeToHeadingTree', () => {
         expect(result[0].lastUpdatedAt).toBe(1234567890);
         expect(result[0].from).toBe(1);
         expect(result[0].children).toBeUndefined();
+    });
+
+    it('should handle Sahih al-Bukhari', () => {
+        const titleNodes = [
+            { content: 'بيان الشيخ حسونة ﵀', id: 1, page: 1 },
+            { content: 'مقدمة مصححي الطبعة', id: 2, page: 5 },
+            {
+                content: 'بدء الوحي',
+                id: 3,
+                page: 9,
+                children: [{ content: 'باب كيف كان بدء الوحي إلى رسول الله', id: 4, page: 9, parent: 3 }],
+            },
+            {
+                content: 'كتاب الإيمان',
+                id: 5,
+                page: 17,
+                children: [
+                    { content: 'باب قول النبي ﷺ بني الإسلام على خمس', id: 6, page: 17, parent: 5 },
+                    { content: 'باب دعاؤكم إيمانكم', id: 7, page: 18, parent: 5 },
+                ],
+            },
+        ];
+
+        const headings = [
+            {
+                from: 9,
+                id: 'T3',
+                lastUpdatedAt: 1764025085,
+                nass: 'بدء الوحي',
+                text: 'The Beginning of Revelation',
+                translator: 891,
+            },
+            {
+                from: 9,
+                id: 'T4',
+                lastUpdatedAt: 1764025085,
+                nass: 'باب كيف كان بدء الوحي إلى رسول الله',
+                text: 'Chapter: How the revelation began to the Messenger of Allah',
+                translator: 891,
+            },
+            {
+                from: 17,
+                id: 'T5',
+                lastUpdatedAt: 1764025085,
+                nass: 'كتاب الإيمان',
+                text: 'Book of Faith',
+                translator: 891,
+            },
+            {
+                from: 17,
+                id: 'T6',
+                lastUpdatedAt: 1764025085,
+                nass: 'باب قول النبي ﷺ بني الإسلام على خمس',
+                text: 'Chapter: The Prophet\'s ﷺ statement "Islam is built upon five"',
+                translator: 891,
+            },
+            {
+                from: 18,
+                id: 'T7',
+                lastUpdatedAt: 1764025085,
+                nass: 'باب دعاؤكم إيمانكم',
+                text: 'Chapter: Your supplication is your faith',
+                translator: 891,
+            },
+        ];
+
+        const actual = mapTitleTreeToHeadingTree(titleNodes, headings);
+
+        expect(actual).toEqual([
+            {
+                from: 9,
+                id: 'T3',
+                lastUpdatedAt: 1764025085,
+                nass: 'بدء الوحي',
+                text: 'The Beginning of Revelation',
+                translator: 891,
+                children: [
+                    {
+                        from: 9,
+                        id: 'T4',
+                        lastUpdatedAt: 1764025085,
+                        nass: 'باب كيف كان بدء الوحي إلى رسول الله',
+                        text: 'Chapter: How the revelation began to the Messenger of Allah',
+                        translator: 891,
+                    },
+                ],
+            },
+            {
+                from: 17,
+                id: 'T5',
+                lastUpdatedAt: 1764025085,
+                nass: 'كتاب الإيمان',
+                text: 'Book of Faith',
+                translator: 891,
+                children: [
+                    {
+                        from: 17,
+                        id: 'T6',
+                        lastUpdatedAt: 1764025085,
+                        nass: 'باب قول النبي ﷺ بني الإسلام على خمس',
+                        text: 'Chapter: The Prophet\'s ﷺ statement "Islam is built upon five"',
+                        translator: 891,
+                    },
+                    {
+                        from: 18,
+                        id: 'T7',
+                        lastUpdatedAt: 1764025085,
+                        nass: 'باب دعاؤكم إيمانكم',
+                        text: 'Chapter: Your supplication is your faith',
+                        translator: 891,
+                    },
+                ],
+            },
+        ]);
     });
 
     it('should map multiple root nodes without children', () => {
