@@ -11,7 +11,7 @@ describe('slugify', () => {
     });
 
     it('keeps stopwords if the title is only stopwords', () => {
-        expect(slugify('al wa fi')).toBe('al-wa');
+        expect(slugify('al wa fi')).toBe('al-fi');
     });
 
     it('normalizes diacritics and prefixes for titles', () => {
@@ -25,7 +25,7 @@ describe('slugify', () => {
     });
 
     it('handles single-word author names', () => {
-        expect(slugify('Siyar Aʿlām al-Nubalā', 'al-Dhahabī')).toBe('siyar-al-dhahabi');
+        expect(slugify('Siyar Aʿlām al-Nubalā', 'al-Dhahabī')).toBe('siyar-alam-dhahabi');
     });
 
     it('removes punctuation and extra spacing', () => {

@@ -114,13 +114,57 @@ export const mergeIndexes = (...partials: Partial<LookupIndexes>[]): LookupIndex
     };
 
     for (const partial of partials) {
-        Object.assign(merged.sectionToExcerpts, partial.sectionToExcerpts);
-        Object.assign(merged.excerptToSection, partial.excerptToSection);
-        Object.assign(merged.pageToHeading, partial.pageToHeading);
-        Object.assign(merged.collectionToSections, partial.collectionToSections);
-        Object.assign(merged.sectionToChunks, partial.sectionToChunks);
-        Object.assign(merged.excerptToChunk, partial.excerptToChunk);
-        Object.assign(merged.entityToCollections, partial.entityToCollections);
+        // Deep merge sectionToExcerpts
+        for (const [collectionId, sections] of Object.entries(partial.sectionToExcerpts || {})) {
+            merged.sectionToExcerpts[collectionId] ??= {};
+            Object.assign(merged.sectionToExcerpts[collectionId], sections);
+        }
+
+        // Deep merge excerptToSection
+        for (const [collectionId, excerpts] of Object.entries(partial.excerptToSection || {})) {
+            merged.excerptToSection[collectionId] ??= {};
+            Object.assign(merged.excerptToSection[collectionId], excerpts);
+        }
+
+        // Deep merge pageToHeading
+        for (const [collectionId, pages] of Object.entries(partial.pageToHeading || {})) {
+            merged.pageToHeading[collectionId] ??= {};
+            Object.assign(merged.pageToHeading[collectionId], pages);
+        }
+
+        // Deep merge collectionToSections
+        for (const [collectionId, sections] of Object.entries(partial.collectionToSections || {})) {
+            merged.collectionToSections[collectionId] ??= [];
+            merged.collectionToSections[collectionId].push(...sections);
+        }
+
+        // Deep merge sectionToChunks
+        for (const [collectionId, sections] of Object.entries(partial.sectionToChunks || {})) {
+            merged.sectionToChunks[collectionId] ??= {};
+            Object.assign(merged.sectionToChunks[collectionId], sections);
+        }
+
+        // Deep merge excerptToChunk
+        for (const [collectionId, excerpts] of Object.entries(partial.excerptToChunk || {})) {
+            merged.excerptToChunk[collectionId] ??= {};
+            Object.assign(merged.excerptToChunk[collectionId], excerpts);
+        }
+
+        // Deep merge entityToCollections
+        for (const [entityId, data] of Object.entries(partial.entityToCollections || {})) {
+            if (!merged.entityToCollections[entityId]) {
+                merged.entityToCollections[entityId] = { authorOf: [], mentionedIn: [] };
+            }
+            if (data.authorOf) {
+                merged.entityToCollections[entityId].authorOf.push(...data.authorOf);
+            }
+            if (data.mentionedIn) {
+                merged.entityToCollections[entityId].mentionedIn = [
+                    ...(merged.entityToCollections[entityId].mentionedIn || []),
+                    ...data.mentionedIn,
+                ];
+            }
+        }
     }
 
     return merged;
