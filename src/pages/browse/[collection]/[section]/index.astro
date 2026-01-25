@@ -1,5 +1,7 @@
 ---
-import { getCollection } from 'astro:content';
+// Enable SSR for this route
+export const prerender = false;
+
 import ExcerptCard from '@/components/domain/ExcerptCard.astro';
 import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
@@ -10,29 +12,6 @@ import indexesData from '@/data/indexes.json';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { arabicToWestern } from '@/lib/arabic';
 import type { Collection, Excerpt } from '@/types/excerpts';
-
-// Generate static paths for all sections in all collections
-export async function getStaticPaths() {
-    const indexes = indexesData as Record<string, any>;
-    const collections = Array.isArray(collectionsData)
-        ? (collectionsData as Collection[])
-        : ((collectionsData as { collections?: Collection[] }).collections ?? []);
-    const paths = [];
-
-    for (const collection of collections) {
-        const sections = (indexes.collectionToSections?.[collection.id] || []) as string[];
-        for (const section of sections) {
-            paths.push({
-                params: {
-                    collection: collection.slug,
-                    section: section,
-                },
-            });
-        }
-    }
-
-    return paths;
-}
 
 const { collection: collectionSlug, section } = Astro.params;
 
@@ -60,10 +39,34 @@ if (excerptIds.length === 0) {
     return Astro.redirect(`/browse/${collectionSlug}`);
 }
 
-// Load chunks for this section
-const allChunks = await getCollection('excerpt-chunks');
-const sectionChunks = allChunks.filter(
-    (chunk) => chunk.data.sectionId === section && chunk.id.startsWith(`${collectionData.id}/`),
+type ChunkPayload = { sectionId: string; excerptIds: string[]; excerpts: Excerpt[] };
+const bucket = (Astro.locals as { runtime?: { env?: { EXCERPT_BUCKET?: { get: (key: string) => Promise<any> } } } })
+    ?.runtime?.env?.EXCERPT_BUCKET;
+
+const fetchChunk = async (chunkId: string): Promise<ChunkPayload | null> => {
+    if (bucket) {
+        const object = await bucket.get(chunkId);
+        if (!object) {
+            return null;
+        }
+        const text = await object.text();
+        return JSON.parse(text) as ChunkPayload;
+    }
+
+    if (import.meta.env.DEV) {
+        const filePath = `tmp/excerpt-chunks/${chunkId}`;
+        if (await Bun.file(filePath).exists()) {
+            return Bun.file(filePath).json();
+        }
+    }
+
+    return null;
+};
+
+const sectionChunkIds = (indexes.sectionToChunks?.[collectionData.id] || {}) as Record<string, string[]>;
+const chunkIds = sectionChunkIds[section] || [];
+const sectionChunks = (await Promise.all(chunkIds.map((chunkId) => fetchChunk(chunkId)))).filter(
+    (chunk): chunk is NonNullable<typeof chunk> => Boolean(chunk),
 );
 
 if (sectionChunks.length === 0) {
@@ -74,7 +77,7 @@ const headingIdSet = new Set(Object.keys(sectionMap));
 
 // Extract all excerpts from chunks and filter out heading markers
 const excerpts = sectionChunks
-    .flatMap((chunk) => chunk.data.excerpts)
+    .flatMap((chunk) => chunk.excerpts)
     .filter((excerpt) => {
         const excerptId = String(excerpt.id);
         const hasContent = typeof excerpt.nass === 'string' && excerpt.nass.trim().length > 0;
@@ -83,7 +86,7 @@ const excerpts = sectionChunks
     .sort((a, b) => a.from - b.from);
 
 // Get the section heading
-const headingExcerpt = sectionChunks.flatMap((chunk) => chunk.data.excerpts).find((excerpt) => excerpt.id === section);
+const headingExcerpt = sectionChunks.flatMap((chunk) => chunk.excerpts).find((excerpt) => excerpt.id === section);
 
 const sectionTitle = headingExcerpt?.text || `Section ${section}`;
 const sectionTitleArabic = headingExcerpt?.nass || '';
@@ -107,6 +110,10 @@ void arabicToWestern;
 void excerpts;
 void sectionTitleArabic;
 void breadcrumbItems;
+
+// Set cache headers for edge caching
+Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
 ---
 
 <BaseLayout title={sectionTitle} description={`Browse excerpts from ${sectionTitle}`}>

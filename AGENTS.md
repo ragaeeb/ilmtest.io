@@ -9,14 +9,33 @@ Welcome, Agent. You are working on **IlmTest**, a high-performance digital libra
 
 ### 1. The "54k Page" Architecture
 We cannot statically generate all pages due to build limits.
--   **Hybrid Strategy**: Browsing indexes are Static (SSG). Leaf nodes (Excerpts) are Dynamic (SSR).
+-   **Hybrid Strategy**: Collection and section browsing pages are SSR with aggressive edge caching; excerpt pages remain SSR.
 -   **Caching**: SSR pages **MUST** include `Cache-Control` headers for Cloudflare Edge.
     -   `Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400`
 -   **Constraint**: Do not propose changing `output: 'static'` (Astro 6 default) to purely static generation for excerpts.
 
+### 1.a Decision Rationale: SSR for Sections + Aggressive Caching
+We switched section pages to SSR to avoid multi-hour builds when a collection has tens of آلاف sections (web scraped sites can have ~20k pages). With SSR + edge caching, first-hit cost is paid once per cache window; subsequent requests are served at the edge.
+
+**Pros of SSR sections**:
+- Eliminates build-time explosion from `getStaticPaths`.
+- Keeps section pages fast after first hit via cache.
+- Simplifies adding large scraped collections.
+
+**Cons of SSR sections**:
+- Consumes Workers invocations on first hit per cache window.
+- Requires strict cache rules and bot protection to stay within free tier.
+
+**Alternatives considered**:
+- **Static sections (SSG)**: Zero Worker cost, but build time scales with section count and becomes untenable at 20k+ sections.
+- **Static with precomputed section summaries**: Faster than full scans but still generates thousands of pages and grows linearly with data size.
+
+**Why this is the best compromise**:
+SSR + cache gives acceptable runtime performance while keeping build times bounded. Combined with Cloudflare cache rules and bot protections, it preserves free-tier viability without sacrificing scalability.
+
 ### 2. Data Strategy & Chunking
 To avoid loading multi-megabyte JSON files:
--   **Chunks**: Excerpts are split into chunks of ~50-100 items or ~80KB max (`src/content/excerpt-chunks/`).
+-   **Chunks**: Excerpts are split into chunks stored in R2; local builds write to `tmp/excerpt-chunks/`.
 -   **Indexes**: We use usage-optimized O(1) lookups generated at build time (`src/data/indexes.json`).
     -   `sectionToExcerpts`: Maps a Section ID to a list of Excerpt IDs.
     -   Always prefer O(1) Lookups over array `.find()` scanning.
@@ -80,7 +99,7 @@ graph TD
     
     subgraph Output
     F --> H[src/data/indexes.json]
-    G --> I[src/content/excerpt-chunks/**]
+    G --> I[tmp/excerpt-chunks/**]
     D --> J[src/data/collections.json]
     end
 ```
@@ -101,7 +120,7 @@ graph TD
     -   `pageToHeading`: Deep linking from physical page numbers.
 
 4.  **Chunking**:
-    -   Splits excerpts into ~80KB JSON files in `src/content/excerpt-chunks/`.
+    -   Splits excerpts into JSON files written to `tmp/excerpt-chunks/` and uploaded to R2.
     -   Enables granular SSR loading without parsing massive files.
 
 

@@ -1,5 +1,7 @@
 ---
-import { getCollection } from 'astro:content';
+// Enable SSR for this route
+export const prerender = false;
+
 import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
@@ -9,19 +11,9 @@ import Card from '@/components/ui/Card.astro';
 import collectionsData from '@/data/collections.json';
 import indexesData from '@/data/indexes.json';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import type { Collection } from '@/types/excerpts';
+import type { Collection, Excerpt } from '@/types/excerpts';
 
 const indexes = indexesData as Record<string, any>;
-
-// Generate static paths for all collections
-export async function getStaticPaths() {
-    const collections = Array.isArray(collectionsData)
-        ? (collectionsData as Collection[])
-        : ((collectionsData as { collections?: Collection[] }).collections ?? []);
-    return collections.map((col) => ({
-        params: { collection: col.slug },
-    }));
-}
 
 const { collection: collectionSlug } = Astro.params;
 
@@ -46,17 +38,54 @@ if (sections.length === 0) {
     return Astro.redirect('/browse');
 }
 
-// Load all chunks to get heading information
-const allChunks = await getCollection('excerpt-chunks');
+const PAGE_SIZE = 100;
+const url = new URL(Astro.request.url);
+const pageParam = Number(url.searchParams.get('page') ?? '1');
+const normalizedPage = Number.isFinite(pageParam) ? Math.max(1, Math.floor(pageParam)) : 1;
+const totalPages = Math.max(1, Math.ceil(sections.length / PAGE_SIZE));
+const currentPage = Math.min(normalizedPage, totalPages);
+const startIndex = (currentPage - 1) * PAGE_SIZE;
+const pageSections = sections.slice(startIndex, startIndex + PAGE_SIZE);
+const pageSectionIdSet = new Set(pageSections);
 
-// Filter chunks for this collection and extract headings
-const collectionChunks = allChunks.filter((chunk) => chunk.id.startsWith(`${collectionData.id}/`));
+const buildPageHref = (page: number) =>
+    page <= 1 ? `/browse/${collectionSlug}` : `/browse/${collectionSlug}?page=${page}`;
 
-const sectionIdSet = new Set(sections);
+type ChunkPayload = { sectionId: string; excerptIds: string[]; excerpts: Excerpt[] };
+const bucket = (Astro.locals as { runtime?: { env?: { EXCERPT_BUCKET?: { get: (key: string) => Promise<any> } } } })
+    ?.runtime?.env?.EXCERPT_BUCKET;
+
+const fetchChunk = async (chunkId: string): Promise<ChunkPayload | null> => {
+    if (bucket) {
+        const object = await bucket.get(chunkId);
+        if (!object) {
+            return null;
+        }
+        const text = await object.text();
+        return JSON.parse(text) as ChunkPayload;
+    }
+
+    if (import.meta.env.DEV) {
+        const filePath = `tmp/excerpt-chunks/${chunkId}`;
+        if (await Bun.file(filePath).exists()) {
+            return Bun.file(filePath).json();
+        }
+    }
+
+    return null;
+};
+
+const sectionIdSet = pageSectionIdSet;
+const sectionChunkIds = (indexes.sectionToChunks?.[collectionData.id] || {}) as Record<string, string[]>;
+
+const chunksForPage = await Promise.all(
+    pageSections.flatMap((sectionId) => (sectionChunkIds[sectionId] ?? []).map((chunkId) => fetchChunk(chunkId))),
+);
+const pageChunks = chunksForPage.filter((chunk): chunk is NonNullable<typeof chunk> => Boolean(chunk));
 
 // Extract headings from chunks (by section IDs from indexes)
-const headings = collectionChunks
-    .flatMap((chunk) => chunk.data.excerpts)
+const headings = pageChunks
+    .flatMap((chunk) => chunk.excerpts)
     .filter((excerpt) => sectionIdSet.has(excerpt.id))
     .map((heading) => ({
         id: heading.id,
@@ -68,20 +97,20 @@ const headings = collectionChunks
 const headingsById = new Map(headings.map((heading) => [heading.id, heading]));
 
 const sectionExcerptCounts = new Map<string, number>();
-for (const chunk of collectionChunks) {
-    const sectionId = chunk.data.sectionId as string;
+for (const chunk of pageChunks) {
+    const sectionId = chunk.sectionId as string;
     if (!sectionIdSet.has(sectionId)) {
         continue;
     }
 
-    const excerptIds: string[] = chunk.data.excerptIds ?? chunk.data.excerpts.map((e: any) => e.id);
+    const excerptIds: string[] = chunk.excerptIds ?? chunk.excerpts.map((e: any) => e.id);
     const hasHeadingMarker = excerptIds.includes(sectionId);
     const count = Math.max(excerptIds.length - (hasHeadingMarker ? 1 : 0), 0);
     sectionExcerptCounts.set(sectionId, (sectionExcerptCounts.get(sectionId) ?? 0) + count);
 }
 
 // Create section items with their primary heading
-const sectionItems = sections.map((sectionId: string) => {
+const sectionItems = pageSections.map((sectionId: string) => {
     const primaryHeading = headingsById.get(sectionId);
 
     return {
@@ -93,6 +122,12 @@ const sectionItems = sections.map((sectionId: string) => {
 });
 
 const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: collectionData.roman }];
+const hasPrevPage = currentPage > 1;
+const hasNextPage = currentPage < totalPages;
+
+// Set cache headers for edge caching
+Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
 ---
 
 <BaseLayout title={collectionData.roman} description={`Browse ${collectionData.roman}`}>
@@ -121,7 +156,9 @@ const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: collecti
                     ))}
                 </p>
             )}
-            <p class="subtitle">{sections.length} sections</p>
+            <p class="subtitle">
+                {sections.length} sections · Page {currentPage} of {totalPages}
+            </p>
         </header>
 
         <div class="sections-list">
@@ -145,6 +182,24 @@ const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: collecti
                 ))
             }
         </div>
+
+        <nav class="pagination" aria-label="Section pages">
+            <a
+                class:list={["pagination-link", !hasPrevPage && "is-disabled"]}
+                href={hasPrevPage ? buildPageHref(currentPage - 1) : undefined}
+                aria-disabled={!hasPrevPage}
+            >
+                Previous
+            </a>
+            <span class="pagination-info">Page {currentPage} of {totalPages}</span>
+            <a
+                class:list={["pagination-link", !hasNextPage && "is-disabled"]}
+                href={hasNextPage ? buildPageHref(currentPage + 1) : undefined}
+                aria-disabled={!hasNextPage}
+            >
+                Next
+            </a>
+        </nav>
     </div>
 
     <Footer slot="footer" />
@@ -232,6 +287,41 @@ const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: collecti
         font-size: var(--text-sm);
         white-space: nowrap;
     }
+
+  .pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--space-4);
+    margin-top: var(--space-8);
+  }
+
+  .pagination-link {
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    font-size: var(--text-sm);
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    transition:
+      color var(--duration-fast) var(--ease-out),
+      border-color var(--duration-fast) var(--ease-out);
+  }
+
+  .pagination-link:hover {
+    color: var(--color-primary-text);
+    border-color: var(--color-border-hover);
+  }
+
+  .pagination-link.is-disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .pagination-info {
+    color: var(--color-text-tertiary);
+    font-size: var(--text-sm);
+  }
 
     @media (max-width: 640px) {
         .section-content {

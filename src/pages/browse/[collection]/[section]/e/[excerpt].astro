@@ -2,8 +2,6 @@
 // Enable SSR for this route
 export const prerender = false;
 
-import { getCollection, getEntry } from 'astro:content';
-import type { CollectionEntry } from 'astro:content';
 import { marked } from 'marked';
 import BilingualText from '@/components/domain/BilingualText.astro';
 import CitationBlock from '@/components/domain/CitationBlock.astro';
@@ -51,42 +49,35 @@ if (!sectionExcerptIds.has(excerptId)) {
     return Astro.redirect('/404');
 }
 
-const safeGetEntry = async (entryId: string): Promise<CollectionEntry<'excerpt-chunks'> | null> => {
-    const normalizedId = entryId.endsWith('.json') ? entryId : `${entryId}.json`;
-    try {
-        return (await getEntry('excerpt-chunks', normalizedId)) as CollectionEntry<'excerpt-chunks'>;
-    } catch (error) {
-        void error;
-        if (normalizedId !== entryId) {
-            try {
-                return (await getEntry('excerpt-chunks', entryId)) as CollectionEntry<'excerpt-chunks'>;
-            } catch (fallbackError) {
-                void fallbackError;
-                return null;
-            }
+type ChunkPayload = { sectionId: string; excerptIds: string[]; excerpts: Excerpt[] };
+const bucket = (Astro.locals as { runtime?: { env?: { EXCERPT_BUCKET?: { get: (key: string) => Promise<any> } } } })
+    ?.runtime?.env?.EXCERPT_BUCKET;
+
+const fetchChunk = async (chunkId: string): Promise<ChunkPayload | null> => {
+    if (bucket) {
+        const object = await bucket.get(chunkId);
+        if (!object) {
+            return null;
         }
-        return null;
+        const text = await object.text();
+        return JSON.parse(text) as ChunkPayload;
     }
+
+    if (import.meta.env.DEV) {
+        const filePath = `tmp/excerpt-chunks/${chunkId}`;
+        if (await Bun.file(filePath).exists()) {
+            return Bun.file(filePath).json();
+        }
+    }
+
+    return null;
 };
 
 const excerptToChunk = (indexes.excerptToChunk?.[collectionData.id] || {}) as Record<string, string>;
 const chunkId = excerptToChunk[excerptId];
 
-const initialChunkEntry = chunkId ? await safeGetEntry(chunkId) : undefined;
-let excerpt = initialChunkEntry?.data.excerpts.find((e: any) => e.id === excerptId) as Excerpt | undefined;
-
-if (!excerpt) {
-    const allChunks = await getCollection('excerpt-chunks');
-    const sectionChunks = allChunks.filter(
-        (chunk) => chunk.data.sectionId === section && chunk.id.startsWith(`${collectionData.id}/`),
-    );
-    for (const chunk of sectionChunks) {
-        excerpt = chunk.data.excerpts.find((e: any) => e.id === excerptId) as Excerpt | undefined;
-        if (excerpt) {
-            break;
-        }
-    }
-}
+const initialChunk = chunkId ? await fetchChunk(chunkId) : null;
+let excerpt = initialChunk?.excerpts.find((e) => e.id === excerptId);
 
 if (!excerpt) {
     return Astro.redirect(`/browse/${collectionSlug}/${section}`);
@@ -95,8 +86,8 @@ if (!excerpt) {
 // Get the section heading for breadcrumb (heading marker is stored in the first chunk)
 const headingChunkId =
     ((indexes.sectionToChunks?.[collectionData.id] || {}) as Record<string, string[]>)[section]?.[0] ?? chunkId;
-const headingChunk = headingChunkId ? await safeGetEntry(headingChunkId) : undefined;
-const headingExcerpt = headingChunk?.data.excerpts.find((e: any) => e.id === section) as Excerpt | undefined;
+const headingChunk = headingChunkId ? await fetchChunk(headingChunkId) : null;
+const headingExcerpt = headingChunk?.excerpts.find((e) => e.id === section) as Excerpt | undefined;
 
 const sectionTitle = headingExcerpt?.text || `Section ${section}`;
 

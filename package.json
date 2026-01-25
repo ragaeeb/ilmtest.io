@@ -18,8 +18,11 @@
         "lint": "biome check .",
         "format": "biome check --write .",
         "setup": "bun scripts/setup.ts",
-        "clean": "rm -rf src/data src/content/excerpt-chunks dist code_packet.txt",
-        "gen-packet": "code2prompt . --include=\"src/**,package.json,astro.config.mjs,README.md,AGENTS.md,docs/deployment.md,scripts/setup.ts,scripts/chunking.ts,scripts/indexing.ts,scripts/mapping.ts,scripts/hierarchy.ts,scripts/env.ts\" -e \"node_modules/**,dist/**,.git/**,bun.lockb,src/data/**,src/content/excerpt-chunks/**,**/*.test.ts\" -O code_packet.txt"
+        "clean": "rm -rf src/data tmp/excerpt-chunks dist code_packet.txt",
+        "create-r2-bucket": "wrangler r2 bucket create \"$R2_BUCKET\"",
+        "upload-r2": "bun scripts/uploadR2.ts",
+        "deploy": "bun run build && bun run upload-r2 \"$R2_BUCKET\" \"${R2_BASE_DIR:-tmp/excerpt-chunks}\" && wrangler pages deploy dist --project-name \"$PAGES_PROJECT\"",
+        "gen-packet": "code2prompt . --include=\"src/**,package.json,astro.config.mjs,README.md,AGENTS.md,docs/deployment.md,scripts/setup.ts,scripts/chunking.ts,scripts/indexing.ts,scripts/mapping.ts,scripts/hierarchy.ts,scripts/env.ts\" -e \"node_modules/**,dist/**,.git/**,bun.lockb,src/data/**,tmp/excerpt-chunks/**,**/*.test.ts\" -O code_packet.txt"
     },
     "dependencies": {
         "@astrojs/react": "^4.4.2",

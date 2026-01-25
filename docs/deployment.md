@@ -15,6 +15,10 @@ This guide outlines the steps to deploy the IlmTest Astro application to Cloudfl
 
 - **Build command**: `bun run build`
 - **Build output directory**: `dist`
+- **Helper scripts**:
+  - `bun run upload-r2` (bulk upload chunks to R2)
+  - `bun run deploy` (build → upload chunks → deploy Pages)
+  - `bun run create-r2-bucket` (creates R2 bucket)
 
 ## Option A: Deploy from your machine (Direct Upload)
 
@@ -54,6 +58,8 @@ wrangler pages project create ilmtest
 ```bash
 wrangler pages deploy dist --project-name ilmtest
 ```
+
+> Tip: If you are using R2, you can use `bun run deploy` once `R2_BUCKET` and `PAGES_PROJECT` are set.
 
 > **Note:** Direct Upload projects cannot be converted to Git-based deployments later. If you want CI, prefer Option B.
 
@@ -96,6 +102,63 @@ Once the deployment is successful:
 3.  Click **Set up a custom domain**.
 4.  Enter `ilmtest.io` (and optionally `www.ilmtest.io`).
 5.  Cloudflare will automatically configure the DNS records since the domain is managed by Cloudflare.
+
+## Cache Rules (Required for SSR Browse Pages)
+
+To keep Worker usage low on the free tier, add a Cache Rule that **caches HTML** for `/browse/*`:
+
+1.  Cloudflare Dashboard → **Rules** → **Cache Rules** → **Create rule**.
+2.  **If**: `URI Path` **starts with** `/browse/`.
+3.  **Then**: **Cache eligibility** → **Cache everything**.
+4.  **Cache TTL**: **Respect existing headers**.
+
+This ensures the `Cache-Control` headers set by SSR routes are honored at the edge.
+
+### Cache Verification Checklist
+
+After deployment, confirm caching is working:
+
+1.  Cloudflare Dashboard → **Analytics** → **Caching**.
+2.  Filter by `/browse/` paths and confirm cache **HIT** rates are rising.
+3.  Use DevTools on a `/browse/...` page and verify response headers include:
+    - `Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400`
+    - `CF-Cache-Status: HIT` (after the first request)
+
+## Bot Protection (Recommended)
+
+To prevent crawlers from exhausting the free tier:
+
+1.  Cloudflare Dashboard → **Security** → **Bots**.
+2.  Enable **Bot Fight Mode** (or **Super Bot Fight Mode** if available).
+3.  Add **WAF/Rate limiting** rule for `/browse/*` (e.g., limit requests per minute per IP).
+4.  Optionally block known AI crawlers via **User-Agent** rules if needed.
+
+## Long-term: R2 Migration Path (Recommended for Scale)
+
+When file counts exceed Pages limits, move `excerpt-chunks` to R2:
+
+1.  **Create an R2 bucket** in Cloudflare.
+2.  **Upload chunks to R2** (from `tmp/excerpt-chunks/`).
+    - `R2_BUCKET=<bucket-name> bun run upload-r2`
+3.  **Create the bucket** (if not already created):
+    - `R2_BUCKET=<bucket-name> bun run create-r2-bucket`
+4.  **Configure R2 binding** in Pages project settings:
+    - Binding name: `EXCERPT_BUCKET`
+5.  **Update runtime fetches** to read chunk JSON from R2 instead of local files.
+4.  **Keep cache headers** on SSR routes so `/browse/*` and excerpt pages stay cached.
+5.  **Purge cache only when needed** (e.g., if a collection changes).
+
+This removes the Pages 20,000-file limit and lets the library scale without redeploy pressure.
+
+## Data Size Optimizations
+
+To reduce storage and transfer costs:
+
+1.  **Minify chunk JSON** (remove whitespace) when writing chunk files.
+2.  **Increase chunk size** (fewer files, fewer metadata lookups).
+3.  **Rely on Cloudflare compression** (Brotli/Gzip for responses).
+4.  **Optional**: Precompress `.json.br` and serve with `Content-Encoding: br` if needed.
+5.  **Optional**: Compact JSON schemas (arrays instead of objects) for larger gains.
 
 ## DNS Cutover from Vercel
 

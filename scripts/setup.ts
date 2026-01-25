@@ -20,7 +20,7 @@ import { mapHeadingIdToShamelaTitleId, mapTitlesToTableOfContents, type TitleNod
 
 const SHAMELA4_LIBRARY_ID = '75';
 const OUTPUT_DATA_DIR = 'src/data';
-const CONTENT_CHUNKS_DIR = 'src/content/excerpt-chunks';
+const CONTENT_CHUNKS_DIR = 'tmp/excerpt-chunks';
 const COLLECTIONS_FILE = 'collections.json';
 const TRANSLATORS_FILE = 'translators.json';
 const INDEXES_FILE = 'indexes.json';
@@ -386,7 +386,7 @@ const writeSectionChunks = async (
             const sectionDir = join(CONTENT_CHUNKS_DIR, collectionId, safeSectionId);
             await mkdir(sectionDir, { recursive: true });
             const chunkPath = join(sectionDir, chunkFileName);
-            await Bun.write(chunkPath, JSON.stringify(chunk, null, 2));
+            await Bun.write(chunkPath, JSON.stringify(chunk));
             sectionToChunks[sectionId] ??= [];
             sectionToChunks[sectionId].push(chunkId);
             for (const excerptId of chunk.excerptIds) {

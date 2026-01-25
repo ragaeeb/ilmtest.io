@@ -25,3 +25,6 @@ pnpm-debug.log*
 
 src/content/**
 src/data/**
+.wrangler
+public/excerpt-chunks
+tmp/excerpt-chunks

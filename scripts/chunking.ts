@@ -5,11 +5,11 @@ import type { Excerpt } from '@/types/excerpts';
  */
 export const CHUNK_CONFIG = {
     /** Maximum number of excerpts per chunk */
-    MAX_ITEMS: 100,
-    /** Target maximum uncompressed size in bytes (~80KB) */
-    MAX_SIZE_BYTES: 80 * 1024,
+    MAX_ITEMS: 200,
+    /** Target maximum uncompressed size in bytes (~200KB) */
+    MAX_SIZE_BYTES: 200 * 1024,
     /** Minimum items before creating a new chunk */
-    MIN_ITEMS: 20,
+    MIN_ITEMS: 50,
 };
 
 /**
@@ -97,6 +97,7 @@ export const groupAndChunkExcerpts = (
     excerptToSection: Record<string, string>,
     collectionId: string,
 ): Map<string, ExcerptChunk[]> => {
+    void collectionId;
     // Group excerpts by section
     const sectionExcerpts = new Map<string, Excerpt[]>();
 

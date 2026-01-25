@@ -58,7 +58,30 @@ All commands are run from the root of the project:
 | `bun preview`             | Preview your build locally, before deploying     |
 | `bun run setup`           | Runs the ETL pipeline to generate content/data   |
 | `bun run clean`           | Removes generated content, data, and build files |
+| `bun run create-r2-bucket`| Creates the R2 bucket (uses `R2_BUCKET`)         |
+| `bun run upload-r2`       | Uploads chunks to R2                             |
+| `bun run deploy`          | Build + upload chunks + Pages deploy             |
 | `bun astro ...`           | Run CLI commands like `astro add`, `astro check` |
+
+## 🔐 Environment Variables
+
+Place these in `.env` so Bun picks them up:
+
+- `CLOUDFLARE_API_TOKEN` — API token with R2 edit permission
+- `R2_BUCKET` — R2 bucket name (e.g., `ilmtest-excerpts`)
+- `PAGES_PROJECT` — Pages project name (e.g., `ilmtest`)
+- `R2_CONCURRENCY` — Upload parallelism (default: `8`)
+
+## 🛠️ Troubleshooting
+
+- **403 Forbidden uploading to R2**  
+  Ensure R2 is enabled in Cloudflare and your API token includes **Account → R2 Storage → Edit** for the correct account.
+
+- **Pages deploy fails with 20,000 file limit**  
+  This happens if chunks are deployed with Pages. Use R2 and remove chunk files from the deployment.
+
+- **`wrangler r2 bucket list` fails with code 10042**  
+  R2 is not enabled on the account yet. Enable it in the Cloudflare dashboard first.
 
 ## 📚 Documentation
 
