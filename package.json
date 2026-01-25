@@ -11,7 +11,7 @@
     "bugs": {
         "url": "https://github.com/ragaeeb/ilmtest.io/issues"
     },
-    "homepage": "https://github.com/ragaeeb/ilmtest.io#readme",
+    "homepage": "https://github.com/ragaeeb/ilmtest.io",
     "scripts": {
         "dev": "astro dev",
         "build": "astro build",

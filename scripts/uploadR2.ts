@@ -6,6 +6,7 @@ const baseDir = process.argv[3] ?? process.env.R2_BASE_DIR ?? 'tmp/excerpt-chunk
 const concurrency = Math.max(1, Number(process.env.R2_CONCURRENCY ?? '8'));
 const useRemote = process.env.R2_REMOTE === '1';
 const limit = Math.max(0, Number(process.env.R2_LIMIT ?? '0'));
+const progressEvery = Math.max(1, Number(process.env.R2_PROGRESS_EVERY ?? '50'));
 const SESSION = 'debug-session';
 const RUN_ID = 'pre-fix';
 const ENDPOINT = 'http://127.0.0.1:7242/ingest/52426cdf-aa70-46f4-bea3-a95a3d7c7923';
@@ -47,6 +48,7 @@ const main = async () => {
     const files = limit > 0 ? allFiles.slice(0, limit) : allFiles;
     let failures = 0;
     let successes = 0;
+    let lastLogged = 0;
 
     // #region agent log
     await log({
@@ -94,6 +96,17 @@ const main = async () => {
                 // #endregion
             } else {
                 successes += 1;
+            }
+            const completed = successes + failures;
+            if (
+                completed > lastLogged
+                && (completed === files.length || completed - lastLogged >= progressEvery)
+            ) {
+                lastLogged = completed;
+                const remaining = files.length - completed;
+                console.log(
+                    `[uploadR2] ${completed}/${files.length} done (${remaining} remaining, ${successes} ok, ${failures} failed)`,
+                );
             }
         }
     };

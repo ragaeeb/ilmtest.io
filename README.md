@@ -5,6 +5,8 @@
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=flat&logo=tailwind-css&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat&logo=typescript&logoColor=white)
 ![Bun](https://img.shields.io/badge/Bun-000000?style=flat&logo=bun&logoColor=white)
+[![wakatime](https://wakatime.com/badge/user/a0b906ce-b8e7-4463-8bce-383238df6d4b/project/259f7be9-9cf1-4d32-9cfa-c17c9ae69a1a.svg)](https://wakatime.com/badge/user/a0b906ce-b8e7-4463-8bce-383238df6d4b/project/259f7be9-9cf1-4d32-9cfa-c17c9ae69a1a)
+[![codecov](https://codecov.io/gh/ragaeeb/ilmtest.io/graph/badge.svg?token=BAEZ6JJPHO)](https://codecov.io/gh/ragaeeb/ilmtest.io)
 
 **Authentic Islamic content with verification and scholarly sources.**
 
