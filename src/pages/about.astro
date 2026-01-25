@@ -65,10 +65,25 @@ void BaseLayout;
           </ul>
         </section>
 
-        <div class="notice-box">
+        <section>
+          <h2 class="section-title">Coming Soon</h2>
+          <p class="body-text">
+            We are actively working on the following features for future releases:
+          </p>
+          <ul class="feature-list">
+            <li><strong>Narrator Linking:</strong> Explore chains of transmission by clicking on individual narrator names within texts.</li>
+            <li><strong>Expanded Library:</strong> Adding major works in <em>Tafsīr</em> (exegesis), the Qurʾān, Biographies, and <em>Jarḥ wa-Taʿdīl</em> (criticism and praise), with deep interconnectivity.</li>
+            <li><strong>Professional Translations:</strong> Replacing AI-generated placeholders with verified, high-quality human translations.</li>
+            <li><strong>Community Feedback:</strong> A built-in system for reporting typos and data corrections.</li>
+          </ul>
+        </section>
+
+        <div class="notice-box warning">
           <p class="notice-text">
-            <strong>Status:</strong> Public Beta (Phase 3). <br/>
-            We are currently indexing core verified collections. If you spot an error, please report it via our repository.
+            <strong>🚧 Alpha Release Status</strong><br/>
+            IlmTest is currently in <strong>Alpha</strong>. This means the platform is active development.
+            <br />
+            Please expect <strong>breaking changes</strong> to URLs and data structures. Do not rely on deep links blindly, as routes may shift as we optimize our architecture.
           </p>
         </div>
       </div>
@@ -125,12 +140,37 @@ void BaseLayout;
     border-radius: var(--radius-sm);
   }
 
+  .notice-box.warning {
+    background-color: var(--color-warning-bg);
+    border-left-color: var(--color-warning);
+  }
+
   .notice-text {
     color: var(--color-info);
     font-weight: 500;
   }
+
+  .warning .notice-text {
+    color: var(--color-text-primary); /* Better readability on warning bg */
+  }
   
   [data-theme="dark"] .notice-text {
+    color: var(--color-text-primary);
+  }
+
+  .feature-list {
+    margin-top: var(--space-4);
+    padding-left: var(--space-4);
+    list-style-type: disc;
+    color: var(--color-text-secondary);
+    line-height: var(--leading-relaxed);
+  }
+
+  .feature-list li + li {
+    margin-top: var(--space-2);
+  }
+
+  .feature-list strong {
     color: var(--color-text-primary);
   }
 </style>
