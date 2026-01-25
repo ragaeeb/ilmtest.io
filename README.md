@@ -72,6 +72,15 @@ Place these in `.env` so Bun picks them up. See `docs/deployment.md` for the ful
 
 ## 🛠️ Troubleshooting
 
+- **"Nothing is here yet" on custom domain**  
+  Ensure the Pages **Production Branch** is `main` and a production deploy completed.
+
+- **Browse shows `0 excerpts`**  
+  The `EXCERPT_BUCKET` binding is missing or pointing at the wrong R2 bucket.
+
+- **Pages deploy fails with `Authentication error [code: 10000]`**  
+  Add token permissions for **Cloudflare Pages → Edit** and **User → User Details/Memberships → Read**.
+
 - **403 Forbidden uploading to R2**  
   Ensure R2 is enabled in Cloudflare and your API token includes **Account → R2 Storage → Edit** for the correct account.
 

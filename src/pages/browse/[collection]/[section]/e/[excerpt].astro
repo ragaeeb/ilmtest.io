@@ -10,9 +10,7 @@ import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
-import collectionsData from '@/data/collections.json';
-import indexesData from '@/data/indexes.json';
-import translatorsData from '@/data/translators.json';
+import { loadCollectionsData, loadIndexesData, loadTranslatorsData } from '@/lib/data';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { arabicToWestern } from '@/lib/arabic';
 import { getCitationParts } from '@/lib/citations';
@@ -25,6 +23,9 @@ if (!collectionSlug || !section || !excerptId) {
 }
 
 // Find collection metadata
+const collectionsData = loadCollectionsData();
+const indexesData = loadIndexesData();
+const translatorsData = loadTranslatorsData();
 const indexes = indexesData as Record<string, any>;
 
 function getCollections(): Collection[] {

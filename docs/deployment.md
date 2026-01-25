@@ -79,7 +79,7 @@ wrangler pages deploy dist --project-name ilmtest
 Cloudflare should detect Astro, but set the following explicitly:
 
 - **Project Name**: `ilmtest` (or your preferred project name)
-- **Production Branch**: `main` (or your default branch)
+- **Production Branch**: `main` (required for `ilmtest.io`)
 - **Framework Preset**: `Astro`
 - **Build Command**: `bun run build`
 - **Build Output Directory**: `dist`
@@ -94,15 +94,26 @@ Add any required environment variables in **Project Settings → Environment Var
 1.  Click **Save and Deploy**.
 2.  Cloudflare will clone your repository, install dependencies, build the site, and deploy it to a `*.pages.dev` subdomain.
 
+### Production vs Preview Branches
+
+- **Production** always serves the custom domain (`ilmtest.io`).
+- **Preview** deployments are for non-production branches (e.g., `feature/*` or `v1`).
+- If you deploy a preview branch only, `ilmtest.io` will show **"Nothing is here yet"**.
+- Keep the **Production Branch** set to `main`, and deploy from `main` for prod.
+
 ## Custom Domain Setup
 
-Once the deployment is successful:
+Once the production deployment is successful:
 
 1.  Go to your Pages project settings.
 2.  Click on the **Custom domains** tab.
 3.  Click **Set up a custom domain**.
 4.  Enter `ilmtest.io` (and optionally `www.ilmtest.io`).
 5.  Cloudflare will automatically configure the DNS records since the domain is managed by Cloudflare.
+
+**If you see "Nothing is here yet" on `ilmtest.io`:**
+- Verify the **Production Branch** is `main`.
+- Confirm a **production** deployment succeeded (not just a preview branch).
 
 ## Cache Rules (Required for SSR Browse Pages)
 
@@ -112,6 +123,8 @@ To keep Worker usage low on the free tier, add a Cache Rule that **caches HTML**
 2.  **If**: `URI Path` **starts with** `/browse/`.
 3.  **Then**: **Cache eligibility** → **Cache everything**.
 4.  **Cache TTL**: **Respect existing headers**.
+
+Note: use **Cache Rules** (not Page Rules). This is required for SSR HTML caching.
 
 This ensures the `Cache-Control` headers set by SSR routes are honored at the edge.
 
@@ -146,9 +159,10 @@ When file counts exceed Pages limits, move `excerpt-chunks` to R2:
     - `R2_BUCKET=<bucket-name> bun run create-r2-bucket`
 4.  **Configure R2 binding** in Pages project settings:
     - Binding name: `EXCERPT_BUCKET`
+    - Add it to **both Production and Preview** environments if you deploy previews.
 5.  **Update runtime fetches** to read chunk JSON from R2 instead of local files.
-4.  **Keep cache headers** on SSR routes so `/browse/*` and excerpt pages stay cached.
-5.  **Purge cache only when needed** (e.g., if a collection changes).
+6.  **Keep cache headers** on SSR routes so `/browse/*` and excerpt pages stay cached.
+7.  **Purge cache only when needed** (e.g., if a collection changes).
 
 This removes the Pages 20,000-file limit and lets the library scale without redeploy pressure.
 
@@ -178,6 +192,29 @@ If the domain is currently pointed to Vercel, update DNS in Cloudflare:
 2.  Verify that all pages load correctly (Landing, About, Browse, Excerpts).
 3.  Check that the specific font subsets (Arabic) are loading.
 4.  Test navigation between pages.
+
+## Troubleshooting
+
+- **"Nothing is here yet" on `ilmtest.io`**
+  - Custom domains serve **production** only. Ensure Production Branch is `main` and a production deploy completed.
+- **Preview works, production fails / 522 on custom domain**
+  - Check that production deploy finished successfully and DNS is pointing to Pages.
+- **Browse shows "Section T123" and `0 excerpts`**
+  - The `EXCERPT_BUCKET` binding is missing or pointing at the wrong R2 bucket.
+  - Add the binding to both **Production and Preview** if you use previews.
+- **Pages deploy fails with `Authentication error [code: 10000]`**
+  - Your `CLOUDFLARE_API_TOKEN` needs:
+    - `Account → Cloudflare Pages → Edit`
+    - `User → User Details → Read`
+    - `User → Memberships → Read`
+- **R2 upload errors like `put: Unspecified error (0)` / R2 500s**
+  - Ensure `R2_REMOTE=1` (remote mode) and that `R2_BUCKET` is set.
+- **Skip-existing not skipping**
+  - Listing requires `R2_ENDPOINT` or `R2_ACCOUNT_ID/CF_ACCOUNT_ID` and S3 keys (or a `CLOUDFLARE_API_TOKEN` that can derive them).
+  - Ensure `R2_LIST_PREFIX` matches your upload key prefix and `R2_BASE_DIR` matches the local root used to build object keys.
+- **CI builds without data**
+  - The app now tolerates missing `src/data/*.json` and will build with empty content.
+  - To render real content, run `bun run setup` before deploying.
 
 ## Updates
 
@@ -209,6 +246,7 @@ R2_REQUIRE_CONFIRM=1 R2_CONFIRM=1 bun run resume
 Place these in `.env` for local runs:
 
 - `CLOUDFLARE_API_TOKEN` — API token with R2 edit permission
+- If you use `bun run deploy`, the token also needs **Cloudflare Pages → Edit** and **User → User Details/Memberships → Read**
 - `R2_BUCKET` — R2 bucket name (e.g., `ilmtest-excerpts`)
 - `R2_CONCURRENCY` — Upload parallelism (default: `8`)
 - `PAGES_PROJECT` — Pages project name (e.g., `ilmtest`)

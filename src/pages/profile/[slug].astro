@@ -4,11 +4,12 @@ import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
 import Card from '@/components/ui/Card.astro';
-import collectionsData from '@/data/collections.json';
-// Import indexes
-import indexes from '@/data/indexes.json';
+import { loadCollectionsData, loadIndexesData } from '@/lib/data';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import type { Collection } from '@/types/excerpts';
+
+const collectionsData = loadCollectionsData();
+const indexes = loadIndexesData() as Record<string, any>;
 
 export async function getStaticPaths() {
     const entityIds = Object.keys(indexes.entityToCollections || {});
@@ -83,7 +84,7 @@ const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: entity.n
             {
                 entity.collections.length > 0 ? (
                     <div class="collections-list">
-                        {entity.collections.map((collectionId) => {
+                        {entity.collections.map((collectionId: string) => {
                             const collection = collectionsById.get(collectionId);
                             const href = collection ? `/browse/${collection.slug}` : `/browse/${collectionId}`;
                             const title = collection?.roman ?? `Collection ${collectionId}`;

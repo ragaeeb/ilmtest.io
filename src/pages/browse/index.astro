@@ -3,11 +3,12 @@ import CollectionCard from '@/components/domain/CollectionCard.astro';
 import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
-import collectionsData from '@/data/collections.json';
-import indexesData from '@/data/indexes.json';
+import { loadCollectionsData, loadIndexesData } from '@/lib/data';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import type { Collection } from '@/types/excerpts';
 
+const collectionsData = loadCollectionsData();
+const indexesData = loadIndexesData();
 const indexes = indexesData as Record<string, any>;
 
 function getCollections(): Collection[] {

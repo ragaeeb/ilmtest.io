@@ -1,8 +1,10 @@
-import collectionsData from '@/data/collections.json';
-import indexesData from '@/data/indexes.json';
+import { loadCollectionsData, loadIndexesData } from '@/lib/data';
 import type { Collection } from '@/types/excerpts';
 
 const site = import.meta.env.SITE ?? 'https://ilmtest.io';
+
+const collectionsData = loadCollectionsData();
+const indexesData = loadIndexesData();
 
 const getCollections = (): Collection[] => {
     if (Array.isArray(collectionsData)) {

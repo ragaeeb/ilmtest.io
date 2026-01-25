@@ -8,11 +8,12 @@ import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
 import Card from '@/components/ui/Card.astro';
 // Import data
-import collectionsData from '@/data/collections.json';
-import indexesData from '@/data/indexes.json';
+import { loadCollectionsData, loadIndexesData } from '@/lib/data';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import type { Collection, Excerpt } from '@/types/excerpts';
 
+const collectionsData = loadCollectionsData();
+const indexesData = loadIndexesData();
 const indexes = indexesData as Record<string, any>;
 
 const { collection: collectionSlug } = Astro.params;
