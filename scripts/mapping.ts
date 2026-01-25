@@ -1,33 +1,5 @@
-import type { BookData, Page, Title } from 'shamela';
-import { arabicToWestern } from '@/lib/arabic';
-import type { Compilation, Excerpt, Heading } from '@/types/excerpts';
-
-/**
- * When the user gets a shareable link to an excerpt and they open it, there hould be a hard link to exactly where this excerpt was taken from its original library.
- */
-export const mapExcerptToCitation = (e: Excerpt, citationTemplate: string) => {
-    return citationTemplate.replace(':page', e.from.toString());
-};
-
-const copyCitationDataToMeta = (pages: Page[], excerpts: Excerpt[]) => {
-    const idToPage = new Map<number, Page>();
-
-    pages.forEach((p) => {
-        idToPage.set(p.id, p);
-    });
-
-    excerpts.forEach((e) => {
-        const page = idToPage.get(e.from)!;
-
-        if (page.part?.match(/^\d+$/)) {
-            e.meta = { ...e.meta, vol: Number(page.part) };
-
-            if (page.page) {
-                e.meta.vp = page.page;
-            }
-        }
-    });
-};
+import type { Title } from 'shamela';
+import type { Heading } from '@/types/excerpts';
 
 export type TitleNode = Title & {
     children?: TitleNode[];
@@ -60,23 +32,6 @@ export const mapTitlesToTableOfContents = (titles: Title[]) => {
 
 export const mapHeadingIdToShamelaTitleId = (heading: Heading) => parseInt(heading.id.slice(1), 10);
 
-export const mapHeadingsToShamelaTitles = (headings: Heading[], titles: Title[]) => {
-    const headingToTitle = new Map<Heading, Title>();
-    const idToTitle = new Map<number, Title>();
-
-    for (const t of titles) {
-        idToTitle.set(t.id, t);
-    }
-
-    for (const heading of headings) {
-        const titleId = mapHeadingIdToShamelaTitleId(heading);
-        const title = idToTitle.get(titleId)!;
-        headingToTitle.set(heading, title);
-    }
-
-    return headingToTitle;
-};
-
 type HeadingNode = Heading & {
     children?: HeadingNode[];
 };
@@ -105,104 +60,3 @@ export const mapTitleTreeToHeadingTree = (titleNodes: TitleNode[], headings: Hea
 
     return titleNodes.filter((t) => titleIdToHeading.has(t.id)).map(convertNode);
 };
-
-export const getTitleTreeForPage = (nodes: TitleNode[], page: number) => {
-    // Find the last root node where page <= given page
-    let activeRoot = nodes[0];
-
-    for (const node of nodes) {
-        if (node.page <= page) {
-            activeRoot = node;
-        }
-    }
-
-    // Recursively filter the tree to only show children with page <= given page
-    const filterTree = (node: TitleNode): TitleNode => {
-        const filteredChildren = (node.children || []).filter((child) => child.page <= page).map(filterTree);
-
-        return {
-            ...node,
-            children: filteredChildren,
-        };
-    };
-
-    return filterTree(activeRoot);
-};
-
-export const getExcerptsUnderTitle = (
-    titles: TitleNode[],
-    excerpts: Excerpt[],
-    selectedTitle: TitleNode,
-    validTitleIds?: Set<number>,
-) => {
-    // Find the next title page that "closes" this section
-    const nextTitlePage = findNextTitleAtSameLevelOrHigher(titles, selectedTitle, validTitleIds);
-
-    // If no children, return all excerpts in the range
-    if (!selectedTitle.children?.length) {
-        return excerpts.filter((e) => e.from >= selectedTitle.page && e.from < nextTitlePage);
-    }
-
-    const firstChildPage = selectedTitle.children[0].page;
-
-    // If parent and first child are on the same page, assign nothing to parent
-    // (all excerpts will be assigned to children via recursive processing)
-    if (firstChildPage === selectedTitle.page) {
-        return [];
-    }
-
-    // Otherwise, assign excerpts between parent and first child to parent
-    // (excerpts at/after first child will be assigned to children via recursion)
-    return excerpts.filter((e) => e.from >= selectedTitle.page && e.from < firstChildPage);
-};
-
-// Helper: Find the next title at the same level or higher
-const findNextTitleAtSameLevelOrHigher = (
-    titles: TitleNode[],
-    selectedTitle: TitleNode,
-    validTitleIds?: Set<number>,
-): number => {
-    // Flatten all titles with their depth
-    const flatTitles: Array<{ node: TitleNode; depth: number }> = [];
-
-    const flatten = (nodes: TitleNode[], depth: number) => {
-        for (const node of nodes) {
-            flatTitles.push({ node, depth });
-            if (node.children?.length) {
-                flatten(node.children, depth + 1);
-            }
-        }
-    };
-
-    flatten(titles, 0);
-
-    // Find selected title's index and depth
-    const selectedIndex = flatTitles.findIndex((t) => t.node.id === selectedTitle.id);
-    const selectedDepth = flatTitles[selectedIndex].depth;
-
-    // Find next title at same or higher level (lower depth number)
-    for (let i = selectedIndex + 1; i < flatTitles.length; i++) {
-        if (flatTitles[i].depth <= selectedDepth) {
-            // Include effective boundary logic:
-            // If validTitleIds is provided, we ONLY stop at titles that are valid headings.
-            // If the title is NOT a valid heading, we skip it (it's transparent).
-            if (validTitleIds && !validTitleIds.has(flatTitles[i].node.id)) {
-                continue;
-            }
-            return flatTitles[i].node.page;
-        }
-    }
-
-    return Infinity;
-};
-
-/**
- * Utility function to ground citations for each excerpt.
- * @param excerpt
- * @param bookData
- */
-export const groundShamelaExcerpts = (data: Compilation, bookData: BookData) => {
-    copyCitationDataToMeta(bookData.pages, data.excerpts);
-};
-
-export { arabicToWestern };

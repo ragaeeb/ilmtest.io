@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test';
 import type { Collection, Excerpt } from '../scripts/types/excerpts';
-import { arabicToWestern } from './arabic';
 import {
     formatAnonymousCitation,
     formatAuthorName,
@@ -81,18 +80,6 @@ describe('formatAuthorName', () => {
             ],
         });
         expect(formatAuthorName(collection)).toBe('Ibn Kathīr et al.');
-    });
-});
-
-describe('arabicToWestern', () => {
-    it('should convert Arabic numerals to Western', () => {
-        expect(arabicToWestern('٥٩')).toBe(59);
-        expect(arabicToWestern('١٢٣٤')).toBe(1234);
-        expect(arabicToWestern('٠')).toBe(0);
-    });
-
-    it('should handle already Western numerals', () => {
-        expect(arabicToWestern('59')).toBe(59);
     });
 });
 

@@ -10,10 +10,10 @@ import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
-import { loadCollectionsData, loadIndexesData, loadTranslatorsData } from '@/lib/data';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { arabicToWestern } from '@/lib/arabic';
 import { getCitationParts } from '@/lib/citations';
+import { loadCollectionsData, loadIndexesData, loadTranslatorsData } from '@/lib/data';
+import { arabicToWestern } from '@/lib/textUtils';
 import type { Collection, Excerpt } from '@/types/excerpts';
 
 const { collection: collectionSlug, section, excerpt: excerptId } = Astro.params;

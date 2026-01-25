@@ -1,5 +1,5 @@
 import type { Collection, Excerpt } from '@/types/excerpts';
-import { arabicToWestern } from './arabic';
+import { arabicToWestern } from './textUtils';
 
 /**
  * Citation metadata types using discriminated unions for type safety.
