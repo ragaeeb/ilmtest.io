@@ -17,6 +17,7 @@ This guide outlines the steps to deploy the IlmTest Astro application to Cloudfl
 - **Build output directory**: `dist`
 - **Helper scripts**:
   - `bun run upload-r2` (bulk upload chunks to R2)
+  - `bun run resume` (resume upload with skip-existing)
   - `bun run deploy` (build → upload chunks → deploy Pages)
   - `bun run create-r2-bucket` (creates R2 bucket)
 
@@ -140,6 +141,7 @@ When file counts exceed Pages limits, move `excerpt-chunks` to R2:
 1.  **Create an R2 bucket** in Cloudflare.
 2.  **Upload chunks to R2** (from `tmp/excerpt-chunks/`).
     - `R2_BUCKET=<bucket-name> bun run upload-r2`
+    - To resume after an interruption: `bun run resume`
 3.  **Create the bucket** (if not already created):
     - `R2_BUCKET=<bucket-name> bun run create-r2-bucket`
 4.  **Configure R2 binding** in Pages project settings:
@@ -180,3 +182,49 @@ If the domain is currently pointed to Vercel, update DNS in Cloudflare:
 ## Updates
 
 Any new commits pushed to the `main` branch will automatically trigger a new deployment when using Git integration. You can monitor build status in the Cloudflare Pages dashboard.
+
+## R2 Upload Helpers
+
+The upload script supports resume, dry runs, and sanity checks to avoid re-uploading chunks.
+
+### Common commands
+
+- `bun run upload-r2` — upload all chunks
+- `bun run resume` — resume upload with skip-existing and `R2_REMOTE=1`
+
+### Dry run and confirmation
+
+Use these when you want to validate configuration before uploading:
+
+```bash
+# Print sanity check and exit
+R2_DRY_RUN=1 bun run resume
+
+# Require confirmation before uploading
+R2_REQUIRE_CONFIRM=1 R2_CONFIRM=1 bun run resume
+```
+
+### Environment variables (local uploads)
+
+Place these in `.env` for local runs:
+
+- `CLOUDFLARE_API_TOKEN` — API token with R2 edit permission
+- `R2_BUCKET` — R2 bucket name (e.g., `ilmtest-excerpts`)
+- `R2_CONCURRENCY` — Upload parallelism (default: `8`)
+- `PAGES_PROJECT` — Pages project name (e.g., `ilmtest`)
+
+### Optional R2 list config (skip-existing)
+
+Skip-existing uses Bun’s S3 list API. Provide either:
+
+- `R2_ENDPOINT` **or** `R2_ACCOUNT_ID`/`CF_ACCOUNT_ID`
+
+If you prefer explicit S3 credentials, set:
+
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+
+### Retry behavior
+
+- `R2_RETRY_429` — number of retries when a `429`/`TooManyRequests` is detected (default: `3`)
+- `R2_PROGRESS_EVERY` — progress log interval in processed items (default: `50`)
