@@ -504,5 +504,10 @@ export const setup = async (...collectionIds: string[]) => {
 };
 
 if (import.meta.main) {
-    await setup('1118', '2576');
+    const collectionIds = process.argv.slice(2);
+    if (collectionIds.length === 0) {
+        console.error('Please provide one or more collection IDs. Example: bun run setup 1118 2576');
+        process.exit(1);
+    }
+    await setup(...collectionIds);
 }
