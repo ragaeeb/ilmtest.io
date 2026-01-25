@@ -1,6 +1,7 @@
 ---
-const currentYear = new Date().getFullYear();
+import { version } from '@/config/version';
 
+const currentYear = new Date().getFullYear();
 const footerLinks = [
     {
         title: 'Resources',
@@ -21,6 +22,7 @@ const footerLinks = [
 // Biome doesn't see template usage in .astro files.
 void currentYear;
 void footerLinks;
+void version;
 ---
 
 <footer class="footer">
@@ -60,6 +62,7 @@ void footerLinks;
     <p class="footer-copyright">
       © {currentYear} IlmTest. All rights reserved.
     </p>
+    <p class="footer-version">Version v{version}</p>
   </div>
 </footer>
 
@@ -163,6 +166,12 @@ void footerLinks;
     color: var(--color-text-tertiary);
     font-size: var(--text-sm);
     margin: 0;
+  }
+
+  .footer-version {
+    color: var(--color-text-tertiary);
+    font-size: var(--text-xs);
+    margin: var(--space-2) 0 0;
   }
 
   /* Mobile responsive */
