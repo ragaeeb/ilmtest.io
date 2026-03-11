@@ -3,12 +3,33 @@ import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'astro/config';
 
+const optimizeDeps = {
+    entries: [],
+    include: [],
+    noDiscovery: true,
+};
+
+const disableServerDepScanPlugin = {
+    name: 'ilmtest:disable-server-dep-scan',
+    enforce: 'post',
+    configEnvironment(environmentName) {
+        if (!['astro', 'ssr', 'prerender'].includes(environmentName)) {
+            return;
+        }
+
+        return {
+            optimizeDeps,
+        };
+    },
+};
+
 export default defineConfig({
     // Static by default; use `export const prerender = false` on specific routes for SSR
     output: 'static',
 
     adapter: cloudflare({
         imageService: 'passthrough',
+        inspectorPort: false,
     }),
 
     integrations: [
@@ -19,11 +40,25 @@ export default defineConfig({
     site: 'https://ilmtest.io',
 
     vite: {
-        plugins: [tailwindcss()],
+        environments: {
+            astro: {
+                optimizeDeps,
+            },
+            ssr: {
+                optimizeDeps,
+            },
+            prerender: {
+                optimizeDeps,
+            },
+        },
+        optimizeDeps,
+        plugins: [tailwindcss(), disableServerDepScanPlugin],
     },
 
     build: {
+        client: './dist',
         format: 'file',
+        server: './functions',
     },
 
     experimental: {

@@ -1,0 +1,57 @@
+---
+import { Copy } from 'lucide-react';
+
+interface Props {
+    text: string;
+    className?: string;
+    ariaLabel?: string;
+}
+
+const { text, className = '', ariaLabel = 'Copy citation' } = Astro.props;
+const encodedText = JSON.stringify(text);
+const idleLabel = ariaLabel;
+---
+
+<button
+    type="button"
+    class={`share-button ${className}`.trim()}
+    aria-live="polite"
+    aria-label={idleLabel}
+    title={idleLabel}
+    data-copy-text={text}
+    data-idle-label={idleLabel}
+>
+    <Copy size={18} strokeWidth={2} />
+</button>
+
+<script define:vars={{ encodedText, idleLabel }}>
+    const button = document.currentScript?.previousElementSibling;
+
+    if (!(button instanceof HTMLButtonElement)) {
+        return;
+    }
+
+    let resetTimer;
+
+    const setStatus = (status) => {
+        const label = status === 'copied' ? 'Copied' : status === 'error' ? 'Copy failed' : idleLabel;
+        button.classList.toggle('is-copied', status === 'copied');
+        button.setAttribute('aria-label', label);
+        button.setAttribute('title', label);
+    };
+
+    button.addEventListener('click', async () => {
+        window.clearTimeout(resetTimer);
+
+        try {
+            await navigator.clipboard.writeText(JSON.parse(encodedText));
+            setStatus('copied');
+        } catch {
+            setStatus('error');
+        }
+
+        resetTimer = window.setTimeout(() => {
+            setStatus('idle');
+        }, 1500);
+    });
+</script>

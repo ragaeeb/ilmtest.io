@@ -1,0 +1,12 @@
+{
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "compatibility_date": "2026-03-10",
+    "name": "ilmtest-io",
+    "r2_buckets": [
+        {
+            "binding": "EXCERPT_BUCKET",
+            "bucket_name": "ilmtest-excerpts",
+            "preview_bucket_name": "ilmtest-excerpts"
+        }
+    ]
+}

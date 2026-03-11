@@ -1,61 +1,5 @@
 {
     "$schema": "https://biomejs.dev/schemas/latest/schema.json",
-    "vcs": {
-        "enabled": true,
-        "clientKind": "git",
-        "useIgnoreFile": true
-    },
-    "files": {
-        "ignoreUnknown": true,
-        "includes": ["**", "!node_modules", "!dist", "!build", "!coverage"]
-    },
-    "formatter": {
-        "enabled": true,
-        "indentStyle": "space",
-        "indentWidth": 4,
-        "lineWidth": 120
-    },
-    "linter": {
-        "enabled": true,
-        "rules": {
-            "recommended": true,
-            "suspicious": {
-                "noExplicitAny": "off"
-            },
-            "style": {
-                "noNonNullAssertion": "off",
-                "useBlockStatements": {
-                    "level": "error",
-                    "fix": "safe",
-                    "options": {}
-                }
-            },
-            "complexity": {
-                "noExcessiveCognitiveComplexity": "warn",
-                "useWhile": "error"
-            }
-        },
-        "domains": {
-            "project": "recommended"
-        }
-    },
-    "overrides": [
-        {
-            "includes": ["**/*.svelte", "**/*.astro", "**/*.vue"],
-            "linter": {
-                "rules": {
-                    "style": {
-                        "useConst": "off",
-                        "useImportType": "off"
-                    },
-                    "correctness": {
-                        "noUnusedVariables": "off",
-                        "noUnusedImports": "off"
-                    }
-                }
-            }
-        }
-    ],
     "assist": {
         "actions": {
             "source": {
@@ -63,14 +7,141 @@
             }
         }
     },
+    "css": {
+        "parser": {
+            "tailwindDirectives": true
+        }
+    },
+    "files": {
+        "ignoreUnknown": true,
+        "includes": [
+            "**",
+            "!!.astro",
+            "!!.wrangler",
+            "!!build",
+            "!!coverage",
+            "!!dist",
+            "!code_packet.txt",
+            "!output",
+            "!src/content",
+            "!src/data",
+            "!tmp"
+        ]
+    },
+    "formatter": {
+        "enabled": true,
+        "indentStyle": "space",
+        "indentWidth": 4,
+        "lineWidth": 120
+    },
     "javascript": {
         "formatter": {
-            "semicolons": "always",
-            "quoteStyle": "single",
-            "trailingCommas": "all",
-            "bracketSpacing": true,
+            "arrowParentheses": "always",
             "bracketSameLine": false,
-            "arrowParentheses": "always"
+            "bracketSpacing": true,
+            "quoteStyle": "single",
+            "semicolons": "always",
+            "trailingCommas": "all"
         }
+    },
+    "linter": {
+        "domains": {
+            "project": "recommended"
+        },
+        "enabled": true,
+        "rules": {
+            "complexity": {
+                "noExcessiveCognitiveComplexity": "warn",
+                "useArrowFunction": "warn",
+                "useWhile": "error"
+            },
+            "recommended": true,
+            "style": {
+                "noNonNullAssertion": "off",
+                "noRestrictedImports": {
+                    "level": "warn",
+                    "options": {
+                        "paths": {
+                            "react": {
+                                "importNames": ["useMemo", "useCallback"],
+                                "message": "Avoid useMemo or useCallback in React islands unless there is a reviewed, measured need."
+                            }
+                        }
+                    }
+                },
+                "useBlockStatements": {
+                    "fix": "safe",
+                    "level": "error",
+                    "options": {}
+                },
+                "useConsistentTypeDefinitions": {
+                    "fix": "none",
+                    "level": "warn",
+                    "options": {
+                        "style": "type"
+                    }
+                }
+            },
+            "suspicious": {
+                "noExplicitAny": "off"
+            }
+        }
+    },
+    "overrides": [
+        {
+            "assist": {
+                "actions": {
+                    "source": {
+                        "useSortedKeys": {
+                            "level": "on",
+                            "options": {
+                                "sortOrder": "natural"
+                            }
+                        }
+                    }
+                }
+            },
+            "includes": ["biome.json", "tsconfig.json", "wrangler.jsonc", ".vscode/**/*.json", ".vscode/**/*.jsonc"]
+        },
+        {
+            "includes": [".vscode/**/*.json", ".vscode/**/*.jsonc"],
+            "json": {
+                "parser": {
+                    "allowComments": true,
+                    "allowTrailingCommas": true
+                }
+            }
+        },
+        {
+            "includes": ["**/*.astro"],
+            "linter": {
+                "rules": {
+                    "correctness": {
+                        "noUnusedImports": "off",
+                        "noUnusedVariables": "off"
+                    },
+                    "style": {
+                        "useConsistentTypeDefinitions": "off",
+                        "useConst": "off",
+                        "useImportType": "off"
+                    }
+                }
+            }
+        },
+        {
+            "includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
+            "linter": {
+                "rules": {
+                    "complexity": {
+                        "useLiteralKeys": "off"
+                    }
+                }
+            }
+        }
+    ],
+    "vcs": {
+        "clientKind": "git",
+        "enabled": true,
+        "useIgnoreFile": true
     }
 }

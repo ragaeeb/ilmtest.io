@@ -25,7 +25,9 @@ graph TD
 
     %% Application Logic
     subgraph "Build Process"
-        Setup[setup.ts\n(ETL Pipeline)]
+        ETL[Build Pipeline\n(scripts/)]
+        Setup[setup.ts\n(Ingest & Transform)]
+        Upload[uploadR2.ts\n(Distribute)]
         Astro[Astro Build\n(SSG + Server Adaptor)]
     end
 
@@ -40,8 +42,10 @@ graph TD
     Dev -->|git push| Pages
     Pages -->|Trigger| Astro
     Setup -->|Download| HF
-    Setup -->|Upload| R2
-    Setup -->|Generate| Astro
+    Upload -->|Upload| R2
+    Setup -->|Generate JSON| Astro
+    ETL --- Setup
+    ETL --- Upload
 ```
 
 ## 2. Data Flow: The "54k Page" Architecture
@@ -60,14 +64,15 @@ sequenceDiagram
     Note over ETL: 1. Ingestion Phase
     ETL->>HF: Download Raw JSON/ZIP
     ETL->>ETL: Decompress & Parse
-    ETL->>ETL: Compute Heading Ranges
+    ETL->>ETL: Handle Identity (Shamela vs Web)
     
     Note over ETL: 2. Transformation Phase
+    ETL->>ETL: Compute Heading Ranges
     ETL->>ETL: Chunk Excerpts (Grouping)
-    ETL->>ETL: Generate O(1) Indexes
+    ETL->>ETL: Generate Metadata & Indexes
     
     Note over ETL: 3. Distribution Phase
-    ETL->>R2: Upload Content Chunks (JSON)
+    ETL->>R2: Upload Content Chunks (uploadR2.ts)
     ETL->>SSR: Embed Indexes (Build Time)
     
     Note over User: 4. Runtime Phase
@@ -86,15 +91,15 @@ sequenceDiagram
 
 ### Key Components
 
-1.  **ETL Pipeline (`setup.ts`)**:
-    *   Runs before the main build.
-    *   Transforms massive raw datasets into small, accessible "Chunks".
-    *   Generates `indexes.json` for O(1) lookups, avoiding massive array scans at runtime.
+1.  **Build Pipeline (`scripts/`)**:
+    *   **`setup.ts`**: The main transformation engine. It handles disparate source types (Shamela-formatted books and Web-scraped content), computing hierarchical heading ranges and backfilling missing data.
+    *   **Data Artifacts**: Generates `indexes.json` (O(1) lookups for sections, chunks, and entities), `collections.json` (library metadata), and `translators.json`.
+    *   **`uploadR2.ts`**: A high-concurrency distribution script that syncs generated content chunks to Cloudflare R2, supporting resumes and skip-existing checks.
 
-2.  **Hybrid Rendering**:
-    *   **SSG**: Landing page, About, TOCs.
-    *   **SSR**: Content pages (Excerpts, Sections). This avoids building 54k static files.
+2.  **Hybrid Rendering (Astro)**:
+    *   **SSG**: Landing page, About, and static collections.
+    *   **SSR**: Dynamic browse/content pages (Excerpts, Sections). This architecture scales to millions of excerpts without exploding build times or file counts.
 
-3.  **Caching Strategy**:
-    *   SSR responses include `Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400`.
-    *   Cloudflare Edge honors this, serving subsequent requests instantly without invoking the Worker.
+3.  **Edge Strategy**:
+    *   **Caching**: SSR responses include `Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400`, honored by Cloudflare Edge.
+    *   **R2 Integration**: The Worker fetches granular content chunks from R2 on demand, keeping memory pressure low.

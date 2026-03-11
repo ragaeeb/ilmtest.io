@@ -7,10 +7,11 @@ import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
 import Card from '@/components/ui/Card.astro';
+import BaseLayout from '@/layouts/BaseLayout.astro';
 // Import data
 import { loadCollectionsData, loadIndexesData } from '@/lib/data';
-import BaseLayout from '@/layouts/BaseLayout.astro';
-import type { Collection, Excerpt } from '@/types/excerpts';
+import { fetchExcerptChunk } from '@/lib/excerptChunks';
+import type { Collection } from '@/types/excerpts';
 
 const collectionsData = loadCollectionsData();
 const indexesData = loadIndexesData();
@@ -51,36 +52,15 @@ const pageSectionIdSet = new Set(pageSections);
 
 const buildPageHref = (page: number) =>
     page <= 1 ? `/browse/${collectionSlug}` : `/browse/${collectionSlug}?page=${page}`;
-
-type ChunkPayload = { sectionId: string; excerptIds: string[]; excerpts: Excerpt[] };
-const bucket = (Astro.locals as { runtime?: { env?: { EXCERPT_BUCKET?: { get: (key: string) => Promise<any> } } } })
-    ?.runtime?.env?.EXCERPT_BUCKET;
-
-const fetchChunk = async (chunkId: string): Promise<ChunkPayload | null> => {
-    if (bucket) {
-        const object = await bucket.get(chunkId);
-        if (!object) {
-            return null;
-        }
-        const text = await object.text();
-        return JSON.parse(text) as ChunkPayload;
-    }
-
-    if (import.meta.env.DEV) {
-        const filePath = `tmp/excerpt-chunks/${chunkId}`;
-        if (await Bun.file(filePath).exists()) {
-            return Bun.file(filePath).json();
-        }
-    }
-
-    return null;
-};
+const requestUrl = Astro.request.url;
 
 const sectionIdSet = pageSectionIdSet;
 const sectionChunkIds = (indexes.sectionToChunks?.[collectionData.id] || {}) as Record<string, string[]>;
 
 const chunksForPage = await Promise.all(
-    pageSections.flatMap((sectionId) => (sectionChunkIds[sectionId] ?? []).map((chunkId) => fetchChunk(chunkId))),
+    pageSections.flatMap((sectionId) =>
+        (sectionChunkIds[sectionId] ?? []).map((chunkId) => fetchExcerptChunk(chunkId, requestUrl)),
+    ),
 );
 const pageChunks = chunksForPage.filter((chunk): chunk is NonNullable<typeof chunk> => Boolean(chunk));
 

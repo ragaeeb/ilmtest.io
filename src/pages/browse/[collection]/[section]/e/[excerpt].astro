@@ -5,7 +5,7 @@ export const prerender = false;
 import { marked } from 'marked';
 import BilingualText from '@/components/domain/BilingualText.astro';
 import CitationBlock from '@/components/domain/CitationBlock.astro';
-import { ShareButton } from '@/components/islands/ShareButton';
+import ShareButton from '@/components/islands/ShareButton.astro';
 import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
@@ -13,6 +13,7 @@ import Breadcrumb from '@/components/ui/Breadcrumb.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { getCitationParts } from '@/lib/citations';
 import { loadCollectionsData, loadIndexesData, loadTranslatorsData } from '@/lib/data';
+import { fetchExcerptChunk } from '@/lib/excerptChunks';
 import { arabicToWestern } from '@/lib/textUtils';
 import type { Collection, Excerpt } from '@/types/excerpts';
 
@@ -50,34 +51,12 @@ if (!sectionExcerptIds.has(excerptId)) {
     return Astro.redirect('/404');
 }
 
-type ChunkPayload = { sectionId: string; excerptIds: string[]; excerpts: Excerpt[] };
-const bucket = (Astro.locals as { runtime?: { env?: { EXCERPT_BUCKET?: { get: (key: string) => Promise<any> } } } })
-    ?.runtime?.env?.EXCERPT_BUCKET;
-
-const fetchChunk = async (chunkId: string): Promise<ChunkPayload | null> => {
-    if (bucket) {
-        const object = await bucket.get(chunkId);
-        if (!object) {
-            return null;
-        }
-        const text = await object.text();
-        return JSON.parse(text) as ChunkPayload;
-    }
-
-    if (import.meta.env.DEV) {
-        const filePath = `tmp/excerpt-chunks/${chunkId}`;
-        if (await Bun.file(filePath).exists()) {
-            return Bun.file(filePath).json();
-        }
-    }
-
-    return null;
-};
-
 const excerptToChunk = (indexes.excerptToChunk?.[collectionData.id] || {}) as Record<string, string>;
 const chunkId = excerptToChunk[excerptId];
+const sectionExcerptList = (sectionMap[section] || []) as string[];
 
-const initialChunk = chunkId ? await fetchChunk(chunkId) : null;
+const requestUrl = Astro.request.url;
+const initialChunk = chunkId ? await fetchExcerptChunk(chunkId, requestUrl) : null;
 let excerpt = initialChunk?.excerpts.find((e) => e.id === excerptId);
 
 if (!excerpt) {
@@ -87,7 +66,7 @@ if (!excerpt) {
 // Get the section heading for breadcrumb (heading marker is stored in the first chunk)
 const headingChunkId =
     ((indexes.sectionToChunks?.[collectionData.id] || {}) as Record<string, string[]>)[section]?.[0] ?? chunkId;
-const headingChunk = headingChunkId ? await fetchChunk(headingChunkId) : null;
+const headingChunk = headingChunkId ? await fetchExcerptChunk(headingChunkId, requestUrl) : null;
 const headingExcerpt = headingChunk?.excerpts.find((e) => e.id === section) as Excerpt | undefined;
 
 const sectionTitle = headingExcerpt?.text || `Section ${section}`;
@@ -108,6 +87,44 @@ const translatorName = translators.find((translator) => translator.id === excerp
 const excerptWords = excerpt.text.split(/\s+/).filter(Boolean);
 const excerptPreview = excerptWords.slice(0, 8).join(' ');
 const excerptLabel = excerptWords.length > 8 ? `${excerptPreview}…` : excerptPreview;
+const currentExcerptIndex = sectionExcerptList.indexOf(excerptId);
+const currentExcerptNumber = currentExcerptIndex >= 0 ? currentExcerptIndex + 1 : 1;
+const totalExcerptsInSection = sectionExcerptList.length;
+const previousExcerptId = currentExcerptIndex > 0 ? sectionExcerptList[currentExcerptIndex - 1] : null;
+const nextExcerptId =
+    currentExcerptIndex >= 0 && currentExcerptIndex < sectionExcerptList.length - 1
+        ? sectionExcerptList[currentExcerptIndex + 1]
+        : null;
+
+async function loadSectionExcerptSummary(targetExcerptId: string | null) {
+    if (!targetExcerptId) {
+        return null;
+    }
+
+    const targetChunkId = excerptToChunk[targetExcerptId];
+    if (!targetChunkId) {
+        return null;
+    }
+
+    const targetChunk = targetChunkId === chunkId ? initialChunk : await fetchExcerptChunk(targetChunkId, requestUrl);
+    const targetExcerpt = targetChunk?.excerpts.find((candidate) => candidate.id === targetExcerptId);
+
+    if (!targetExcerpt) {
+        return null;
+    }
+
+    const previewWords = targetExcerpt.text.split(/\s+/).filter(Boolean);
+    const preview = previewWords.slice(0, 12).join(' ');
+
+    return {
+        id: targetExcerptId,
+        href: `/browse/${collectionSlug}/${section}/e/${targetExcerptId}`,
+        preview: previewWords.length > 12 ? `${preview}…` : preview,
+    };
+}
+
+const previousExcerpt = await loadSectionExcerptSummary(previousExcerptId);
+const nextExcerpt = await loadSectionExcerptSummary(nextExcerptId);
 
 const meta = excerpt.meta;
 const hadithMeta = meta && 'num' in meta ? meta : null;
@@ -131,7 +148,6 @@ const breadcrumbItems = [
 // Biome doesn't see template usage in .astro files.
 void BilingualText;
 void CitationBlock;
-void ShareButton;
 void ThemeToggle;
 void Footer;
 void Header;
@@ -151,6 +167,8 @@ void hadithMeta;
 void bookMeta;
 void formatHadithNumber;
 void breadcrumbItems;
+void previousExcerpt;
+void nextExcerpt;
 
 // Set cache headers for edge caching
 Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
@@ -188,7 +206,7 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
             <!-- Citation Block -->
             <CitationBlock excerpt={excerpt} collection={collectionData} />
             <div class="share-actions" aria-label="Copy excerpt">
-                <ShareButton client:load text={copyPayload} ariaLabel="Copy excerpt and citation" />
+                <ShareButton text={copyPayload} ariaLabel="Copy excerpt and citation" />
             </div>
 
             <!-- Metadata Details -->
@@ -224,6 +242,46 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
                     </div>
                 </dl>
             </section>
+
+            {
+                (previousExcerpt || nextExcerpt) && (
+                    <section class="excerpt-pager-section" aria-labelledby="excerpt-pager-title">
+                        <div class="excerpt-pager-header">
+                            <h2 id="excerpt-pager-title">Section navigation</h2>
+                            <p class="excerpt-pager-status">
+                                Excerpt {currentExcerptNumber} of {totalExcerptsInSection}
+                            </p>
+                        </div>
+
+                        <nav class="excerpt-pagination" aria-label="Excerpt navigation">
+                            {previousExcerpt ? (
+                                <a class="excerpt-pagination-link" href={previousExcerpt.href}>
+                                    <span class="excerpt-pagination-label">Previous excerpt</span>
+                                    <strong class="excerpt-pagination-target">← {previousExcerpt.id}</strong>
+                                    <span class="excerpt-pagination-preview">{previousExcerpt.preview}</span>
+                                </a>
+                            ) : (
+                                <div class="excerpt-pagination-link is-disabled" aria-hidden="true">
+                                    <span class="excerpt-pagination-label">Previous excerpt</span>
+                                    <strong class="excerpt-pagination-target">Start of section</strong>
+                                </div>
+                            )}
+                            {nextExcerpt ? (
+                                <a class="excerpt-pagination-link" href={nextExcerpt.href}>
+                                    <span class="excerpt-pagination-label">Next excerpt</span>
+                                    <strong class="excerpt-pagination-target">{nextExcerpt.id} →</strong>
+                                    <span class="excerpt-pagination-preview">{nextExcerpt.preview}</span>
+                                </a>
+                            ) : (
+                                <div class="excerpt-pagination-link is-disabled" aria-hidden="true">
+                                    <span class="excerpt-pagination-label">Next excerpt</span>
+                                    <strong class="excerpt-pagination-target">End of section</strong>
+                                </div>
+                            )}
+                        </nav>
+                    </section>
+                )
+            }
         </div>
     </article>
 
@@ -340,8 +398,102 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
         color: var(--color-text-primary);
     }
 
+    .excerpt-pager-section {
+        border-top: 1px solid var(--color-border);
+        padding-top: var(--space-6);
+    }
+
+    .excerpt-pager-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: var(--space-4);
+        margin-bottom: var(--space-4);
+        flex-wrap: wrap;
+    }
+
+    .excerpt-pager-header h2 {
+        margin: 0;
+        font-size: var(--text-lg);
+        color: var(--color-text-primary);
+    }
+
+    .excerpt-pager-status {
+        margin: 0;
+        color: var(--color-text-tertiary);
+        font-size: var(--text-sm);
+    }
+
+    .excerpt-pagination {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--space-4);
+    }
+
+    .excerpt-pagination-link {
+        min-height: 7.5rem;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-lg);
+        padding: var(--space-5);
+        background-color: var(--color-surface);
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        gap: var(--space-2);
+        color: inherit;
+        text-decoration: none;
+        transition:
+            border-color var(--duration-fast) var(--ease-out),
+            box-shadow var(--duration-fast) var(--ease-out),
+            transform var(--duration-fast) var(--ease-out);
+    }
+
+    .excerpt-pagination-link:hover {
+        border-color: var(--color-primary);
+        box-shadow: var(--shadow-md);
+        transform: translateY(-1px);
+    }
+
+    .excerpt-pagination-label {
+        font-size: var(--text-xs);
+        font-weight: 600;
+        color: var(--color-text-tertiary);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+
+    .excerpt-pagination-target {
+        font-size: var(--text-base);
+        color: var(--color-primary-text);
+        font-family: var(--font-mono);
+        line-height: 1.2;
+    }
+
+    .excerpt-pagination-preview {
+        color: var(--color-text-secondary);
+        line-height: 1.5;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        text-align: left;
+    }
+
+    .excerpt-pagination-link.is-disabled {
+        opacity: 0.65;
+        cursor: default;
+        pointer-events: none;
+        box-shadow: none;
+        transform: none;
+    }
+
     @media (max-width: 640px) {
         .metadata-list {
+            grid-template-columns: 1fr;
+        }
+
+        .excerpt-pagination {
             grid-template-columns: 1fr;
         }
     }

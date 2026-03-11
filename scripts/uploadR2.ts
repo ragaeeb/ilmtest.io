@@ -6,7 +6,7 @@ import { S3Client } from 'bun';
 const argvBucket = process.argv[2]?.trim();
 const argvBaseDir = process.argv[3]?.trim();
 const bucketName = argvBucket ? argvBucket : process.env.R2_BUCKET;
-const baseDir = argvBaseDir ? argvBaseDir : process.env.R2_BASE_DIR ?? 'tmp/excerpt-chunks';
+const baseDir = argvBaseDir ? argvBaseDir : (process.env.R2_BASE_DIR ?? 'tmp/excerpt-chunks');
 const concurrency = Math.max(1, Number(process.env.R2_CONCURRENCY ?? '8'));
 const useRemote = process.env.R2_REMOTE === '1';
 const limit = Math.max(0, Number(process.env.R2_LIMIT ?? '0'));
@@ -19,18 +19,14 @@ const skipExisting = process.env.R2_SKIP_EXISTING === '1';
 const listPrefix = process.env.R2_LIST_PREFIX ?? '';
 const cfApiToken = process.env.CLOUDFLARE_API_TOKEN ?? '';
 let accountId = process.env.R2_ACCOUNT_ID ?? process.env.CF_ACCOUNT_ID ?? '';
-let accessKeyId =
-    process.env.R2_ACCESS_KEY_ID ?? process.env.S3_ACCESS_KEY_ID ?? process.env.AWS_ACCESS_KEY_ID ?? '';
+let accessKeyId = process.env.R2_ACCESS_KEY_ID ?? process.env.S3_ACCESS_KEY_ID ?? process.env.AWS_ACCESS_KEY_ID ?? '';
 let secretAccessKey =
-    process.env.R2_SECRET_ACCESS_KEY
-    ?? process.env.S3_SECRET_ACCESS_KEY
-    ?? process.env.AWS_SECRET_ACCESS_KEY
-    ?? '';
+    process.env.R2_SECRET_ACCESS_KEY ?? process.env.S3_SECRET_ACCESS_KEY ?? process.env.AWS_SECRET_ACCESS_KEY ?? '';
 let r2Endpoint =
-    process.env.R2_ENDPOINT
-    ?? process.env.S3_ENDPOINT
-    ?? process.env.AWS_ENDPOINT
-    ?? (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
+    process.env.R2_ENDPOINT ??
+    process.env.S3_ENDPOINT ??
+    process.env.AWS_ENDPOINT ??
+    (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
 const SESSION = 'debug-session';
 const RUN_ID = 'pre-fix';
 const ENDPOINT = 'http://127.0.0.1:7242/ingest/52426cdf-aa70-46f4-bea3-a95a3d7c7923';
@@ -79,8 +75,7 @@ const resolveS3AccessFromToken = async (): Promise<string | null> => {
         const tokenId = payload?.result?.id;
         if (tokenId) {
             accessKeyId = accessKeyId || tokenId;
-            secretAccessKey =
-                secretAccessKey || createHash('sha256').update(cfApiToken).digest('hex');
+            secretAccessKey = secretAccessKey || createHash('sha256').update(cfApiToken).digest('hex');
             return tokenId;
         }
     } catch {
@@ -163,9 +158,7 @@ const shouldFetchExistingKeys = (): { ok: boolean; reason?: string } => {
     return { ok: true };
 };
 
-const fetchExistingKeys = async (
-    bucket: string,
-): Promise<{ keys: Set<string>; reason?: string }> => {
+const fetchExistingKeys = async (bucket: string): Promise<{ keys: Set<string>; reason?: string }> => {
     const guard = shouldFetchExistingKeys();
     if (!guard.ok) {
         if (skipExisting) {
@@ -237,9 +230,7 @@ const main = async () => {
 
     let fileCursor = 0;
 
-    const { keys: existingObjectKeys, reason: existingKeysReason } = await fetchExistingKeys(
-        bucketName,
-    );
+    const { keys: existingObjectKeys, reason: existingKeysReason } = await fetchExistingKeys(bucketName);
     console.log(
         `[uploadR2] Existing keys loaded: ${existingObjectKeys.size}${existingKeysReason ? ` (skip list: ${existingKeysReason})` : ''}`,
     );
@@ -263,9 +254,7 @@ const main = async () => {
         return;
     }
     if (requireConfirm && process.env.R2_CONFIRM !== '1') {
-        console.error(
-            '[uploadR2] Aborting: set R2_CONFIRM=1 after verifying sanity check output.',
-        );
+        console.error('[uploadR2] Aborting: set R2_CONFIRM=1 after verifying sanity check output.');
         process.exit(1);
     }
     // #region agent log
@@ -352,9 +341,7 @@ const main = async () => {
                     process.stderr.write(stderrText);
                 }
                 if (is429 && attempt <= retry429) {
-                    console.warn(
-                        `[uploadR2] 429 detected for ${key} (attempt ${attempt}/${retry429}). Retrying.`,
-                    );
+                    console.warn(`[uploadR2] 429 detected for ${key} (attempt ${attempt}/${retry429}). Retrying.`);
                     continue;
                 }
                 failures += 1;

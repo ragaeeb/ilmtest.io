@@ -1,5 +1,5 @@
 ---
-import { MotionSection } from '@/components/islands/MotionSection';
+import MotionSection from '@/components/islands/MotionSection.astro';
 import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
@@ -18,7 +18,7 @@ void BaseLayout;
     <ThemeToggle client:only="react" slot="theme-toggle" />
   </Header>
 
-  <MotionSection client:load>
+  <MotionSection>
     <div class="about-container">
       <header class="about-header">
         <h1 class="page-title">About IlmTest</h1>

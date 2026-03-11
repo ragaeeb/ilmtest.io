@@ -18,12 +18,12 @@ This guide outlines the steps to deploy the IlmTest Astro application to Cloudfl
 - **Helper scripts**:
   - `bun run upload-r2` (bulk upload chunks to R2)
   - `bun run resume` (resume upload with skip-existing)
-  - `bun run deploy` (build → upload chunks → deploy Pages)
+  - `bun run deploy` (build → upload chunks → deploy Pages project)
   - `bun run create-r2-bucket` (creates R2 bucket)
 
-## Option A: Deploy from your machine (Direct Upload)
+## Option A: Deploy from your machine (Wrangler)
 
-This path uploads the built `dist` folder directly from your local machine using Wrangler.
+This path deploys the Astro build output directly to your Cloudflare Pages project using Wrangler.
 
 ### 1. Install Wrangler (local)
 
@@ -48,19 +48,15 @@ bun install
 bun run build
 ```
 
-### 4. Create a Pages project (once)
+### 4. Deploy
 
 ```bash
-wrangler pages project create ilmtest
+wrangler pages deploy ./dist --project-name ilmtest-io
 ```
 
-### 5. Deploy
+> Tip: `bun run deploy` wraps the same flow once `R2_BUCKET` is set for the chunk upload step.
 
-```bash
-wrangler pages deploy dist --project-name ilmtest
-```
-
-> Tip: If you are using R2, you can use `bun run deploy` once `R2_BUCKET` and `PAGES_PROJECT` are set.
+> Note: the checked-in [wrangler.jsonc](/Users/rhaq/workspace/ilmtest.io/wrangler.jsonc) is kept compatible with Astro's local Cloudflare build. The Pages project itself should be created and configured in the Cloudflare dashboard.
 
 > **Note:** Direct Upload projects cannot be converted to Git-based deployments later. If you want CI, prefer Option B.
 
@@ -117,7 +113,7 @@ Once the production deployment is successful:
 
 ## Cache Rules (Required for SSR Browse Pages)
 
-To keep Worker usage low on the free tier, add a Cache Rule that **caches HTML** for `/browse/*`:
+To keep Pages Functions usage low on the free tier, add a Cache Rule that **caches HTML** for `/browse/*`:
 
 1.  Cloudflare Dashboard → **Rules** → **Cache Rules** → **Create rule**.
 2.  **If**: `URI Path` **starts with** `/browse/`.
@@ -164,7 +160,7 @@ When file counts exceed Pages limits, move `excerpt-chunks` to R2:
 6.  **Keep cache headers** on SSR routes so `/browse/*` and excerpt pages stay cached.
 7.  **Purge cache only when needed** (e.g., if a collection changes).
 
-This removes the Pages 20,000-file limit and lets the library scale without redeploy pressure.
+This removes the pressure from the Pages static file limit and lets the library scale without redeploy pressure.
 
 ## Data Size Optimizations
 

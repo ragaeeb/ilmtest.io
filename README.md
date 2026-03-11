@@ -24,7 +24,7 @@ IlmTest is a **digital research desk** for authentic Islamic texts. It solves th
 
 ## 🏗️ Technical Architecture
 
-We chose a **Hybrid Rendering** approach to solve the "54k Page Problem". Statically generating 54k+ excerpts exceeds Cloudflare Pages' file limits and build time quotas.
+We chose a **Hybrid Rendering** approach to solve the "54k Page Problem". Statically generating 54k+ excerpts exceeds practical build and deployment limits.
 
 -   **Static Generators (SSG)**: Landing, About, Browse Index, Collection/Section Indexes.
 -   **Server-Side Rendering (SSR)**: Individual Excerpt pages (`/browse/.../e/[excerpt]`) are rendered on-demand at the Edge.
@@ -32,7 +32,7 @@ We chose a **Hybrid Rendering** approach to solve the "54k Page Problem". Static
 
 ### The Stack
 -   **Framework**: [Astro 6.0](https://astro.build) (Static + SSR)
--   **Runtime**: [Cloudflare Pages](https://pages.cloudflare.com) (Edge/Workers)
+-   **Runtime**: [Cloudflare Pages](https://pages.cloudflare.com) + Pages Functions + R2
 -   **Language**: TypeScript (Strict Mode)
 -   **Styling**: [Tailwind CSS 4.0](https://tailwindcss.com) + Scoped CSS Variables
 -   **Package Manager**: [Bun](https://bun.sh)
@@ -72,20 +72,14 @@ Place these in `.env` so Bun picks them up. See `docs/deployment.md` for the ful
 
 ## 🛠️ Troubleshooting
 
-- **"Nothing is here yet" on custom domain**  
-  Ensure the Pages **Production Branch** is `main` and a production deploy completed.
-
 - **Browse shows `0 excerpts`**  
   The `EXCERPT_BUCKET` binding is missing or pointing at the wrong R2 bucket.
 
-- **Pages deploy fails with `Authentication error [code: 10000]`**  
-  Add token permissions for **Cloudflare Pages → Edit** and **User → User Details/Memberships → Read**.
+- **Pages deploy fails**  
+  Ensure the Cloudflare API token can deploy the `ilmtest-io` Pages project and access the configured R2 bucket.
 
 - **403 Forbidden uploading to R2**  
   Ensure R2 is enabled in Cloudflare and your API token includes **Account → R2 Storage → Edit** for the correct account.
-
-- **Pages deploy fails with 20,000 file limit**  
-  This happens if chunks are deployed with Pages. Use R2 and remove chunk files from the deployment.
 
 - **`wrangler r2 bucket list` fails with code 10042**  
   R2 is not enabled on the account yet. Enable it in the Cloudflare dashboard first.
