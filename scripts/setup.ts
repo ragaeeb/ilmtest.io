@@ -37,14 +37,17 @@ import { downloadDataSet } from './huggingface';
 import { addEntityMappings, generateIndexes, type LookupIndexes } from './indexing';
 import { decompressJson } from './io';
 import { mapHeadingIdToShamelaTitleId, mapTitlesToTableOfContents, type TitleNode } from './mapping';
+import { buildRuntimeArtifacts, writeRuntimeArtifacts } from './runtimeArtifactsBuild';
 
 const SHAMELA4_LIBRARY_ID = '75';
 const OUTPUT_DATA_DIR = 'src/data';
 const CONTENT_CHUNKS_DIR = 'tmp/excerpt-chunks';
 const DATASET_BUILD_DIR = 'tmp/dataset-build';
+const RUNTIME_ARTIFACTS_DIR = 'tmp/runtime-artifacts';
 const COLLECTIONS_FILE = 'collections.json';
 const TRANSLATORS_FILE = 'translators.json';
 const INDEXES_FILE = 'indexes.json';
+const RUNTIME_BOOTSTRAP_FILE = 'runtime-bootstrap.json';
 const DATASET_METADATA_FILE = 'metadata.json';
 
 const getGitCommit = async () => {
@@ -501,6 +504,7 @@ export const setup = async (...collectionIds: string[]) => {
         mkdir(OUTPUT_DATA_DIR, { recursive: true }),
         mkdir(CONTENT_CHUNKS_DIR, { recursive: true }),
         mkdir(DATASET_BUILD_DIR, { recursive: true }),
+        mkdir(RUNTIME_ARTIFACTS_DIR, { recursive: true }),
     ]);
 
     const allTranslators = await loadTranslators();
@@ -580,25 +584,38 @@ export const setup = async (...collectionIds: string[]) => {
         }
     }
 
-    // Write collections metadata
     const collectionsPath = join(OUTPUT_DATA_DIR, COLLECTIONS_FILE);
-    await Bun.write(collectionsPath, JSON.stringify(collections, null, 2));
-    console.log(`\n✓ Written ${collectionsPath}`);
-
-    // Write translators
     const translatorsPath = join(OUTPUT_DATA_DIR, TRANSLATORS_FILE);
     await Bun.write(translatorsPath, JSON.stringify(allTranslators, null, 2));
-    console.log(`✓ Written ${translatorsPath}`);
-
-    // Write lookup indexes
+    console.log(`\n✓ Written ${translatorsPath}`);
     const indexesPath = join(OUTPUT_DATA_DIR, INDEXES_FILE);
     await Bun.write(indexesPath, JSON.stringify(indexes, null, 2));
     console.log(`✓ Written ${indexesPath}`);
 
-    const srcDataBytes = Bun.file(collectionsPath).size + Bun.file(translatorsPath).size + Bun.file(indexesPath).size;
+    const generatedAt = new Date().toISOString();
+    const routeBootstrapPath = join(OUTPUT_DATA_DIR, RUNTIME_BOOTSTRAP_FILE);
+    const runtimeArtifacts = await buildRuntimeArtifacts({
+        collections,
+        indexes,
+        chunksDir: CONTENT_CHUNKS_DIR,
+        generatedAt,
+    });
+    await writeRuntimeArtifacts(runtimeArtifacts, {
+        collectionsFile: collectionsPath,
+        routeBootstrapFile: routeBootstrapPath,
+        runtimeArtifactsDir: RUNTIME_ARTIFACTS_DIR,
+    });
+    console.log(`✓ Written ${collectionsPath}`);
+    console.log(`✓ Written ${routeBootstrapPath}`);
+
+    const srcDataBytes =
+        Bun.file(collectionsPath).size +
+        Bun.file(translatorsPath).size +
+        Bun.file(indexesPath).size +
+        Bun.file(routeBootstrapPath).size;
     const chunkBytes = await walkDirectoryBytes(CONTENT_CHUNKS_DIR);
     const metadata: DatasetBuildMetadata = {
-        generatedAt: new Date().toISOString(),
+        generatedAt,
         gitCommit,
         schemaVersions: {
             datasetSchemaVersion: DATASET_SCHEMA_VERSION,
@@ -630,6 +647,8 @@ export const setup = async (...collectionIds: string[]) => {
             translatorsFile: translatorsPath,
             indexesFile: indexesPath,
             chunksDir: CONTENT_CHUNKS_DIR,
+            routeBootstrapFile: routeBootstrapPath,
+            runtimeArtifactsDir: RUNTIME_ARTIFACTS_DIR,
         },
     };
 

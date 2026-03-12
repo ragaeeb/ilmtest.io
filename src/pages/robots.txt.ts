@@ -1,4 +1,15 @@
-const site = import.meta.env.SITE ?? 'https://ilmtest.io';
+const normalizeSite = (value?: string) => {
+    const trimmed = value?.trim();
+    if (!trimmed) {
+        return 'https://ilmtest.io';
+    }
+    if (!/^https?:\/\//i.test(trimmed)) {
+        return `https://${trimmed}`;
+    }
+    return trimmed;
+};
+
+const site = normalizeSite(import.meta.env.SITE);
 const host = new URL(site).hostname;
 const robotsPolicy =
     (import.meta.env.PUBLIC_ROBOTS_POLICY as string | undefined) ??

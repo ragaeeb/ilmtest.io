@@ -32,6 +32,7 @@ const createFixture = async () => {
     const dataDir = join(root, 'src-data');
     const chunksDir = join(root, 'chunks');
     const buildDir = join(root, 'build');
+    const runtimeArtifactsDir = join(root, 'runtime-artifacts');
     const storeRoot = join(root, 'store');
     const stateDir = join(root, 'state');
 
@@ -40,6 +41,7 @@ const createFixture = async () => {
         mkdir(join(chunksDir, '1118', 'S1'), { recursive: true }),
         mkdir(join(chunksDir, '1118', 'S2'), { recursive: true }),
         mkdir(buildDir, { recursive: true }),
+        mkdir(join(runtimeArtifactsDir, 'collections'), { recursive: true }),
         mkdir(storeRoot, { recursive: true }),
         mkdir(stateDir, { recursive: true }),
     ]);
@@ -88,17 +90,69 @@ const createFixture = async () => {
         join(chunksDir, '1118', 'S1', 'chunk-0.json'),
         JSON.stringify({
             sectionId: 'S1',
-            excerptIds: ['E1'],
-            excerpts: [{ id: 'E1', from: 1, nass: 'نص', text: 'Text', translator: 1, lastUpdatedAt: 0 }],
+            excerptIds: ['S1', 'E1'],
+            excerpts: [
+                { id: 'S1', from: 1, nass: 'عنوان', text: 'Heading', translator: 1, lastUpdatedAt: 0 },
+                { id: 'E1', from: 1, nass: 'نص', text: 'Text', translator: 1, lastUpdatedAt: 0 },
+            ],
         }),
     );
     await Bun.write(
         join(chunksDir, '1118', 'S2', 'chunk-0.json'),
         JSON.stringify({
             sectionId: 'S2',
-            excerptIds: ['E2'],
-            excerpts: [{ id: 'E2', from: 2, nass: 'نص', text: 'Text', translator: 1, lastUpdatedAt: 0 }],
+            excerptIds: ['S2', 'E2'],
+            excerpts: [
+                { id: 'S2', from: 2, nass: 'عنوان', text: 'Heading', translator: 1, lastUpdatedAt: 0 },
+                { id: 'E2', from: 2, nass: 'نص', text: 'Text', translator: 1, lastUpdatedAt: 0 },
+            ],
         }),
+    );
+
+    const routeBootstrapPath = join(dataDir, 'runtime-bootstrap.json');
+    await Bun.write(
+        routeBootstrapPath,
+        JSON.stringify(
+            {
+                artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
+                generatedAt: '2026-03-12T18:42:10.000Z',
+                collectionsBySlug: {
+                    sample: { id: '1118' },
+                },
+            },
+            null,
+            2,
+        ),
+    );
+
+    await Bun.write(
+        join(runtimeArtifactsDir, 'collections', '1118.json'),
+        JSON.stringify(
+            {
+                artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
+                generatedAt: '2026-03-12T18:42:10.000Z',
+                collectionId: '1118',
+                sectionOrder: ['S1', 'S2'],
+                sectionSummaries: {
+                    S1: { sectionId: 'S1', title: 'Section S1', titleArabic: '', excerptCount: 1, firstPage: 1 },
+                    S2: { sectionId: 'S2', title: 'Section S2', titleArabic: '', excerptCount: 1, firstPage: 2 },
+                },
+                sectionDescriptors: {
+                    S1: [{ chunkKey: '1118/S1/chunk-0.json', start: 1, end: 1 }],
+                    S2: [{ chunkKey: '1118/S2/chunk-0.json', start: 1, end: 1 }],
+                },
+                sectionExcerpts: {
+                    S1: ['E1'],
+                    S2: ['E2'],
+                },
+                excerptLookup: {
+                    E1: { sectionId: 'S1', chunkKey: '1118/S1/chunk-0.json', preview: 'Text' },
+                    E2: { sectionId: 'S2', chunkKey: '1118/S2/chunk-0.json', preview: 'Text' },
+                },
+            },
+            null,
+            2,
+        ),
     );
 
     const buildMetadataPath = join(buildDir, 'metadata.json');
@@ -139,6 +193,8 @@ const createFixture = async () => {
             translatorsFile: join(dataDir, 'translators.json'),
             indexesFile: join(dataDir, 'indexes.json'),
             chunksDir,
+            routeBootstrapFile: routeBootstrapPath,
+            runtimeArtifactsDir,
         },
     };
     await Bun.write(buildMetadataPath, JSON.stringify(metadata, null, 2));

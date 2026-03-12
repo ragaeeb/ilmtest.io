@@ -5,6 +5,7 @@ import pkg from '../package.json';
 import {
     APP_MIN_DATASET_SCHEMA_VERSION,
     ARTIFACT_SCHEMA_VERSION,
+    assertDatasetBuildMetadata,
     CHUNK_SCHEMA_VERSION,
     DATASET_SCHEMA_VERSION,
     type DatasetBuildMetadata,
@@ -16,6 +17,7 @@ import {
     resolveLocalCorpusPaths,
     type TranslatorRecord,
 } from './runtimeData';
+import { buildRuntimeArtifacts, writeRuntimeArtifacts } from './runtimeArtifactsBuild';
 
 export type FixtureVariant = 'tiny' | 'medium';
 
@@ -349,13 +351,91 @@ const buildFixtureCorpus = (spec: FixtureSpec, generatedAt: string, gitCommit: s
         mergeCollectionFixture(indexes, built, collection.author.id);
     }
 
-    const collectionsJson = JSON.stringify(collections, null, 2);
-    const translatorsJson = JSON.stringify(spec.translators, null, 2);
-    const indexesJson = JSON.stringify(indexes, null, 2);
-    const chunkBytes = chunkFiles.reduce((total, chunk) => total + textSize(JSON.stringify(chunk.payload)), 0);
-    const srcDataBytes = textSize(collectionsJson) + textSize(translatorsJson) + textSize(indexesJson);
+    return {
+        collections,
+        translators: spec.translators,
+        indexes,
+        chunkFiles,
+        smokeRoutes,
+        description: spec.description,
+        counts: {
+            collections: collections.length,
+            translators: spec.translators.length,
+            sections: totalSections,
+            excerpts: totalExcerpts,
+            chunks: chunkFiles.length,
+        },
+    };
+};
 
-    const metadata: DatasetBuildMetadata = {
+const textSize = (value: string) => new TextEncoder().encode(value).byteLength;
+
+export const loadFixtureSpec = async (variant: FixtureVariant) => {
+    const spec = await readJsonFile<FixtureSpec>(getFixtureSpecPath(variant));
+    if (spec.variant !== variant) {
+        throw new Error(`Fixture spec mismatch: expected ${variant} but found ${spec.variant}`);
+    }
+    return spec;
+};
+
+export const materializeFixture = async (variant: FixtureVariant, options: MaterializeFixtureOptions = {}) => {
+    const spec = await loadFixtureSpec(variant);
+    const paths = resolveLocalCorpusPaths(options.rootDir);
+    const generatedAt = options.generatedAt ?? new Date().toISOString();
+    const gitCommit = options.gitCommit ?? (await getGitCommit());
+    const corpus = buildFixtureCorpus(spec, generatedAt, gitCommit, paths);
+
+    await Promise.all([
+        clearDirectory(paths.dataDir),
+        clearDirectory(paths.chunksDir),
+        clearDirectory(paths.buildDir),
+        clearDirectory(paths.runtimeArtifactsDir),
+    ]);
+
+    await Promise.all([
+        mkdir(join(paths.curatedRoot, 'entities'), { recursive: true }),
+        mkdir(join(paths.curatedRoot, 'relations'), { recursive: true }),
+        mkdir(join(paths.curatedRoot, 'taxonomy'), { recursive: true }),
+        mkdir(join(paths.curatedRoot, 'corrections'), { recursive: true }),
+    ]);
+
+    const curatedDirs = await readdir(paths.curatedRoot, { withFileTypes: true }).catch(() => []);
+    if (curatedDirs.length === 0) {
+        throw new Error(`Failed to create curated data directories at ${paths.curatedRoot}`);
+    }
+
+    await Promise.all([
+        writeJsonFile(join(paths.dataDir, 'translators.json'), corpus.translators),
+        writeJsonFile(join(paths.dataDir, 'indexes.json'), corpus.indexes),
+        ...corpus.chunkFiles.map(async (chunk) => {
+            await mkdir(dirname(join(paths.chunksDir, chunk.key)), { recursive: true });
+            await writeJsonFile(join(paths.chunksDir, chunk.key), chunk.payload);
+        }),
+        Bun.write(join(paths.curatedRoot, 'entities', '.gitkeep'), ''),
+        Bun.write(join(paths.curatedRoot, 'relations', '.gitkeep'), ''),
+        Bun.write(join(paths.curatedRoot, 'taxonomy', '.gitkeep'), ''),
+        Bun.write(join(paths.curatedRoot, 'corrections', '.gitkeep'), ''),
+    ]);
+
+    const runtimeArtifacts = await buildRuntimeArtifacts({
+        collections: corpus.collections,
+        indexes: corpus.indexes,
+        chunksDir: paths.chunksDir,
+        generatedAt,
+    });
+    await writeRuntimeArtifacts(runtimeArtifacts, {
+        collectionsFile: join(paths.dataDir, 'collections.json'),
+        routeBootstrapFile: paths.routeBootstrapPath,
+        runtimeArtifactsDir: paths.runtimeArtifactsDir,
+    });
+
+    const srcDataBytes =
+        Bun.file(join(paths.dataDir, 'collections.json')).size +
+        Bun.file(join(paths.dataDir, 'translators.json')).size +
+        Bun.file(join(paths.dataDir, 'indexes.json')).size +
+        Bun.file(paths.routeBootstrapPath).size;
+    const chunkBytes = corpus.chunkFiles.reduce((total, chunk) => total + textSize(JSON.stringify(chunk.payload)), 0);
+    const metadata = assertDatasetBuildMetadata({
         generatedAt,
         gitCommit,
         schemaVersions: {
@@ -388,13 +468,7 @@ const buildFixtureCorpus = (spec: FixtureSpec, generatedAt: string, gitCommit: s
             node: process.versions.node,
             wrangler: String(pkg.devDependencies.wrangler),
         },
-        counts: {
-            collections: collections.length,
-            translators: spec.translators.length,
-            sections: totalSections,
-            excerpts: totalExcerpts,
-            chunks: chunkFiles.length,
-        },
+        counts: corpus.counts,
         bytes: {
             chunkBytes,
             srcDataBytes,
@@ -404,73 +478,19 @@ const buildFixtureCorpus = (spec: FixtureSpec, generatedAt: string, gitCommit: s
             translatorsFile: join(paths.dataDir, 'translators.json'),
             indexesFile: join(paths.dataDir, 'indexes.json'),
             chunksDir: paths.chunksDir,
+            routeBootstrapFile: paths.routeBootstrapPath,
+            runtimeArtifactsDir: paths.runtimeArtifactsDir,
         },
-    };
-
-    return {
-        collections,
-        translators: spec.translators,
-        indexes,
-        chunkFiles,
-        metadata,
-        smokeRoutes,
-        description: spec.description,
-    };
-};
-
-const textSize = (value: string) => new TextEncoder().encode(value).byteLength;
-
-export const loadFixtureSpec = async (variant: FixtureVariant) => {
-    const spec = await readJsonFile<FixtureSpec>(getFixtureSpecPath(variant));
-    if (spec.variant !== variant) {
-        throw new Error(`Fixture spec mismatch: expected ${variant} but found ${spec.variant}`);
-    }
-    return spec;
-};
-
-export const materializeFixture = async (variant: FixtureVariant, options: MaterializeFixtureOptions = {}) => {
-    const spec = await loadFixtureSpec(variant);
-    const paths = resolveLocalCorpusPaths(options.rootDir);
-    const generatedAt = options.generatedAt ?? new Date().toISOString();
-    const gitCommit = options.gitCommit ?? (await getGitCommit());
-    const corpus = buildFixtureCorpus(spec, generatedAt, gitCommit, paths);
-
-    await Promise.all([clearDirectory(paths.dataDir), clearDirectory(paths.chunksDir), clearDirectory(paths.buildDir)]);
-
-    await Promise.all([
-        mkdir(join(paths.curatedRoot, 'entities'), { recursive: true }),
-        mkdir(join(paths.curatedRoot, 'relations'), { recursive: true }),
-        mkdir(join(paths.curatedRoot, 'taxonomy'), { recursive: true }),
-        mkdir(join(paths.curatedRoot, 'corrections'), { recursive: true }),
-    ]);
-
-    const curatedDirs = await readdir(paths.curatedRoot, { withFileTypes: true }).catch(() => []);
-    if (curatedDirs.length === 0) {
-        throw new Error(`Failed to create curated data directories at ${paths.curatedRoot}`);
-    }
-
-    await Promise.all([
-        writeJsonFile(join(paths.dataDir, 'collections.json'), corpus.collections),
-        writeJsonFile(join(paths.dataDir, 'translators.json'), corpus.translators),
-        writeJsonFile(join(paths.dataDir, 'indexes.json'), corpus.indexes),
-        writeJsonFile(paths.metadataPath, corpus.metadata),
-        ...corpus.chunkFiles.map(async (chunk) => {
-            await mkdir(dirname(join(paths.chunksDir, chunk.key)), { recursive: true });
-            await writeJsonFile(join(paths.chunksDir, chunk.key), chunk.payload);
-        }),
-        Bun.write(join(paths.curatedRoot, 'entities', '.gitkeep'), ''),
-        Bun.write(join(paths.curatedRoot, 'relations', '.gitkeep'), ''),
-        Bun.write(join(paths.curatedRoot, 'taxonomy', '.gitkeep'), ''),
-        Bun.write(join(paths.curatedRoot, 'corrections', '.gitkeep'), ''),
-    ]);
+    });
+    await writeJsonFile(paths.metadataPath, metadata);
 
     return {
         variant,
         description: corpus.description,
         collections: corpus.collections.length,
-        sections: corpus.metadata.counts.sections,
-        excerpts: corpus.metadata.counts.excerpts,
-        chunks: corpus.metadata.counts.chunks,
+        sections: corpus.counts.sections,
+        excerpts: corpus.counts.excerpts,
+        chunks: corpus.counts.chunks,
         paths,
         smokeRoutes: corpus.smokeRoutes,
     } satisfies FixtureMaterializationResult;

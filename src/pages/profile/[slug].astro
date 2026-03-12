@@ -1,23 +1,13 @@
 ---
+export const prerender = false;
+
 import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
 import Card from '@/components/ui/Card.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { loadCollectionsData, loadIndexesData } from '@/lib/data';
-import type { Collection } from '@/types/excerpts';
-
-const collectionsData = loadCollectionsData();
-const indexes = loadIndexesData() as Record<string, any>;
-
-export async function getStaticPaths() {
-    const indexesForPaths = loadIndexesData() as Record<string, any>;
-    const entityIds = Object.keys(indexesForPaths.entityToCollections || {});
-    return entityIds.map((id) => ({
-        params: { slug: id },
-    }));
-}
+import { loadProfileData } from '@/lib/data';
 
 const { slug } = Astro.params;
 
@@ -25,29 +15,19 @@ if (!slug) {
     return Astro.redirect('/404');
 }
 
-// Get entity information from indexes
-const entityData = indexes.entityToCollections?.[slug];
-
-if (!entityData) {
+const profileData = await loadProfileData(slug, Astro.request.url);
+if (!profileData) {
     return Astro.redirect('/404');
 }
-
-const collections = Array.isArray(collectionsData)
-    ? (collectionsData as Collection[])
-    : ((collectionsData as { collections?: Collection[] }).collections ?? []);
-const collectionsById = new Map(collections.map((collection) => [collection.id, collection]));
-
-const entityRecord =
-    collections.flatMap((collection) => collection.authors).find((author) => author.id === slug) || null;
 
 // Profile details (fallback to ID when missing)
 const entity = {
     id: slug,
-    name: entityRecord?.name ?? `Entity ${slug}`,
-    nameArabic: entityRecord?.ism ?? `الكيان ${slug}`,
-    avatarUrl: entityRecord?.img ?? null,
+    name: profileData.entity.name ?? `Entity ${slug}`,
+    nameArabic: profileData.entity.ism ?? `الكيان ${slug}`,
+    avatarUrl: profileData.entity.img ?? null,
     bio: 'Biographical information about this scholar would appear here.',
-    collections: entityData.authorOf || [],
+    collections: profileData.collections,
 };
 
 const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: entity.name }];
@@ -85,15 +65,14 @@ const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: entity.n
             {
                 entity.collections.length > 0 ? (
                     <div class="collections-list">
-                        {entity.collections.map((collectionId: string) => {
-                            const collection = collectionsById.get(collectionId);
-                            const href = collection ? `/browse/${collection.slug}` : `/browse/${collectionId}`;
-                            const title = collection?.roman ?? `Collection ${collectionId}`;
+                        {entity.collections.map((collection) => {
+                            const href = `/browse/${collection.slug}`;
+                            const title = collection.roman ?? `Collection ${collection.id}`;
                             return (
                                 <Card variant="outlined" hoverable href={href}>
                                     <h3 class="collection-title">{title}</h3>
                                 <p class="collection-meta">
-                                    {indexes.collectionToSections?.[collectionId]?.length || 0} sections
+                                    {collection.sectionCount || 0} sections
                                 </p>
                                 </Card>
                             );

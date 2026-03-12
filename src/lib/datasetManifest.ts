@@ -32,11 +32,17 @@ export type DatasetArtifactDescriptor = {
     artifactSchemaVersion: number;
 };
 
+export type DatasetArtifactDescriptorMap = Record<string, DatasetArtifactDescriptor>;
+
 export type RuntimeArtifactSet = {
     bootstrap: {
         collections: DatasetArtifactDescriptor;
         translators: DatasetArtifactDescriptor;
+        routeBootstrap: DatasetArtifactDescriptor;
         indexesFull: DatasetArtifactDescriptor;
+    };
+    runtime: {
+        collectionShards: DatasetArtifactDescriptorMap;
     };
     integrity: {
         chunks: DatasetArtifactDescriptor;
@@ -52,12 +58,14 @@ export type DatasetManifest = DatasetSchemaVersions & {
     artifactCounts: {
         chunks: number;
         bootstrapArtifacts: number;
+        runtimeArtifacts: number;
         integrityArtifacts: number;
         totalObjects: number;
     };
     artifactBytes: {
         chunks: number;
         bootstrapArtifacts: number;
+        runtimeArtifacts: number;
         integrityArtifacts: number;
         total: number;
     };
@@ -86,6 +94,8 @@ export type DatasetBuildMetadata = {
         translatorsFile: string;
         indexesFile: string;
         chunksDir: string;
+        routeBootstrapFile: string;
+        runtimeArtifactsDir: string;
     };
 };
 
@@ -152,14 +162,17 @@ export const isDatasetArtifactDescriptor = (value: unknown): value is DatasetArt
 };
 
 const isRuntimeArtifactSet = (value: unknown): value is RuntimeArtifactSet => {
-    if (!isRecord(value) || !isRecord(value.bootstrap) || !isRecord(value.integrity)) {
+    if (!isRecord(value) || !isRecord(value.bootstrap) || !isRecord(value.runtime) || !isRecord(value.integrity)) {
         return false;
     }
 
     return (
         isDatasetArtifactDescriptor(value.bootstrap.collections) &&
         isDatasetArtifactDescriptor(value.bootstrap.translators) &&
+        isDatasetArtifactDescriptor(value.bootstrap.routeBootstrap) &&
         isDatasetArtifactDescriptor(value.bootstrap.indexesFull) &&
+        isRecord(value.runtime.collectionShards) &&
+        Object.values(value.runtime.collectionShards).every((entry) => isDatasetArtifactDescriptor(entry)) &&
         isDatasetArtifactDescriptor(value.integrity.chunks)
     );
 };
@@ -197,10 +210,12 @@ export const isDatasetManifest = (value: unknown): value is DatasetManifest => {
     return (
         isFiniteNumber(candidate.artifactCounts.chunks) &&
         isFiniteNumber(candidate.artifactCounts.bootstrapArtifacts) &&
+        isFiniteNumber(candidate.artifactCounts.runtimeArtifacts) &&
         isFiniteNumber(candidate.artifactCounts.integrityArtifacts) &&
         isFiniteNumber(candidate.artifactCounts.totalObjects) &&
         isFiniteNumber(candidate.artifactBytes.chunks) &&
         isFiniteNumber(candidate.artifactBytes.bootstrapArtifacts) &&
+        isFiniteNumber(candidate.artifactBytes.runtimeArtifacts) &&
         isFiniteNumber(candidate.artifactBytes.integrityArtifacts) &&
         isFiniteNumber(candidate.artifactBytes.total)
     );
@@ -235,7 +250,9 @@ export const isDatasetBuildMetadata = (value: unknown): value is DatasetBuildMet
         isNonEmptyString(value.outputs.collectionsFile) &&
         isNonEmptyString(value.outputs.translatorsFile) &&
         isNonEmptyString(value.outputs.indexesFile) &&
-        isNonEmptyString(value.outputs.chunksDir)
+        isNonEmptyString(value.outputs.chunksDir) &&
+        isNonEmptyString(value.outputs.routeBootstrapFile) &&
+        isNonEmptyString(value.outputs.runtimeArtifactsDir)
     );
 };
 

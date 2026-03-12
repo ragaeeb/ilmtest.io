@@ -1,31 +1,31 @@
-import { loadCollectionsData, loadIndexesData } from '@/lib/data';
-import type { Collection } from '@/types/excerpts';
+import { loadSitemapCollectionData } from '@/lib/data';
 
-const site = import.meta.env.SITE ?? 'https://ilmtest.io';
+export const prerender = false;
 
-const collectionsData = loadCollectionsData();
-const indexesData = loadIndexesData();
-
-const getCollections = (): Collection[] => {
-    if (Array.isArray(collectionsData)) {
-        return collectionsData as Collection[];
+const normalizeSite = (value?: string) => {
+    const trimmed = value?.trim();
+    if (!trimmed) {
+        return 'https://ilmtest.io';
     }
-    return (collectionsData as { collections?: Collection[] }).collections ?? [];
+    if (!/^https?:\/\//i.test(trimmed)) {
+        return `https://${trimmed}`;
+    }
+    return trimmed;
 };
+
+const site = normalizeSite(import.meta.env.SITE);
 
 const buildUrl = (path: string) => new URL(path, site).toString();
 
-export const GET = () => {
-    const indexes = indexesData as Record<string, any>;
-    const collections = getCollections();
+export const GET = async () => {
+    const collections = await loadSitemapCollectionData(request.url);
     const staticPaths = ['/', '/about', '/browse', '/privacy', '/terms'];
     const urls: string[] = staticPaths.map((path) => buildUrl(path));
 
-    for (const collection of collections) {
-        urls.push(buildUrl(`/browse/${collection.slug}`));
-        const sections = (indexes.collectionToSections?.[collection.id] || []) as string[];
-        for (const sectionId of sections) {
-            urls.push(buildUrl(`/browse/${collection.slug}/${sectionId}`));
+    for (const item of collections) {
+        urls.push(buildUrl(`/browse/${item.collection.slug}`));
+        for (const sectionId of item.sectionIds) {
+            urls.push(buildUrl(`/browse/${item.collection.slug}/${sectionId}`));
         }
     }
 
@@ -41,6 +41,8 @@ export const GET = () => {
     return new Response(body, {
         headers: {
             'Content-Type': 'application/xml; charset=utf-8',
+            'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+            'CDN-Cache-Control': 'max-age=3600',
         },
     });
 };

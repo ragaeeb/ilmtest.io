@@ -23,7 +23,7 @@
         "format": "biome check --write .",
         "baseline": "bun scripts/reportBaseline.ts",
         "setup": "bun scripts/setup.ts",
-        "clean": "rm -rf src/data tmp/excerpt-chunks tmp/dataset-build tmp/publish-state dist code_packet.txt",
+        "clean": "rm -rf src/data tmp/excerpt-chunks tmp/dataset-build tmp/publish-state tmp/runtime-artifacts dist code_packet.txt",
         "create-r2-bucket": "wrangler r2 bucket create \"$R2_BUCKET\"",
         "upload-r2": "bun scripts/uploadR2.ts",
         "resume": "R2_SKIP_EXISTING=1 R2_REMOTE=1 bun scripts/uploadR2.ts \"$R2_BUCKET\" \"${R2_BASE_DIR:-tmp/excerpt-chunks}\"",
@@ -36,6 +36,7 @@
         "setup-fixture": "bun scripts/setupFixture.ts",
         "integrity": "bun scripts/checkIntegrity.ts",
         "smoke-routes": "bun scripts/smokeRoutes.ts",
+        "bundle-check": "bun scripts/checkBundle.ts",
         "gen-packet": "code2prompt . --include=\"src/**,package.json,astro.config.mjs,README.md,AGENTS.md,docs/deployment.md,scripts/setup.ts,scripts/chunking.ts,scripts/indexing.ts,scripts/mapping.ts,scripts/hierarchy.ts,scripts/env.ts\" -e \"node_modules/**,dist/**,.git/**,bun.lockb,src/data/**,tmp/excerpt-chunks/**,**/*.test.ts\" -O code_packet.txt"
     },
     "dependencies": {

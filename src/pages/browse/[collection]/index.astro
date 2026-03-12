@@ -8,14 +8,7 @@ import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
 import Card from '@/components/ui/Card.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-// Import data
-import { loadCollectionsData, loadIndexesData } from '@/lib/data';
-import { fetchExcerptChunk } from '@/lib/excerptChunks';
-import type { Collection } from '@/types/excerpts';
-
-const collectionsData = loadCollectionsData();
-const indexesData = loadIndexesData();
-const indexes = indexesData as Record<string, any>;
+import { loadCollectionPageData } from '@/lib/data';
 
 const { collection: collectionSlug } = Astro.params;
 
@@ -23,95 +16,27 @@ if (!collectionSlug) {
     return Astro.redirect('/404');
 }
 
-// Find the collection metadata
-const collections = Array.isArray(collectionsData)
-    ? (collectionsData as Collection[])
-    : ((collectionsData as { collections?: Collection[] }).collections ?? []);
-const collectionData = collections.find((c) => c.slug === collectionSlug);
-
-if (!collectionData) {
-    return Astro.redirect('/browse');
-}
-
-// Get sections for this collection
-const sections = (indexes.collectionToSections?.[collectionData.id] || []) as string[];
-
-if (sections.length === 0) {
-    return Astro.redirect('/browse');
-}
-
 const PAGE_SIZE = 100;
-const url = new URL(Astro.request.url);
+const url = new URL(Astro.request.url, 'https://ilmtest.io');
 const pageParam = Number(url.searchParams.get('page') ?? '1');
-const normalizedPage = Number.isFinite(pageParam) ? Math.max(1, Math.floor(pageParam)) : 1;
-const totalPages = Math.max(1, Math.ceil(sections.length / PAGE_SIZE));
-const currentPage = Math.min(normalizedPage, totalPages);
-const startIndex = (currentPage - 1) * PAGE_SIZE;
-const pageSections = sections.slice(startIndex, startIndex + PAGE_SIZE);
-const pageSectionIdSet = new Set(pageSections);
+const normalizedPage = Number.isFinite(pageParam) ? pageParam : 1;
+const pageData = await loadCollectionPageData(collectionSlug, normalizedPage, Astro.request.url);
+if (!pageData) {
+    return Astro.redirect('/browse');
+}
 
 const buildPageHref = (page: number) =>
     page <= 1 ? `/browse/${collectionSlug}` : `/browse/${collectionSlug}?page=${page}`;
-const requestUrl = Astro.request.url;
-
-const sectionIdSet = pageSectionIdSet;
-const sectionChunkIds = (indexes.sectionToChunks?.[collectionData.id] || {}) as Record<string, string[]>;
-
-const chunksForPage = await Promise.all(
-    pageSections.flatMap((sectionId) =>
-        (sectionChunkIds[sectionId] ?? []).map((chunkId) => fetchExcerptChunk(chunkId, requestUrl)),
-    ),
-);
-const pageChunks = chunksForPage.filter((chunk): chunk is NonNullable<typeof chunk> => Boolean(chunk));
-
-// Extract headings from chunks (by section IDs from indexes)
-const headings = pageChunks
-    .flatMap((chunk) => chunk.excerpts)
-    .filter((excerpt) => sectionIdSet.has(excerpt.id))
-    .map((heading) => ({
-        id: heading.id,
-        nass: heading.nass,
-        text: heading.text,
-        from: heading.from,
-    }));
-
-const headingsById = new Map(headings.map((heading) => [heading.id, heading]));
-
-const sectionExcerptCounts = new Map<string, number>();
-for (const chunk of pageChunks) {
-    const sectionId = chunk.sectionId as string;
-    if (!sectionIdSet.has(sectionId)) {
-        continue;
-    }
-
-    const excerptIds: string[] = chunk.excerptIds ?? chunk.excerpts.map((e: any) => e.id);
-    const hasHeadingMarker = excerptIds.includes(sectionId);
-    const count = Math.max(excerptIds.length - (hasHeadingMarker ? 1 : 0), 0);
-    sectionExcerptCounts.set(sectionId, (sectionExcerptCounts.get(sectionId) ?? 0) + count);
-}
-
-// Create section items with their primary heading
-const sectionItems = pageSections.map((sectionId: string) => {
-    const primaryHeading = headingsById.get(sectionId);
-
-    return {
-        id: sectionId,
-        title: primaryHeading?.text || `Section ${sectionId}`,
-        titleArabic: primaryHeading?.nass || '',
-        excerptCount: sectionExcerptCounts.get(sectionId) ?? 0,
-    };
-});
-
-const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: collectionData.roman }];
-const hasPrevPage = currentPage > 1;
-const hasNextPage = currentPage < totalPages;
+const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: pageData.collection.roman }];
+const hasPrevPage = pageData.currentPage > 1;
+const hasNextPage = pageData.currentPage < pageData.totalPages;
 
 // Set cache headers for edge caching
 Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
 Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
 ---
 
-<BaseLayout title={collectionData.roman} description={`Browse ${collectionData.roman}`}>
+<BaseLayout title={pageData.collection.roman} description={`Browse ${pageData.collection.roman}`}>
     <Header slot="header" currentPath="/browse">
         <ThemeToggle client:only="react" slot="theme-toggle" />
     </Header>
@@ -121,13 +46,13 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
 
         <header class="collection-header">
             <h1 class="collection-title-arabic" lang="ar" dir="rtl">
-                {collectionData.unwan}
+                {pageData.collection.unwan}
             </h1>
-            <h1>{collectionData.roman}</h1>
-            {collectionData.authors.length > 0 && (
+            <h1>{pageData.collection.roman}</h1>
+            {pageData.collection.authors.length > 0 && (
                 <p class="author-name">
                     by{' '}
-                    {collectionData.authors.map((author, index) => (
+                    {pageData.collection.authors.map((author, index) => (
                         <>
                             {index > 0 ? ', ' : ''}
                             <a class="author-link" href={`/profile/${author.id}`}>
@@ -138,14 +63,14 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
                 </p>
             )}
             <p class="subtitle">
-                {sections.length} sections · Page {currentPage} of {totalPages}
+                {pageData.totalSections} sections · Page {pageData.currentPage} of {pageData.totalPages}
             </p>
         </header>
 
         <div class="sections-list">
             {
-                sectionItems.map((section: { id: string; title: string; titleArabic: string; excerptCount: number }) => (
-                    <Card variant="outlined" hoverable href={`/browse/${collectionSlug}/${section.id}`}>
+                pageData.sectionItems.map((section) => (
+                    <Card variant="outlined" hoverable href={`/browse/${collectionSlug}/${section.sectionId}`}>
                         <div class="section-content">
                             <div class="section-titles">
                                 {section.titleArabic && (
@@ -167,15 +92,15 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
         <nav class="pagination" aria-label="Section pages">
             <a
                 class:list={["pagination-link", !hasPrevPage && "is-disabled"]}
-                href={hasPrevPage ? buildPageHref(currentPage - 1) : undefined}
+                href={hasPrevPage ? buildPageHref(pageData.currentPage - 1) : undefined}
                 aria-disabled={!hasPrevPage}
             >
                 Previous
             </a>
-            <span class="pagination-info">Page {currentPage} of {totalPages}</span>
+            <span class="pagination-info">Page {pageData.currentPage} of {pageData.totalPages}</span>
             <a
                 class:list={["pagination-link", !hasNextPage && "is-disabled"]}
-                href={hasNextPage ? buildPageHref(currentPage + 1) : undefined}
+                href={hasNextPage ? buildPageHref(pageData.currentPage + 1) : undefined}
                 aria-disabled={!hasNextPage}
             >
                 Next

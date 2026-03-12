@@ -8,10 +8,8 @@ import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { loadCollectionsData, loadIndexesData } from '@/lib/data';
-import { fetchExcerptChunk } from '@/lib/excerptChunks';
-import { arabicToWestern } from '@/lib/textUtils';
-import type { Collection, Excerpt } from '@/types/excerpts';
+import { loadSectionPageData } from '@/lib/data';
+import type { Excerpt } from '@/types/excerpts';
 
 const { collection: collectionSlug, section } = Astro.params;
 
@@ -19,73 +17,27 @@ if (!collectionSlug || !section) {
     return Astro.redirect('/404');
 }
 
-// Find collection metadata
-const collectionsData = loadCollectionsData();
-const indexesData = loadIndexesData();
-const indexes = indexesData as Record<string, any>;
-const collections = Array.isArray(collectionsData)
-    ? (collectionsData as Collection[])
-    : ((collectionsData as { collections?: Collection[] }).collections ?? []);
-const collectionData = collections.find((c) => c.slug === collectionSlug);
-
-if (!collectionData) {
+const sectionData = await loadSectionPageData(collectionSlug, section, Astro.request.url);
+if (!sectionData) {
     return Astro.redirect('/browse');
 }
-
-const sectionMap = (indexes.sectionToExcerpts?.[collectionData.id] || {}) as Record<string, string[]>;
-
-// Get excerpts for this section
-const excerptIds = (sectionMap[section] || []) as string[];
-
-if (excerptIds.length === 0) {
-    return Astro.redirect(`/browse/${collectionSlug}`);
-}
-
-const sectionChunkIds = (indexes.sectionToChunks?.[collectionData.id] || {}) as Record<string, string[]>;
-const chunkIds = sectionChunkIds[section] || [];
-const sectionChunks = (
-    await Promise.all(chunkIds.map((chunkId) => fetchExcerptChunk(chunkId, Astro.request.url)))
-).filter((chunk): chunk is NonNullable<typeof chunk> => Boolean(chunk));
-
-if (sectionChunks.length === 0) {
-    return Astro.redirect(`/browse/${collectionSlug}`);
-}
-
-const headingIdSet = new Set(Object.keys(sectionMap));
-
-// Extract all excerpts from chunks and filter out heading markers
-const excerpts = sectionChunks
-    .flatMap((chunk) => chunk.excerpts)
-    .filter((excerpt) => {
-        const excerptId = String(excerpt.id);
-        const hasContent = typeof excerpt.nass === 'string' && excerpt.nass.trim().length > 0;
-        return !headingIdSet.has(excerptId) && hasContent;
-    })
-    .sort((a, b) => a.from - b.from);
-
-// Get the section heading
-const headingExcerpt = sectionChunks.flatMap((chunk) => chunk.excerpts).find((excerpt) => excerpt.id === section);
-
-const sectionTitle = headingExcerpt?.text || `Section ${section}`;
-const sectionTitleArabic = headingExcerpt?.nass || '';
+const sectionTitle = sectionData.sectionSummary.title || `Section ${section}`;
+const sectionTitleArabic = sectionData.sectionSummary.titleArabic || '';
 
 const breadcrumbItems = [
     { label: 'Browse', href: '/browse' },
-    { label: collectionData.roman, href: `/browse/${collectionSlug}` },
+    { label: sectionData.collection.roman, href: `/browse/${collectionSlug}` },
     { label: sectionTitle },
 ];
 
 // Biome doesn't see template usage in .astro files.
-const _typeCheck = null as unknown as Collection | Excerpt;
-void _typeCheck;
 void ExcerptCard;
 void ThemeToggle;
 void Footer;
 void Header;
 void Breadcrumb;
 void BaseLayout;
-void arabicToWestern;
-void excerpts;
+void sectionData.excerpts;
 void sectionTitleArabic;
 void breadcrumbItems;
 
@@ -111,15 +63,15 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
                 )
             }
             <h1 class="section-title">{sectionTitle}</h1>
-            <p class="subtitle">{excerpts.length} excerpts</p>
+            <p class="subtitle">{sectionData.excerpts.length} excerpts</p>
         </header>
 
         <div class="excerpts-list">
             {
-                excerpts.map((excerpt) => (
+                sectionData.excerpts.map((excerpt) => (
                     <ExcerptCard
                         excerpt={excerpt as Excerpt}
-                        collection={collectionData}
+                        collection={sectionData.collection}
                         collectionSlug={collectionSlug}
                         sectionSlug={section}
                         excerptId={excerpt.id}

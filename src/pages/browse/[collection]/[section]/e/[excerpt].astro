@@ -12,10 +12,9 @@ import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { getCitationParts } from '@/lib/citations';
-import { loadCollectionsData, loadIndexesData, loadTranslatorsData } from '@/lib/data';
-import { fetchExcerptChunk } from '@/lib/excerptChunks';
+import { loadExcerptPageData } from '@/lib/data';
 import { arabicToWestern } from '@/lib/textUtils';
-import type { Collection, Excerpt } from '@/types/excerpts';
+import type { Excerpt } from '@/types/excerpts';
 
 const { collection: collectionSlug, section, excerpt: excerptId } = Astro.params;
 
@@ -23,108 +22,31 @@ if (!collectionSlug || !section || !excerptId) {
     return Astro.redirect('/404');
 }
 
-// Find collection metadata
-const collectionsData = loadCollectionsData();
-const indexesData = loadIndexesData();
-const translatorsData = loadTranslatorsData();
-const indexes = indexesData as Record<string, any>;
-
-function getCollections(): Collection[] {
-    if (Array.isArray(collectionsData)) {
-        return collectionsData as Collection[];
-    }
-    return (collectionsData as { collections?: Collection[] }).collections ?? [];
-}
-
-const collections = getCollections();
-const collectionData = collections.find((c) => c.slug === collectionSlug);
-
-if (!collectionData) {
-    return Astro.redirect('/browse');
-}
-
-const sectionMap = (indexes.sectionToExcerpts?.[collectionData.id] || {}) as Record<string, string[]>;
-
-// Verify this excerpt belongs to this section
-const sectionExcerptIds = new Set((sectionMap[section] || []) as string[]);
-if (!sectionExcerptIds.has(excerptId)) {
-    return Astro.redirect('/404');
-}
-
-const excerptToChunk = (indexes.excerptToChunk?.[collectionData.id] || {}) as Record<string, string>;
-const chunkId = excerptToChunk[excerptId];
-const sectionExcerptList = (sectionMap[section] || []) as string[];
-
-const requestUrl = Astro.request.url;
-const initialChunk = chunkId ? await fetchExcerptChunk(chunkId, requestUrl) : null;
-let excerpt = initialChunk?.excerpts.find((e) => e.id === excerptId);
-
-if (!excerpt) {
+const excerptData = await loadExcerptPageData(collectionSlug, section, excerptId, Astro.request.url);
+if (!excerptData) {
     return Astro.redirect(`/browse/${collectionSlug}/${section}`);
 }
-
-// Get the section heading for breadcrumb (heading marker is stored in the first chunk)
-const headingChunkId =
-    ((indexes.sectionToChunks?.[collectionData.id] || {}) as Record<string, string[]>)[section]?.[0] ?? chunkId;
-const headingChunk = headingChunkId ? await fetchExcerptChunk(headingChunkId, requestUrl) : null;
-const headingExcerpt = headingChunk?.excerpts.find((e) => e.id === section) as Excerpt | undefined;
-
-const sectionTitle = headingExcerpt?.text || `Section ${section}`;
+const excerpt = excerptData.excerpt;
+const sectionTitle = excerptData.sectionSummary.title || `Section ${section}`;
 
 // Format citation using the actual collection data
-const citation = getCitationParts(excerpt, collectionData);
+const citation = getCitationParts(excerpt, excerptData.collection);
 marked.setOptions({ breaks: true });
 
 const citationMarkdown = `[${citation.label}](${citation.url})`;
 const englishHtml = marked.parse(excerpt.text);
 const copyPayload = `${excerpt.nass}\n\n${excerpt.text}\n\n${citationMarkdown}`;
 
-const translators = Array.isArray(translatorsData)
-    ? translatorsData
-    : ((translatorsData as { translators?: Array<{ id: number; name: string }> }).translators ?? []);
-const translatorName = translators.find((translator) => translator.id === excerpt.translator)?.name;
+const translatorName = excerptData.translators.find((translator) => translator.id === excerpt.translator)?.name;
 
 const excerptWords = excerpt.text.split(/\s+/).filter(Boolean);
 const excerptPreview = excerptWords.slice(0, 8).join(' ');
 const excerptLabel = excerptWords.length > 8 ? `${excerptPreview}…` : excerptPreview;
-const currentExcerptIndex = sectionExcerptList.indexOf(excerptId);
+const currentExcerptIndex = excerptData.sectionExcerptList.indexOf(excerptId);
 const currentExcerptNumber = currentExcerptIndex >= 0 ? currentExcerptIndex + 1 : 1;
-const totalExcerptsInSection = sectionExcerptList.length;
-const previousExcerptId = currentExcerptIndex > 0 ? sectionExcerptList[currentExcerptIndex - 1] : null;
-const nextExcerptId =
-    currentExcerptIndex >= 0 && currentExcerptIndex < sectionExcerptList.length - 1
-        ? sectionExcerptList[currentExcerptIndex + 1]
-        : null;
-
-async function loadSectionExcerptSummary(targetExcerptId: string | null) {
-    if (!targetExcerptId) {
-        return null;
-    }
-
-    const targetChunkId = excerptToChunk[targetExcerptId];
-    if (!targetChunkId) {
-        return null;
-    }
-
-    const targetChunk = targetChunkId === chunkId ? initialChunk : await fetchExcerptChunk(targetChunkId, requestUrl);
-    const targetExcerpt = targetChunk?.excerpts.find((candidate) => candidate.id === targetExcerptId);
-
-    if (!targetExcerpt) {
-        return null;
-    }
-
-    const previewWords = targetExcerpt.text.split(/\s+/).filter(Boolean);
-    const preview = previewWords.slice(0, 12).join(' ');
-
-    return {
-        id: targetExcerptId,
-        href: `/browse/${collectionSlug}/${section}/e/${targetExcerptId}`,
-        preview: previewWords.length > 12 ? `${preview}…` : preview,
-    };
-}
-
-const previousExcerpt = await loadSectionExcerptSummary(previousExcerptId);
-const nextExcerpt = await loadSectionExcerptSummary(nextExcerptId);
+const totalExcerptsInSection = excerptData.sectionExcerptList.length;
+const previousExcerpt = excerptData.previousExcerpt;
+const nextExcerpt = excerptData.nextExcerpt;
 
 const meta = excerpt.meta;
 const hadithMeta = meta && 'num' in meta ? meta : null;
@@ -140,7 +62,7 @@ const formatHadithNumber = (num?: string) => {
 
 const breadcrumbItems = [
     { label: 'Browse', href: '/browse' },
-    { label: collectionData.roman, href: `/browse/${collectionSlug}` },
+    { label: excerptData.collection.roman, href: `/browse/${collectionSlug}` },
     { label: sectionTitle, href: `/browse/${collectionSlug}/${section}` },
     { label: excerptLabel || 'Excerpt' },
 ];
@@ -152,9 +74,6 @@ void ThemeToggle;
 void Footer;
 void Header;
 void Breadcrumb;
-void collectionsData;
-void indexesData;
-void translatorsData;
 void BaseLayout;
 void arabicToWestern;
 void getCitationParts;
@@ -167,8 +86,8 @@ void hadithMeta;
 void bookMeta;
 void formatHadithNumber;
 void breadcrumbItems;
-void previousExcerpt;
-void nextExcerpt;
+void excerptData.previousExcerpt;
+void excerptData.nextExcerpt;
 
 // Set cache headers for edge caching
 Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
@@ -204,7 +123,7 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
             </div>
 
             <!-- Citation Block -->
-            <CitationBlock excerpt={excerpt} collection={collectionData} />
+                    <CitationBlock excerpt={excerpt} collection={excerptData.collection} />
             <div class="share-actions" aria-label="Copy excerpt">
                 <ShareButton text={copyPayload} ariaLabel="Copy excerpt and citation" />
             </div>
