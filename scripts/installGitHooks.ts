@@ -5,6 +5,7 @@ const PRE_COMMIT_HOOK = `#!/bin/sh
 set -eu
 
 bun run lint
+bun run check
 `;
 
 const main = async () => {

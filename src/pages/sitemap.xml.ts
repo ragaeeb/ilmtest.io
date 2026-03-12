@@ -17,7 +17,7 @@ const site = normalizeSite(import.meta.env.SITE);
 
 const buildUrl = (path: string) => new URL(path, site).toString();
 
-export const GET = async () => {
+export const GET = async ({ request }: { request: Request }) => {
     const collections = await loadSitemapCollectionData(request.url);
     const staticPaths = ['/', '/about', '/browse', '/privacy', '/terms'];
     const urls: string[] = staticPaths.map((path) => buildUrl(path));

@@ -169,8 +169,9 @@ const loadRuntimeContext = async (requestUrl?: string): Promise<RuntimeContext> 
 
 const loadCollectionsArtifact = async (requestUrl?: string) => {
     const context = await loadRuntimeContext(requestUrl);
+    const { manifest } = context;
 
-    if (!context.manifest) {
+    if (!manifest) {
         if (import.meta.env.DEV) {
             return loadBundledCollections();
         }
@@ -185,17 +186,16 @@ const loadCollectionsArtifact = async (requestUrl?: string) => {
         ARTIFACT_CACHE_TTL_MS,
         async () =>
             assertRuntimeCollectionSummaryArray(
-                await readBucketJson<RuntimeCollectionSummary[]>(
-                    context.manifest.runtimeArtifactSet.bootstrap.collections.key,
-                ),
+                await readBucketJson<RuntimeCollectionSummary[]>(manifest.runtimeArtifactSet.bootstrap.collections.key),
             ),
     );
 };
 
 export const loadTranslatorsData = async (requestUrl?: string) => {
     const context = await loadRuntimeContext(requestUrl);
+    const { manifest } = context;
 
-    if (!context.manifest) {
+    if (!manifest) {
         if (import.meta.env.DEV) {
             return loadBundledTranslators();
         }
@@ -208,7 +208,7 @@ export const loadTranslatorsData = async (requestUrl?: string) => {
         ARTIFACT_CACHE_TTL_MS,
         async () =>
             await readBucketJson<Array<{ id: number; name: string }>>(
-                context.manifest.runtimeArtifactSet.bootstrap.translators.key,
+                manifest.runtimeArtifactSet.bootstrap.translators.key,
             ),
     );
 };
