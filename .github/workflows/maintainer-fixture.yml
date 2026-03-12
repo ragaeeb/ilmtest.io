@@ -1,13 +1,15 @@
-name: Contributor CI
+name: Maintainer Fixture Lane
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      fixture:
+        description: Fixture tier to materialize
+        required: true
+        default: medium
 
 jobs:
-  contributor:
+  maintainer:
     runs-on: ubuntu-latest
 
     steps:
@@ -28,8 +30,8 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Materialize tiny fixture corpus
-        run: bun run setup-fixture -- tiny
+      - name: Materialize fixture corpus
+        run: bun run setup-fixture -- ${{ inputs.fixture }}
 
       - name: Lint
         run: bun run lint
@@ -38,7 +40,7 @@ jobs:
         run: bun run check
 
       - name: Test
-        run: bun test --coverage --coverage-reporter=lcov
+        run: bun test
 
       - name: Integrity
         run: bun run integrity
@@ -47,9 +49,13 @@ jobs:
         run: bun run build
 
       - name: Route smoke
-        run: bun run smoke-routes -- --port 4322
+        run: bun run smoke-routes -- --port 4323
 
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
+      - name: Capture baseline snapshot
+        run: bun run baseline
+
+      - name: Upload baseline artifact
+        uses: actions/upload-artifact@v4
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          name: baseline-${{ inputs.fixture }}
+          path: docs/baselines/current.json

@@ -1,0 +1,65 @@
+name: Release Corpus Lane
+
+on:
+  workflow_dispatch:
+    inputs:
+      collection_ids:
+        description: Space-separated collection IDs for the full-corpus ETL run
+        required: true
+      publish_dataset:
+        description: Publish the validated dataset after checks pass
+        required: true
+        default: "false"
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node 25
+        uses: actions/setup-node@v6
+        with:
+          node-version: "25"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate full corpus
+        env:
+          RELEASE_BUILD: "1"
+        run: bun run setup ${{ inputs.collection_ids }}
+
+      - name: Validate dataset inputs
+        run: bun run validate-dataset
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run check
+
+      - name: Test
+        run: bun test
+
+      - name: Integrity
+        run: bun run integrity
+
+      - name: Build project
+        run: bun run build
+
+      - name: Route smoke
+        run: bun run smoke-routes -- --port 4324
+
+      - name: Publish immutable dataset
+        if: inputs.publish_dataset == 'true'
+        run: bun run publish-dataset

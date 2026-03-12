@@ -4,6 +4,9 @@ This document is now legacy/current-state deployment guidance. The new corpus pu
 
 - [Publish Corpus](/Users/rhaq/workspace/ilmtest.io/docs/runbooks/publish-corpus.md)
 - [Roll Back Corpus](/Users/rhaq/workspace/ilmtest.io/docs/runbooks/rollback-corpus.md)
+- [Fixture Corpus Workflow](/Users/rhaq/workspace/ilmtest.io/docs/fixtures.md)
+- [QA And Observability Baseline](/Users/rhaq/workspace/ilmtest.io/docs/qa.md)
+- [Cloudflare Security Baseline](/Users/rhaq/workspace/ilmtest.io/docs/security-baseline.md)
 
 Pages deployment still exists for continuity until the `M4` Workers cutover is complete.
 
@@ -23,6 +26,9 @@ This guide outlines the steps to deploy the IlmTest Astro application to Cloudfl
 - **Build command**: `bun run build`
 - **Build output directory**: `dist`
 - **Helper scripts**:
+  - `bun run setup-fixture -- tiny|medium` (materialize PR-safe or maintainer fixtures without secrets)
+  - `bun run integrity` (validate local routes, chunk mappings, schema, and curated references)
+  - `bun run smoke-routes` (fetch homepage, browse, collection, section, and excerpt routes against local dev)
   - `bun run validate-dataset` (validate local dataset inputs before publish)
   - `bun run publish-dataset` (publish immutable dataset artifacts to R2)
   - `bun run promote-dataset` (move the preview or prod dataset pointer)

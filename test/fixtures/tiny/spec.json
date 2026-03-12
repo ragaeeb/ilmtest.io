@@ -1,0 +1,48 @@
+{
+    "variant": "tiny",
+    "description": "Tiny PR-safe fixture corpus with one Shamela-like collection and one web-like collection.",
+    "translators": [
+        {
+            "id": 1,
+            "name": "Translator One"
+        },
+        {
+            "id": 2,
+            "name": "Translator Two"
+        }
+    ],
+    "collections": [
+        {
+            "id": "9001",
+            "fid": "9001",
+            "slug": "sample-shamela-text",
+            "roman": "Sample Shamela Text",
+            "unwan": "نص شمائل تجريبي",
+            "kind": "shamela",
+            "sectionCount": 4,
+            "excerptsPerSection": 5,
+            "chunkSize": 2,
+            "author": {
+                "id": "1001",
+                "name": "Ibn Example",
+                "ism": "ابن مثال"
+            }
+        },
+        {
+            "id": "9901",
+            "fid": "site-9901",
+            "slug": "sample-web-articles",
+            "roman": "Sample Web Articles",
+            "unwan": "مقالات ويب تجريبية",
+            "kind": "web",
+            "sectionCount": 3,
+            "excerptsPerSection": 4,
+            "chunkSize": 2,
+            "author": {
+                "id": "1002",
+                "name": "Umm Example",
+                "ism": "أم مثال"
+            }
+        }
+    ]
+}
