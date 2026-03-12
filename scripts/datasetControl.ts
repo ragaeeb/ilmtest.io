@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, rm } from 'node:fs/promises';
-import { dirname, join, relative } from 'node:path';
+import { basename, dirname, join, relative } from 'node:path';
 import {
     DeleteObjectCommand,
     GetObjectCommand,
@@ -87,7 +87,7 @@ type PreparedObject = {
     contentType: string;
     sha256: string;
     body: Uint8Array;
-    category: 'chunk' | 'bootstrap' | 'integrity';
+    category: 'chunk' | 'bootstrap' | 'runtime' | 'integrity';
 };
 
 type PreparedDataset = {
@@ -272,6 +272,11 @@ const prepareLocalDataset = async (
             remotePath: `${datasetPrefix}/artifacts/bootstrap/translators.json`,
         },
         {
+            name: 'routeBootstrap',
+            localPath: buildMetadata.outputs.routeBootstrapFile,
+            remotePath: `${datasetPrefix}/artifacts/runtime/bootstrap/routes.json`,
+        },
+        {
             name: 'indexesFull',
             localPath: buildMetadata.outputs.indexesFile,
             remotePath: `${datasetPrefix}/artifacts/bootstrap/indexes.full.json`,
@@ -280,6 +285,7 @@ const prepareLocalDataset = async (
 
     const objects: PreparedObject[] = [];
     const chunkFiles = await listFiles(buildMetadata.outputs.chunksDir);
+    const runtimeArtifactFiles = await listFiles(buildMetadata.outputs.runtimeArtifactsDir).catch(() => []);
     const chunkChecksumEntries: ChunkChecksumEntry[] = [];
 
     for (const chunkPath of chunkFiles.sort()) {
@@ -313,6 +319,21 @@ const prepareLocalDataset = async (
         });
     }
 
+    for (const artifactPath of runtimeArtifactFiles.sort()) {
+        const body = new Uint8Array(await Bun.file(artifactPath).arrayBuffer());
+        objects.push({
+            key: `${datasetPrefix}/artifacts/runtime/${relative(
+                buildMetadata.outputs.runtimeArtifactsDir,
+                artifactPath,
+            ).replace(/\\/g, '/')}`,
+            bytes: body.byteLength,
+            contentType: JSON_CONTENT_TYPE,
+            sha256: sha256Hex(body),
+            body,
+            category: 'runtime',
+        });
+    }
+
     const integrityArtifact = buildIntegrityArtifact(datasetVersion, chunkChecksumEntries, createdAt);
     const integrityBody = textEncoder.encode(JSON.stringify(integrityArtifact, null, 2));
     const integrityKey = `${datasetPrefix}/artifacts/integrity/chunks.json`;
@@ -328,6 +349,11 @@ const prepareLocalDataset = async (
     const descriptorMap = new Map(
         objects.map((object) => [object.key, buildArtifactDescriptor(object.key, object.bytes, object.sha256)]),
     );
+    const collectionShardDescriptors = Object.fromEntries(
+        [...descriptorMap.entries()]
+            .filter(([key]) => key.startsWith(`${datasetPrefix}/artifacts/runtime/collections/`))
+            .map(([key, descriptor]) => [basename(key, '.json'), descriptor]),
+    );
     const manifest = {
         datasetSchemaVersion: DATASET_SCHEMA_VERSION,
         chunkSchemaVersion: CHUNK_SCHEMA_VERSION,
@@ -341,6 +367,7 @@ const prepareLocalDataset = async (
         artifactCounts: {
             chunks: chunkChecksumEntries.length,
             bootstrapArtifacts: bootstrapInputs.length,
+            runtimeArtifacts: Object.keys(collectionShardDescriptors).length,
             integrityArtifacts: 1,
             totalObjects: objects.length,
         },
@@ -351,6 +378,9 @@ const prepareLocalDataset = async (
             bootstrapArtifacts: objects
                 .filter((object) => object.category === 'bootstrap')
                 .reduce((sum, object) => sum + object.bytes, 0),
+            runtimeArtifacts: objects
+                .filter((object) => object.category === 'runtime')
+                .reduce((sum, object) => sum + object.bytes, 0),
             integrityArtifacts: integrityBody.byteLength,
             total: objects.reduce((sum, object) => sum + object.bytes, 0),
         },
@@ -358,7 +388,11 @@ const prepareLocalDataset = async (
             bootstrap: {
                 collections: descriptorMap.get(`${datasetPrefix}/artifacts/bootstrap/collections.json`)!,
                 translators: descriptorMap.get(`${datasetPrefix}/artifacts/bootstrap/translators.json`)!,
+                routeBootstrap: descriptorMap.get(`${datasetPrefix}/artifacts/runtime/bootstrap/routes.json`)!,
                 indexesFull: descriptorMap.get(`${datasetPrefix}/artifacts/bootstrap/indexes.full.json`)!,
+            },
+            runtime: {
+                collectionShards: collectionShardDescriptors,
             },
             integrity: {
                 chunks: descriptorMap.get(integrityKey)!,
@@ -663,7 +697,9 @@ const validateManifestArtifacts = async (store: ObjectStore, manifest: DatasetMa
     const descriptors = [
         manifest.runtimeArtifactSet.bootstrap.collections,
         manifest.runtimeArtifactSet.bootstrap.translators,
+        manifest.runtimeArtifactSet.bootstrap.routeBootstrap,
         manifest.runtimeArtifactSet.bootstrap.indexesFull,
+        ...Object.values(manifest.runtimeArtifactSet.runtime.collectionShards),
         manifest.runtimeArtifactSet.integrity.chunks,
     ];
 

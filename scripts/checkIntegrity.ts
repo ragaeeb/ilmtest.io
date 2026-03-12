@@ -121,6 +121,16 @@ const validateSectionIntegrity = async (collectionId: string, sectionId: string,
     if (sectionChunkIds.length === 0) {
         throw new Error(`Section ${collectionId}/${sectionId} has no chunk mappings`);
     }
+    if (sectionChunkIds.length > 8) {
+        throw new Error(
+            `Section ${collectionId}/${sectionId} exceeds the chunk fan-out cap with ${sectionChunkIds.length} chunks`,
+        );
+    }
+    if (sectionChunkIds.length > 4) {
+        console.warn(
+            `⚠️  Section ${collectionId}/${sectionId} exceeds p95 fan-out target with ${sectionChunkIds.length} chunks.`,
+        );
+    }
 
     const firstChunkKey = sectionChunkIds[0];
     if (!context.availableChunkKeys.has(firstChunkKey)) {

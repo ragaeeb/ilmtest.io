@@ -98,6 +98,7 @@ const main = async () => {
         await runCommand('check', ['bun', 'run', 'check']),
         await runCommand('test', ['bun', 'test']),
         await runCommand('build', ['bun', 'run', 'build']),
+        await runCommand('bundle-check', ['bun', 'run', 'bundle-check']),
     ];
 
     const collections = (await Bun.file(join('src', 'data', 'collections.json'))

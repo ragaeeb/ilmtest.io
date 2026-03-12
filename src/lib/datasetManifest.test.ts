@@ -45,21 +45,29 @@ describe('datasetManifest', () => {
             },
             artifactCounts: {
                 chunks: 2,
-                bootstrapArtifacts: 3,
+                bootstrapArtifacts: 4,
+                runtimeArtifacts: 1,
                 integrityArtifacts: 1,
-                totalObjects: 6,
+                totalObjects: 8,
             },
             artifactBytes: {
                 chunks: 256,
                 bootstrapArtifacts: 384,
+                runtimeArtifacts: 192,
                 integrityArtifacts: 64,
-                total: 704,
+                total: 896,
             },
             runtimeArtifactSet: {
                 bootstrap: {
                     collections: descriptor,
                     translators: { ...descriptor, key: 'datasets/example/artifacts/bootstrap/translators.json' },
+                    routeBootstrap: { ...descriptor, key: 'datasets/example/artifacts/runtime/bootstrap/routes.json' },
                     indexesFull: { ...descriptor, key: 'datasets/example/artifacts/bootstrap/indexes.full.json' },
+                },
+                runtime: {
+                    collectionShards: {
+                        '1118': { ...descriptor, key: 'datasets/example/artifacts/runtime/collections/1118.json' },
+                    },
                 },
                 integrity: {
                     chunks: { ...descriptor, key: 'datasets/example/artifacts/integrity/chunks.json' },
@@ -110,6 +118,8 @@ describe('datasetManifest', () => {
                 translatorsFile: 'src/data/translators.json',
                 indexesFile: 'src/data/indexes.json',
                 chunksDir: 'tmp/excerpt-chunks',
+                routeBootstrapFile: 'src/data/runtime-bootstrap.json',
+                runtimeArtifactsDir: 'tmp/runtime-artifacts',
             },
         };
 

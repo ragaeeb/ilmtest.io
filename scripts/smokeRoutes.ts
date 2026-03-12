@@ -1,10 +1,11 @@
-import { join } from 'node:path';
 import { loadLocalRuntimeData, readChunkFromDisk } from './runtimeData';
 
 type SmokeRoute = {
     label: string;
     path: string;
     expectText: string;
+    expectStrings?: string[];
+    forbidStrings?: string[];
 };
 
 const getFlagValue = (args: string[], flag: string) => {
@@ -52,8 +53,7 @@ const waitForServer = async (baseUrl: string, server: Bun.Subprocess, timeoutMs 
 };
 
 const startDevServer = async (port: number) => {
-    const astroBin = join(process.cwd(), 'node_modules', '.bin', 'astro');
-    const server = Bun.spawn(['node', astroBin, 'dev', '--host', '127.0.0.1', '--port', String(port)], {
+    const server = Bun.spawn(['bunx', 'astro', 'dev', '--host', '127.0.0.1', '--port', String(port)], {
         stdout: 'pipe',
         stderr: 'pipe',
         env: process.env,
@@ -112,6 +112,8 @@ const collectSmokeRoutes = async () => {
                 label: `${collection.slug}:collection`,
                 path: `/browse/${collection.slug}`,
                 expectText: collection.roman,
+                expectStrings: [`/browse/${collection.slug}/${sectionId}`],
+                forbidStrings: ['/undefined'],
             },
             {
                 label: `${collection.slug}:section`,
@@ -148,6 +150,16 @@ export const runRouteSmoke = async (baseUrl?: string, port = 4321) => {
             const body = await response.text();
             if (!body.includes(route.expectText)) {
                 throw new Error(`${route.label} did not include expected text "${route.expectText}"`);
+            }
+            for (const expected of route.expectStrings ?? []) {
+                if (!body.includes(expected)) {
+                    throw new Error(`${route.label} did not include expected string "${expected}"`);
+                }
+            }
+            for (const forbidden of route.forbidStrings ?? []) {
+                if (body.includes(forbidden)) {
+                    throw new Error(`${route.label} unexpectedly included "${forbidden}"`);
+                }
             }
         }
     } finally {

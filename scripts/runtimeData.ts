@@ -21,6 +21,8 @@ export type LocalCorpusPaths = {
     buildDir: string;
     metadataPath: string;
     curatedRoot: string;
+    routeBootstrapPath: string;
+    runtimeArtifactsDir: string;
 };
 
 export type LocalRuntimeData = {
@@ -45,6 +47,8 @@ export const resolveLocalCorpusPaths = (rootDir = '.') => {
         buildDir,
         metadataPath: join(buildDir, 'metadata.json'),
         curatedRoot: join(rootDir, 'src', 'data-curated'),
+        routeBootstrapPath: join(dataDir, 'runtime-bootstrap.json'),
+        runtimeArtifactsDir: join(rootDir, 'tmp', 'runtime-artifacts'),
     } satisfies LocalCorpusPaths;
 };
 
