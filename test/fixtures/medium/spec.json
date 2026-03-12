@@ -1,0 +1,52 @@
+{
+    "variant": "medium",
+    "description": "Medium maintainer fixture corpus with around one hundred sections per collection.",
+    "translators": [
+        {
+            "id": 1,
+            "name": "Translator One"
+        },
+        {
+            "id": 2,
+            "name": "Translator Two"
+        },
+        {
+            "id": 3,
+            "name": "Translator Three"
+        }
+    ],
+    "collections": [
+        {
+            "id": "9100",
+            "fid": "9100",
+            "slug": "medium-shamela-text",
+            "roman": "Medium Shamela Text",
+            "unwan": "نص شمائل متوسط",
+            "kind": "shamela",
+            "sectionCount": 100,
+            "excerptsPerSection": 5,
+            "chunkSize": 2,
+            "author": {
+                "id": "1101",
+                "name": "Ibn Medium",
+                "ism": "ابن متوسط"
+            }
+        },
+        {
+            "id": "9900",
+            "fid": "site-9900",
+            "slug": "medium-web-articles",
+            "roman": "Medium Web Articles",
+            "unwan": "مقالات ويب متوسطة",
+            "kind": "web",
+            "sectionCount": 100,
+            "excerptsPerSection": 4,
+            "chunkSize": 2,
+            "author": {
+                "id": "1102",
+                "name": "Umm Medium",
+                "ism": "أم متوسطة"
+            }
+        }
+    ]
+}

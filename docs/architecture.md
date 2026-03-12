@@ -11,6 +11,12 @@ This document outlines the high-level system architecture and data flow of IlmTe
 - [ADR 0005: D1 Backs Moderated Reports](/Users/rhaq/workspace/ilmtest.io/docs/adr/0005-d1-reports.md)
 - [ADR 0006: Inline Mentions Are Deferred](/Users/rhaq/workspace/ilmtest.io/docs/adr/0006-inline-mentions-deferred.md)
 
+## Operational Docs
+
+- [Fixture Corpus Workflow](/Users/rhaq/workspace/ilmtest.io/docs/fixtures.md)
+- [QA And Observability Baseline](/Users/rhaq/workspace/ilmtest.io/docs/qa.md)
+- [Cloudflare Security Baseline](/Users/rhaq/workspace/ilmtest.io/docs/security-baseline.md)
+
 ## 1. System Context Diagram
 
 High-level view of how users interact with the system and how the system is built.
@@ -121,3 +127,12 @@ The current request path still uses bundled `src/data/*.json` plus legacy flat c
 - Immutable datasets publish under `datasets/<datasetVersion>/...`.
 - `channels/prod.json` and `channels/preview.json` select the active dataset manifest for the future runtime path.
 - Corpus publishing, code deployment, and dataset promotion are now separate release lanes.
+
+## 4. M2 Fixture And Integrity Layer
+
+Before the runtime switches to manifest-selected datasets, the repo now supports fixture-driven validation:
+
+- `test/fixtures/tiny/` defines the PR-safe corpus used in contributor CI.
+- `test/fixtures/medium/` defines the larger maintainer corpus used for manual validation.
+- `scripts/checkIntegrity.ts` verifies route inputs, chunk mappings, dataset metadata, and curated-reference integrity.
+- `scripts/smokeRoutes.ts` exercises representative pages against a live Astro dev server without production secrets.

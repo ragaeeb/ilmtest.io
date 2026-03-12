@@ -1,0 +1,56 @@
+name: Maintainer Fixture Lane
+
+on:
+  workflow_dispatch:
+    inputs:
+      fixture:
+        description: Fixture tier to materialize
+        required: true
+        default: medium
+
+jobs:
+  maintainer:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Materialize fixture corpus
+        run: bun run setup-fixture -- ${{ inputs.fixture }}
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run check
+
+      - name: Test
+        run: bun test
+
+      - name: Integrity
+        run: bun run integrity
+
+      - name: Build project
+        run: bun run build
+
+      - name: Route smoke
+        run: bun run smoke-routes -- --port 4323
+
+      - name: Capture baseline snapshot
+        run: bun run baseline
+
+      - name: Upload baseline artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-${{ inputs.fixture }}
+          path: docs/baselines/current.json
