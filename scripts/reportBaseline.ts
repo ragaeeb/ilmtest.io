@@ -9,6 +9,52 @@ type DirectoryStats = {
     bytes: number;
 };
 
+type CommandStatus = {
+    label: string;
+    ok: boolean;
+    exitCode: number;
+    durationMs: number;
+};
+
+type DeployCoupling = {
+    deployScript: string | null;
+    usesPagesDeploy: boolean;
+    usesLegacyUploadR2: boolean;
+    publishDatasetScript: string | null;
+};
+
+export type BaselineReport = {
+    generatedAt: string;
+    collections: number;
+    translators: number;
+    srcData: DirectoryStats;
+    excerptChunks: DirectoryStats;
+    buildOutput: DirectoryStats;
+    serverBundle: DirectoryStats & {
+        topFiles: Array<{ path: string; bytes: number }>;
+    };
+    topSectionFanOut: Array<{
+        collectionId: string;
+        sectionId: string;
+        excerptCount: number;
+        chunkCount: number;
+    }>;
+    routeReadFanOut: {
+        excerptRoute: {
+            chunkReads: ReturnType<typeof summarizeValues>;
+        };
+        sectionRoute: {
+            chunkReads: ReturnType<typeof summarizeValues>;
+        };
+        collectionRoute: {
+            pageSize: number;
+            chunkReads: ReturnType<typeof summarizeValues>;
+        };
+    };
+    commands: CommandStatus[];
+    deployCoupling: DeployCoupling;
+};
+
 const percentile = (values: number[], fraction: number) => {
     if (values.length === 0) {
         return 0;
@@ -92,35 +138,55 @@ const runCommand = async (label: string, command: string[]) => {
     };
 };
 
-const main = async () => {
-    const commandStatuses = [
-        await runCommand('lint', ['bun', 'run', 'lint']),
-        await runCommand('check', ['bun', 'run', 'check']),
-        await runCommand('test', ['bun', 'test']),
-        await runCommand('build', ['bun', 'run', 'build']),
-        await runCommand('bundle-check', ['bun', 'run', 'bundle-check']),
-    ];
+const readJson = async <T>(rootDir: string, ...segments: string[]) => {
+    return (await Bun.file(join(rootDir, ...segments)).json()) as T;
+};
 
-    const collections = (await Bun.file(join('src', 'data', 'collections.json'))
-        .json()
-        .catch(() => [])) as Array<Record<string, unknown>>;
-    const indexes = (await Bun.file(join('src', 'data', 'indexes.json'))
+type GenerateBaselineOptions = {
+    rootDir?: string;
+    commandStatuses?: CommandStatus[];
+    runCommands?: boolean;
+};
+
+const readPackageScripts = async (rootDir: string) => {
+    const packageJson = (await readJson<{ scripts?: Record<string, string> }>(rootDir, 'package.json').catch(() => ({
+        scripts: {},
+    }))) as { scripts?: Record<string, string> };
+    return packageJson.scripts ?? {};
+};
+
+export const generateBaselineReport = async (options: GenerateBaselineOptions = {}): Promise<BaselineReport> => {
+    const rootDir = options.rootDir ?? process.cwd();
+    const commandStatuses =
+        options.commandStatuses ??
+        (options.runCommands === false
+            ? []
+            : [
+                  await runCommand('lint', ['bun', 'run', 'lint']),
+                  await runCommand('check', ['bun', 'run', 'check']),
+                  await runCommand('test', ['bun', 'test']),
+                  await runCommand('build', ['bun', 'run', 'build']),
+                  await runCommand('bundle-check', ['bun', 'run', 'bundle-check']),
+              ]);
+    const scripts = await readPackageScripts(rootDir);
+
+    const collections = await readJson<Array<Record<string, unknown>>>(
+        rootDir,
+        'src',
+        'data',
+        'collections.json',
+    ).catch(() => []);
+    const indexes = (await Bun.file(join(rootDir, 'src', 'data', 'indexes.json'))
         .json()
         .catch(() => ({}))) as Record<string, any>;
-    const translators = (await Bun.file(join('src', 'data', 'translators.json'))
+    const translators = (await Bun.file(join(rootDir, 'src', 'data', 'translators.json'))
         .json()
         .catch(() => [])) as Array<Record<string, unknown>>;
 
-    const chunkStats = await walkDirectory(join('tmp', 'excerpt-chunks'));
-    const srcDataStats = {
-        files: 3,
-        bytes:
-            Bun.file(join('src', 'data', 'collections.json')).size +
-            Bun.file(join('src', 'data', 'translators.json')).size +
-            Bun.file(join('src', 'data', 'indexes.json')).size,
-    };
-    const distStats = await walkDirectory('dist');
-    const serverBundleStats = await walkDirectory(join('dist', 'functions'));
+    const chunkStats = await walkDirectory(join(rootDir, 'tmp', 'excerpt-chunks'));
+    const srcDataStats = await walkDirectory(join(rootDir, 'src', 'data'));
+    const distStats = await walkDirectory(join(rootDir, 'dist'));
+    const serverBundleStats = await walkDirectory(join(rootDir, 'dist', 'functions'));
 
     const sectionEntries = Object.entries(indexes.sectionToExcerpts ?? {}).flatMap(([collectionId, sections]) =>
         Object.entries(sections as Record<string, string[]>).map(([sectionId, excerptIds]) => {
@@ -158,7 +224,7 @@ const main = async () => {
         },
     );
 
-    const baseline = {
+    return {
         generatedAt: new Date().toISOString(),
         collections: collections.length,
         translators: translators.length,
@@ -167,7 +233,7 @@ const main = async () => {
         buildOutput: distStats,
         serverBundle: {
             ...serverBundleStats,
-            topFiles: await topFiles(join('dist', 'functions')),
+            topFiles: await topFiles(join(rootDir, 'dist', 'functions')),
         },
         topSectionFanOut,
         routeReadFanOut: {
@@ -183,15 +249,27 @@ const main = async () => {
             },
         },
         commands: commandStatuses,
+        deployCoupling: {
+            deployScript: scripts.deploy ?? null,
+            usesPagesDeploy: (scripts.deploy ?? '').includes('wrangler pages deploy'),
+            usesLegacyUploadR2: (scripts.deploy ?? '').includes('uploadR2.ts') || Boolean(scripts['upload-r2']),
+            publishDatasetScript: scripts['publish-dataset'] ?? null,
+        },
     };
+};
+
+const main = async () => {
+    const baseline = await generateBaselineReport();
 
     await mkdir(dirname(BASELINE_OUTPUT_PATH), { recursive: true });
     await Bun.write(BASELINE_OUTPUT_PATH, JSON.stringify(baseline, null, 2));
     console.log(JSON.stringify(baseline, null, 2));
 
-    if (commandStatuses.some((status) => !status.ok)) {
+    if (baseline.commands.some((status) => !status.ok)) {
         process.exit(1);
     }
 };
 
-await main();
+if (import.meta.main) {
+    await main();
+}

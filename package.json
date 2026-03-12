@@ -38,6 +38,7 @@
         "setup-fixture": "bun scripts/setupFixture.ts",
         "integrity": "bun scripts/checkIntegrity.ts",
         "smoke-routes": "bun scripts/smokeRoutes.ts",
+        "runtime-probe": "bun scripts/runtimeProbe.ts",
         "bundle-check": "bun scripts/checkBundle.ts",
         "gen-packet": "code2prompt . --include=\"src/**,package.json,astro.config.mjs,README.md,AGENTS.md,docs/deployment.md,scripts/setup.ts,scripts/chunking.ts,scripts/indexing.ts,scripts/mapping.ts,scripts/hierarchy.ts,scripts/env.ts\" -e \"node_modules/**,dist/**,.git/**,bun.lockb,src/data/**,tmp/excerpt-chunks/**,**/*.test.ts\" -O code_packet.txt"
     },

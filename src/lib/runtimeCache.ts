@@ -25,6 +25,11 @@ export class RuntimeCache {
         this.#entries.delete(key);
     }
 
+    hasFresh(key: string) {
+        const current = this.#entries.get(key);
+        return Boolean(current && current.expiresAt > this.#now());
+    }
+
     async getOrLoad<T>(key: string, ttlMs: number, loader: () => Promise<T>) {
         const current = this.#entries.get(key) as CacheEntry<T> | undefined;
         if (current && current.expiresAt > this.#now()) {

@@ -1,5 +1,7 @@
 import { env } from 'cloudflare:workers';
 import type { Excerpt } from '@/types/excerpts';
+import { getErrorMessage, RuntimeDataError } from './runtimeErrors';
+import { logRuntimeSignal } from './runtimeSignals';
 
 type BucketObject = {
     text(): Promise<string>;
@@ -50,23 +52,86 @@ export const fetchExcerptChunk = async (
     _requestUrl?: string,
     datasetVersion?: string,
 ): Promise<ChunkPayload | null> => {
-    if (import.meta.env.DEV) {
-        return readLocalChunk(chunkKey);
-    }
+    const startedAt = Date.now();
+    const localRuntime = import.meta.env.DEV;
 
-    const bucket = getExcerptBucket();
-    if (!bucket) {
-        return readLocalChunk(chunkKey);
-    }
+    try {
+        if (localRuntime) {
+            const chunk = await readLocalChunk(chunkKey);
+            logRuntimeSignal({
+                routeType: 'chunk-fetch',
+                datasetVersion: datasetVersion ?? 'local',
+                cacheStatus: 'local',
+                chunkKey,
+                durationMs: Date.now() - startedAt,
+                status: chunk ? 'ok' : 'error',
+                message: chunk ? undefined : `Missing local chunk payload for ${chunkKey}`,
+            });
+            return chunk;
+        }
 
-    if (!datasetVersion) {
-        throw new Error(`Remote chunk fetch requires a datasetVersion for ${chunkKey}`);
-    }
+        const bucket = getExcerptBucket();
+        if (!bucket) {
+            const chunk = await readLocalChunk(chunkKey);
+            logRuntimeSignal({
+                routeType: 'chunk-fetch',
+                datasetVersion: datasetVersion ?? 'local',
+                cacheStatus: 'local',
+                chunkKey,
+                durationMs: Date.now() - startedAt,
+                status: chunk ? 'ok' : 'error',
+                message: chunk ? undefined : `Missing fallback local chunk payload for ${chunkKey}`,
+            });
+            return chunk;
+        }
 
-    const object = await bucket.get(`datasets/${datasetVersion}/chunks/${chunkKey}`);
-    if (!object) {
-        return null;
-    }
+        if (!datasetVersion) {
+            throw new RuntimeDataError(
+                'chunk-missing',
+                `Remote chunk fetch requires a datasetVersion for ${chunkKey}`,
+                {
+                    chunkKey,
+                },
+            );
+        }
 
-    return JSON.parse(await object.text()) as ChunkPayload;
+        const object = await bucket.get(`datasets/${datasetVersion}/chunks/${chunkKey}`);
+        if (!object) {
+            logRuntimeSignal({
+                routeType: 'chunk-fetch',
+                datasetVersion,
+                cacheStatus: 'miss',
+                chunkKey,
+                r2Operation: 'get',
+                durationMs: Date.now() - startedAt,
+                status: 'error',
+                message: `Missing remote chunk payload for ${chunkKey}`,
+            });
+            return null;
+        }
+
+        const chunk = JSON.parse(await object.text()) as ChunkPayload;
+        logRuntimeSignal({
+            routeType: 'chunk-fetch',
+            datasetVersion,
+            cacheStatus: 'miss',
+            chunkKey,
+            r2Operation: 'get',
+            durationMs: Date.now() - startedAt,
+            status: 'ok',
+        });
+        return chunk;
+    } catch (error) {
+        logRuntimeSignal({
+            routeType: 'chunk-fetch',
+            datasetVersion: datasetVersion ?? (localRuntime ? 'local' : undefined),
+            cacheStatus: localRuntime ? 'local' : 'miss',
+            chunkKey,
+            r2Operation: localRuntime ? undefined : 'get',
+            durationMs: Date.now() - startedAt,
+            status: 'error',
+            message: getErrorMessage(error),
+        });
+        throw error;
+    }
 };

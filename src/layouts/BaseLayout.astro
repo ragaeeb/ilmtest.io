@@ -58,15 +58,13 @@ void ogImageResolved;
     <meta name="twitter:description" content={description} />
     {ogImageResolved && <meta name="twitter:image" content={ogImageResolved} />}
     
-    <!-- Preload Arabic fonts - uncomment when fonts are added to /public/fonts/
-    <link 
-      rel="preload" 
-      href="/fonts/NotoNaskhArabic-Regular.woff2" 
-      as="font" 
-      type="font/woff2" 
-      crossorigin 
+    <link
+      rel="preload"
+      href="/fonts/KFGQPCUthmanTahaNaskh.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
     />
-    -->
     {jsonLdContent && (
       <script type="application/ld+json" set:html={jsonLdContent} />
     )}

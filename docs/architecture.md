@@ -16,6 +16,8 @@ This document outlines the high-level system architecture and data flow of IlmTe
 - [Fixture Corpus Workflow](/Users/rhaq/workspace/ilmtest.io/docs/fixtures.md)
 - [QA And Observability Baseline](/Users/rhaq/workspace/ilmtest.io/docs/qa.md)
 - [Cloudflare Security Baseline](/Users/rhaq/workspace/ilmtest.io/docs/security-baseline.md)
+- [Source Continuity](/Users/rhaq/workspace/ilmtest.io/docs/source-continuity.md)
+- [Support Matrix](/Users/rhaq/workspace/ilmtest.io/docs/support-matrix.md)
 
 ## 1. System Context Diagram
 
@@ -87,15 +89,16 @@ sequenceDiagram
     ETL->>ETL: Generate Metadata & Indexes
     
     Note over ETL: 3. Distribution Phase
-    ETL->>R2: Upload Content Chunks (uploadR2.ts)
-    ETL->>SSR: Embed Indexes (Build Time)
+    ETL->>R2: Publish Dataset (publishDataset.ts)
+    ETL->>SSR: Embed Runtime Bootstrap (Build Time)
     
     Note over User: 4. Runtime Phase
     User->>Edge: Request /browse/section/123
     host->>Edge: Check Cache
     alt Cache Miss
         Edge->>SSR: Invoke Worker
-        SSR->>SSR: Lookup Indexes (In-memory)
+        SSR->>SSR: Resolve Pointer + Manifest
+        SSR->>SSR: Load Collection Shard (In-memory cache)
         SSR->>R2: Fetch Required Chunk (JSON)
         R2-->>SSR: Return Chunk
         SSR->>SSR: Render HTML
@@ -108,8 +111,8 @@ sequenceDiagram
 
 1.  **Build Pipeline (`scripts/`)**:
     *   **`setup.ts`**: The main transformation engine. It handles disparate source types (Shamela-formatted books and Web-scraped content), computing hierarchical heading ranges and backfilling missing data.
-    *   **Data Artifacts**: Generates `indexes.json` (O(1) lookups for sections, chunks, and entities), `collections.json` (library metadata), and `translators.json`.
-    *   **`uploadR2.ts`**: A high-concurrency distribution script that syncs generated content chunks to Cloudflare R2, supporting resumes and skip-existing checks.
+    *   **Data Artifacts**: Generates runtime bootstraps, runtime collection shards, chunk files, and dataset metadata for immutable publishing.
+    *   **`publishDataset.ts`**: The canonical dataset publisher. It uploads immutable dataset prefixes, writes the manifest, and promotes channel pointers. `uploadR2.ts` remains legacy compatibility tooling only.
 
 2.  **Hybrid Rendering (Astro)**:
     *   **SSG**: Landing page, About, and static collections.
@@ -136,3 +139,19 @@ Before the runtime switches to manifest-selected datasets, the repo now supports
 - `test/fixtures/medium/` defines the larger maintainer corpus used for manual validation.
 - `scripts/checkIntegrity.ts` verifies route inputs, chunk mappings, dataset metadata, and curated-reference integrity.
 - `scripts/smokeRoutes.ts` exercises representative pages against a live Astro dev server without production secrets.
+
+## 5. M3 Runtime Data Plane
+
+The browse, profile, and sitemap surfaces now resolve corpus data through version-aware runtime artifacts instead of relying on bundled monolithic indexes:
+
+- `src/lib/runtimeLoader.ts` resolves the active channel pointer and dataset manifest.
+- `src/lib/data.ts` loads bundle-sized bootstraps plus manifest-selected collection shards.
+- `src/lib/excerptChunks.ts` fetches chunk payloads by dataset version at runtime.
+- `src/lib/runtimeCache.ts` keeps pointer, manifest, and hot artifact shards in per-isolate memory.
+- `src/lib/runtimeSignals.ts` emits structured `[runtime]` logs for route loads, artifact loads, and chunk fetches.
+
+Operational checks for this layer are:
+
+- `bun run bundle-check`
+- `bun run smoke-routes`
+- `bun run runtime-probe`

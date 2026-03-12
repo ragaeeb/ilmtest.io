@@ -1,3 +1,4 @@
+import { startAstroDevServer } from './devServerHarness';
 import { loadLocalRuntimeData, readChunkFromDisk } from './runtimeData';
 
 type SmokeRoute = {
@@ -14,60 +15,6 @@ const getFlagValue = (args: string[], flag: string) => {
         return undefined;
     }
     return args[index + 1];
-};
-
-const readSubprocessPipe = async (pipe: Bun.Subprocess['stdout']) => {
-    if (!pipe || typeof pipe === 'number') {
-        return '';
-    }
-
-    return new Response(pipe).text();
-};
-
-const waitForServer = async (baseUrl: string, server: Bun.Subprocess, timeoutMs = 30_000) => {
-    const start = Date.now();
-
-    while (Date.now() - start < timeoutMs) {
-        if (server.exitCode !== null) {
-            const [stdout, stderr] = await Promise.all([
-                readSubprocessPipe(server.stdout),
-                readSubprocessPipe(server.stderr),
-            ]);
-            throw new Error(`Dev server exited early.\nstdout:\n${stdout}\n\nstderr:\n${stderr}`);
-        }
-
-        try {
-            const response = await fetch(new URL('/', baseUrl));
-            if (response.ok) {
-                return;
-            }
-        } catch {
-            // Server is still starting.
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-
-    server.kill();
-    throw new Error(`Timed out waiting for dev server at ${baseUrl}`);
-};
-
-const startDevServer = async (port: number) => {
-    const server = Bun.spawn(['bunx', 'astro', 'dev', '--host', '127.0.0.1', '--port', String(port)], {
-        stdout: 'pipe',
-        stderr: 'pipe',
-        env: process.env,
-    });
-    const baseUrl = `http://127.0.0.1:${port}`;
-    await waitForServer(baseUrl, server);
-
-    return {
-        baseUrl,
-        dispose: async () => {
-            server.kill();
-            await server.exited;
-        },
-    };
 };
 
 const collectSmokeRoutes = async () => {
@@ -133,7 +80,7 @@ const collectSmokeRoutes = async () => {
 
 export const runRouteSmoke = async (baseUrl?: string, port = 4321) => {
     const routes = await collectSmokeRoutes();
-    const server = baseUrl ? null : await startDevServer(port);
+    const server = baseUrl ? null : await startAstroDevServer(port);
     const targetBaseUrl = baseUrl ?? server?.baseUrl;
 
     if (!targetBaseUrl) {

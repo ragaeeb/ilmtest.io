@@ -4,7 +4,7 @@ This runbook covers the `M0-M1` dataset control plane. It publishes immutable co
 
 ## Support Matrix
 
-- Bun: `>=1.3.6`
+- Bun: `>=1.3.10`
 - Node: `>=25.0.0`
 - Wrangler package: `^4.72.0`
 - Local control-plane commands: `bun run validate-dataset`, `bun run publish-dataset`, `bun run promote-dataset`, `bun run rollback-dataset`, `bun run prune-datasets`

@@ -6,42 +6,65 @@ import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
+import RuntimeUnavailableLayout from '@/layouts/RuntimeUnavailableLayout.astro';
 import { loadCollectionsData } from '@/lib/data';
+import { isRuntimeDataError } from '@/lib/runtimeErrors';
 
-const collectionsWithCounts = await loadCollectionsData(Astro.request.url);
+let collectionsWithCounts: Awaited<ReturnType<typeof loadCollectionsData>> = [];
+let runtimeUnavailable = false;
 
-// Set cache headers for edge caching
-Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
-Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
+try {
+    collectionsWithCounts = await loadCollectionsData(Astro.request.url);
+} catch (error) {
+    if (!isRuntimeDataError(error)) {
+        throw error;
+    }
+
+    runtimeUnavailable = true;
+    Astro.response.status = error.statusCode;
+    Astro.response.headers.set('Cache-Control', 'no-store');
+    Astro.response.headers.set('CDN-Cache-Control', 'no-store');
+}
+
+if (!runtimeUnavailable) {
+    Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+    Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
+}
 ---
 
-<BaseLayout
-    title="Browse Collections"
-    description="Explore Islamic texts with verified translations and scholarly sources."
->
-    <Header slot="header" currentPath="/browse">
-        <ThemeToggle client:only="react" slot="theme-toggle" />
-    </Header>
+{
+    runtimeUnavailable ? (
+        <RuntimeUnavailableLayout title="Browse unavailable" message="Collection metadata could not be loaded from the active dataset." />
+    ) : (
+        <BaseLayout
+            title="Browse Collections"
+            description="Explore Islamic texts with verified translations and scholarly sources."
+        >
+            <Header slot="header" currentPath="/browse">
+                <ThemeToggle client:only="react" slot="theme-toggle" />
+            </Header>
 
-    <div class="browse-container">
-        <header class="browse-header">
-            <h1>Browse Collections</h1>
-            <p class="subtitle">
-                Explore carefully curated Islamic texts with authentic translations.
-            </p>
-        </header>
+            <div class="browse-container">
+                <header class="browse-header">
+                    <h1>Browse Collections</h1>
+                    <p class="subtitle">
+                        Explore carefully curated Islamic texts with authentic translations.
+                    </p>
+                </header>
 
-        <div class="collections-grid">
-            {
-                collectionsWithCounts.map((collection) => (
-                    <CollectionCard collection={collection} slug={collection.slug} />
-                ))
-            }
-        </div>
-    </div>
+                <div class="collections-grid">
+                    {
+                        collectionsWithCounts.map((collection) => (
+                            <CollectionCard collection={collection} slug={collection.slug} />
+                        ))
+                    }
+                </div>
+            </div>
 
-    <Footer slot="footer" />
-</BaseLayout>
+            <Footer slot="footer" />
+        </BaseLayout>
+    )
+}
 
 <style>
     .browse-container {

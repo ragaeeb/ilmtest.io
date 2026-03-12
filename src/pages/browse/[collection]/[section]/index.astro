@@ -8,7 +8,9 @@ import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
+import RuntimeUnavailableLayout from '@/layouts/RuntimeUnavailableLayout.astro';
 import { loadSectionPageData } from '@/lib/data';
+import { isRuntimeDataError } from '@/lib/runtimeErrors';
 import type { Excerpt } from '@/types/excerpts';
 
 const { collection: collectionSlug, section } = Astro.params;
@@ -17,16 +19,31 @@ if (!collectionSlug || !section) {
     return Astro.redirect('/404');
 }
 
-const sectionData = await loadSectionPageData(collectionSlug, section, Astro.request.url);
-if (!sectionData) {
+let sectionData: Awaited<ReturnType<typeof loadSectionPageData>> = null;
+let runtimeUnavailable = false;
+
+try {
+    sectionData = await loadSectionPageData(collectionSlug, section, Astro.request.url);
+} catch (error) {
+    if (!isRuntimeDataError(error)) {
+        throw error;
+    }
+
+    runtimeUnavailable = true;
+    Astro.response.status = error.statusCode;
+    Astro.response.headers.set('Cache-Control', 'no-store');
+    Astro.response.headers.set('CDN-Cache-Control', 'no-store');
+}
+
+if (!runtimeUnavailable && !sectionData) {
     return Astro.redirect('/browse');
 }
-const sectionTitle = sectionData.sectionSummary.title || `Section ${section}`;
-const sectionTitleArabic = sectionData.sectionSummary.titleArabic || '';
+const sectionTitle = sectionData?.sectionSummary.title || `Section ${section}`;
+const sectionTitleArabic = sectionData?.sectionSummary.titleArabic || '';
 
 const breadcrumbItems = [
     { label: 'Browse', href: '/browse' },
-    { label: sectionData.collection.roman, href: `/browse/${collectionSlug}` },
+    { label: sectionData?.collection.roman ?? 'Collection', href: `/browse/${collectionSlug}` },
     { label: sectionTitle },
 ];
 
@@ -37,15 +54,24 @@ void Footer;
 void Header;
 void Breadcrumb;
 void BaseLayout;
-void sectionData.excerpts;
+void sectionData;
 void sectionTitleArabic;
 void breadcrumbItems;
 
-// Set cache headers for edge caching
-Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
-Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
+if (!runtimeUnavailable) {
+    Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+    Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
+}
 ---
 
+{
+runtimeUnavailable || !sectionData ? (
+    <RuntimeUnavailableLayout
+        title="Section unavailable"
+        message="The active dataset is missing section browse artifacts for this route."
+        backHref={`/browse/${collectionSlug}`}
+    />
+) : (
 <BaseLayout title={sectionTitle} description={`Browse excerpts from ${sectionTitle}`}>
     <Header slot="header" currentPath="/browse">
         <ThemeToggle client:only="react" slot="theme-toggle" />
@@ -83,6 +109,8 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
 
     <Footer slot="footer" />
 </BaseLayout>
+)
+}
 
 <style>
     .section-container {
@@ -99,7 +127,8 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
     .section-title-arabic {
         font-family: var(--font-arabic-content);
         font-size: var(--text-3xl);
-        line-height: var(--leading-arabic);
+        font-weight: 400;
+        line-height: 1.4;
         margin-bottom: var(--space-4);
         color: var(--color-text-primary);
     }

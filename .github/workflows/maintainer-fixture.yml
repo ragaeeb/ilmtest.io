@@ -7,6 +7,10 @@ on:
         description: Fixture tier to materialize
         required: true
         default: medium
+      preview_base_url:
+        description: Optional deployed preview URL for cold/warm runtime probing
+        required: false
+        default: ""
 
 jobs:
   maintainer:
@@ -48,8 +52,25 @@ jobs:
       - name: Build project
         run: bun run build
 
+      - name: Bundle check
+        run: bun run bundle-check
+
       - name: Route smoke
         run: bun run smoke-routes -- --port 4323
+
+      - name: Runtime probe (local)
+        if: inputs.preview_base_url == ''
+        run: bun run runtime-probe -- --port 4325 --output tmp/runtime-probe.json
+
+      - name: Runtime probe (preview)
+        if: inputs.preview_base_url != ''
+        run: bun run runtime-probe -- --base-url "${{ inputs.preview_base_url }}" --output tmp/runtime-probe.json
+
+      - name: Upload runtime probe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-probe-${{ inputs.fixture }}
+          path: tmp/runtime-probe.json
 
       - name: Capture baseline snapshot
         run: bun run baseline
