@@ -1,5 +1,5 @@
 import { assertDatasetManifest, type DatasetManifest } from './datasetManifest';
-import { assertDatasetPointer, getDatasetPointerKey, type DatasetChannel, type DatasetPointer } from './datasetPointer';
+import { assertDatasetPointer, type DatasetChannel, type DatasetPointer, getDatasetPointerKey } from './datasetPointer';
 import { buildRuntimeCacheKey, MANIFEST_CACHE_TTL_MS, POINTER_CACHE_TTL_MS, type RuntimeCache } from './runtimeCache';
 
 export type BucketJsonReader = <T>(key: string) => Promise<T>;

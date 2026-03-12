@@ -25,7 +25,7 @@ describe('runtimeCache', () => {
     });
 
     it('evicts entries when loaders fail', async () => {
-        let now = 0;
+        const now = 0;
         const cache = new RuntimeCache(() => now);
         let calls = 0;
 

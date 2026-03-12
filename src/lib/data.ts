@@ -3,7 +3,6 @@ import type { Entity, Excerpt } from '@/types/excerpts';
 import type { DatasetManifest } from './datasetManifest';
 import type { DatasetChannel } from './datasetPointer';
 import { fetchExcerptChunk } from './excerptChunks';
-import { resolveDatasetManifest, resolveDatasetPointer } from './runtimeLoader';
 import {
     assertCollectionRuntimeShard,
     assertRuntimeCollectionSummaryArray,
@@ -13,11 +12,8 @@ import {
     type RuntimeCollectionSummary,
     type SectionSummary,
 } from './runtimeArtifacts';
-import {
-    ARTIFACT_CACHE_TTL_MS,
-    buildRuntimeCacheKey,
-    runtimeCache,
-} from './runtimeCache';
+import { ARTIFACT_CACHE_TTL_MS, buildRuntimeCacheKey, runtimeCache } from './runtimeCache';
+import { resolveDatasetManifest, resolveDatasetPointer } from './runtimeLoader';
 
 type ModuleMap<T> = Record<string, T>;
 
@@ -89,20 +85,11 @@ const getExcerptBucket = (): ExcerptBucket | undefined => env.EXCERPT_BUCKET as 
 const isProductionHost = (hostname: string) => hostname === 'ilmtest.io' || hostname === 'www.ilmtest.io';
 
 const readLocalJson = async <T>(filePath: string) => {
-    if (typeof Bun !== 'undefined') {
-        return (await Bun.file(filePath).json()) as T;
+    if (typeof Bun === 'undefined') {
+        throw new Error(`Local runtime artifact mode is unavailable without Bun: ${filePath}`);
     }
 
-    if (typeof process !== 'undefined' && typeof process.versions?.node === 'string') {
-        const nodeImport = (0, eval)(
-            'import'
-        ) as (specifier: string) => Promise<{ readFile: typeof import('node:fs/promises').readFile }>;
-        const { readFile } = await nodeImport('node:fs/promises');
-        const raw = await readFile(filePath, 'utf8');
-        return JSON.parse(raw) as T;
-    }
-
-    throw new Error(`Local runtime artifact mode is unavailable without Bun or Node: ${filePath}`);
+    return (await Bun.file(filePath).json()) as T;
 };
 
 const readBucketJson = async <T>(key: string) => {
@@ -128,10 +115,7 @@ const loadBundledRouteBootstrap = () =>
         }),
     );
 
-const loadBundledCollections = () =>
-    assertRuntimeCollectionSummaryArray(
-        getFirstModule(collectionModules, []),
-    );
+const loadBundledCollections = () => assertRuntimeCollectionSummaryArray(getFirstModule(collectionModules, []));
 
 const loadBundledTranslators = () => getFirstModule(translatorModules, []) as Array<{ id: number; name: string }>;
 
@@ -191,7 +175,9 @@ const loadCollectionsArtifact = async (requestUrl?: string) => {
             return loadBundledCollections();
         }
 
-        return assertRuntimeCollectionSummaryArray(await readLocalJson<RuntimeCollectionSummary[]>(LOCAL_COLLECTIONS_PATH));
+        return assertRuntimeCollectionSummaryArray(
+            await readLocalJson<RuntimeCollectionSummary[]>(LOCAL_COLLECTIONS_PATH),
+        );
     }
 
     return runtimeCache.getOrLoad(
@@ -199,7 +185,9 @@ const loadCollectionsArtifact = async (requestUrl?: string) => {
         ARTIFACT_CACHE_TTL_MS,
         async () =>
             assertRuntimeCollectionSummaryArray(
-                await readBucketJson<RuntimeCollectionSummary[]>(context.manifest.runtimeArtifactSet.bootstrap.collections.key),
+                await readBucketJson<RuntimeCollectionSummary[]>(
+                    context.manifest.runtimeArtifactSet.bootstrap.collections.key,
+                ),
             ),
     );
 };
@@ -218,7 +206,10 @@ export const loadTranslatorsData = async (requestUrl?: string) => {
     return runtimeCache.getOrLoad(
         buildRuntimeCacheKey('artifact', context.datasetVersion, 'translators'),
         ARTIFACT_CACHE_TTL_MS,
-        async () => await readBucketJson<Array<{ id: number; name: string }>>(context.manifest.runtimeArtifactSet.bootstrap.translators.key),
+        async () =>
+            await readBucketJson<Array<{ id: number; name: string }>>(
+                context.manifest.runtimeArtifactSet.bootstrap.translators.key,
+            ),
     );
 };
 
@@ -301,7 +292,9 @@ const readSectionChunks = async (
         return [];
     }
     if (descriptors.length > 8) {
-        throw new Error(`Section ${sectionId} exceeds the runtime chunk fan-out cap with ${descriptors.length} descriptors`);
+        throw new Error(
+            `Section ${sectionId} exceeds the runtime chunk fan-out cap with ${descriptors.length} descriptors`,
+        );
     }
 
     const chunks = await Promise.all(
@@ -334,15 +327,18 @@ export const loadSectionPageData = async (
     }
 
     const { datasetVersion } = await loadRuntimeContext(requestUrl);
-    const excerpts = await readSectionChunks(shard, sectionId, requestUrl, datasetVersion === 'local' ? undefined : datasetVersion);
+    const excerpts = await readSectionChunks(
+        shard,
+        sectionId,
+        requestUrl,
+        datasetVersion === 'local' ? undefined : datasetVersion,
+    );
 
     return {
         collection,
         shard,
         sectionSummary,
-        excerpts: excerpts
-            .filter((excerpt) => excerpt.id !== sectionId)
-            .sort((left, right) => left.from - right.from),
+        excerpts: excerpts.filter((excerpt) => excerpt.id !== sectionId).sort((left, right) => left.from - right.from),
     };
 };
 
@@ -402,7 +398,8 @@ export const loadExcerptPageData = async (
 
     const currentIndex = sectionExcerptList.indexOf(excerptId);
     const previousExcerptId = currentIndex > 0 ? sectionExcerptList[currentIndex - 1] : null;
-    const nextExcerptId = currentIndex >= 0 && currentIndex < sectionExcerptList.length - 1 ? sectionExcerptList[currentIndex + 1] : null;
+    const nextExcerptId =
+        currentIndex >= 0 && currentIndex < sectionExcerptList.length - 1 ? sectionExcerptList[currentIndex + 1] : null;
 
     return {
         ...sectionData,

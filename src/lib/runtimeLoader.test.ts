@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-import { ARTIFACT_SCHEMA_VERSION, CHUNK_SCHEMA_VERSION, DATASET_SCHEMA_VERSION, APP_MIN_DATASET_SCHEMA_VERSION } from './datasetManifest';
+import {
+    APP_MIN_DATASET_SCHEMA_VERSION,
+    ARTIFACT_SCHEMA_VERSION,
+    CHUNK_SCHEMA_VERSION,
+    DATASET_SCHEMA_VERSION,
+} from './datasetManifest';
 import { RuntimeCache } from './runtimeCache';
 import { resolveDatasetManifest, resolveDatasetPointer } from './runtimeLoader';
 

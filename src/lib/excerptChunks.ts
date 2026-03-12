@@ -42,25 +42,12 @@ const readLocalChunk = async (chunkKey: string) => {
         return (await file.json()) as ChunkPayload;
     }
 
-    if (typeof process !== 'undefined' && typeof process.versions?.node === 'string') {
-        const nodeImport = (0, eval)(
-            'import'
-        ) as (specifier: string) => Promise<{ readFile: typeof import('node:fs/promises').readFile }>;
-        try {
-            const { readFile } = await nodeImport('node:fs/promises');
-            const raw = await readFile(filePath, 'utf8');
-            return JSON.parse(raw) as ChunkPayload;
-        } catch {
-            return null;
-        }
-    }
-
     return null;
 };
 
 export const fetchExcerptChunk = async (
     chunkKey: string,
-    requestUrl?: string,
+    _requestUrl?: string,
     datasetVersion?: string,
 ): Promise<ChunkPayload | null> => {
     if (import.meta.env.DEV) {

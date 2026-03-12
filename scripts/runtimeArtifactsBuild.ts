@@ -1,9 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { Collection } from '@/types/excerpts';
-import {
-    ARTIFACT_SCHEMA_VERSION,
-} from '../src/lib/datasetManifest';
+import { ARTIFACT_SCHEMA_VERSION } from '../src/lib/datasetManifest';
 import {
     assertCollectionRuntimeShard,
     assertRuntimeCollectionSummaryArray,
@@ -129,7 +127,9 @@ export const buildRuntimeArtifacts = async (options: BuildRuntimeArtifactsOption
     const routeBootstrap: RuntimeRouteBootstrap = {
         artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
         generatedAt: options.generatedAt,
-        collectionsBySlug: Object.fromEntries(collections.map((collection) => [collection.slug, { id: collection.id }])),
+        collectionsBySlug: Object.fromEntries(
+            collections.map((collection) => [collection.slug, { id: collection.id }]),
+        ),
     };
     const collectionShards = Object.fromEntries(
         await Promise.all(

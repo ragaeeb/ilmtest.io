@@ -322,10 +322,10 @@ const prepareLocalDataset = async (
     for (const artifactPath of runtimeArtifactFiles.sort()) {
         const body = new Uint8Array(await Bun.file(artifactPath).arrayBuffer());
         objects.push({
-            key: `${datasetPrefix}/artifacts/runtime/${relative(buildMetadata.outputs.runtimeArtifactsDir, artifactPath).replace(
-                /\\/g,
-                '/',
-            )}`,
+            key: `${datasetPrefix}/artifacts/runtime/${relative(
+                buildMetadata.outputs.runtimeArtifactsDir,
+                artifactPath,
+            ).replace(/\\/g, '/')}`,
             bytes: body.byteLength,
             contentType: JSON_CONTENT_TYPE,
             sha256: sha256Hex(body),

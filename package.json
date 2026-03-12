@@ -1,7 +1,7 @@
 {
     "name": "ilmtest.io",
     "type": "module",
-    "version": "0.0.4",
+    "version": "0.0.5",
     "author": {
         "name": "Ragaeeb Haq",
         "url": "https://github.com/ragaeeb"
@@ -20,7 +20,9 @@
         "build": "astro build",
         "check": "astro check",
         "lint": "biome check .",
-        "format": "biome check --write .",
+        "format": "biome check --write --unsafe .",
+        "install-hooks": "bun scripts/installGitHooks.ts",
+        "prepare": "bun run install-hooks",
         "baseline": "bun scripts/reportBaseline.ts",
         "setup": "bun scripts/setup.ts",
         "clean": "rm -rf src/data tmp/excerpt-chunks tmp/dataset-build tmp/publish-state tmp/runtime-artifacts dist code_packet.txt",

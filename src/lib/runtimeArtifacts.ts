@@ -174,11 +174,12 @@ export const assertCollectionRuntimeShard = (value: unknown): CollectionRuntimeS
     return value;
 };
 
-export const buildSectionChunkDescriptor = (chunkKey: string, start: number, end: number) => ({
-    chunkKey,
-    start,
-    end,
-}) satisfies SectionChunkDescriptor;
+export const buildSectionChunkDescriptor = (chunkKey: string, start: number, end: number) =>
+    ({
+        chunkKey,
+        start,
+        end,
+    }) satisfies SectionChunkDescriptor;
 
 export const buildRuntimeArtifactPayload = <T>(value: T) => ({
     artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,

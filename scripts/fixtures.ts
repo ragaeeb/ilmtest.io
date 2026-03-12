@@ -8,16 +8,15 @@ import {
     assertDatasetBuildMetadata,
     CHUNK_SCHEMA_VERSION,
     DATASET_SCHEMA_VERSION,
-    type DatasetBuildMetadata,
 } from '../src/lib/datasetManifest';
 import type { LookupIndexes } from './indexing';
+import { buildRuntimeArtifacts, writeRuntimeArtifacts } from './runtimeArtifactsBuild';
 import {
     type ChunkPayload,
     type LocalCorpusPaths,
     resolveLocalCorpusPaths,
     type TranslatorRecord,
 } from './runtimeData';
-import { buildRuntimeArtifacts, writeRuntimeArtifacts } from './runtimeArtifactsBuild';
 
 export type FixtureVariant = 'tiny' | 'medium';
 
@@ -325,7 +324,7 @@ const mergeCollectionFixture = (indexes: LookupIndexes, built: BuiltCollectionFi
     indexes.entityToCollections[authorId] = built.entityMapping;
 };
 
-const buildFixtureCorpus = (spec: FixtureSpec, generatedAt: string, gitCommit: string, paths: LocalCorpusPaths) => {
+const buildFixtureCorpus = (spec: FixtureSpec, _generatedAt: string, _gitCommit: string, _paths: LocalCorpusPaths) => {
     const collections: Collection[] = [];
     const indexes: LookupIndexes = {
         sectionToExcerpts: {},

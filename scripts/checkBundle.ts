@@ -45,10 +45,7 @@ const main = async () => {
         throw new Error('Missing dist output. Run `bun run build` before bundle checks.');
     }
 
-    const allFiles = [
-        ...(await scanDir(FUNCTION_DIR)),
-        ...(await scanDir(WORKER_DIR)),
-    ];
+    const allFiles = [...(await scanDir(FUNCTION_DIR)), ...(await scanDir(WORKER_DIR))];
 
     const offendingFiles: string[] = [];
     for (const filePath of allFiles) {
@@ -61,8 +58,8 @@ const main = async () => {
         }
     }
 
-    const filenameHits = allFiles.filter((filePath) =>
-        filePath.includes('indexes.json') || filePath.includes('indexes.full.json'),
+    const filenameHits = allFiles.filter(
+        (filePath) => filePath.includes('indexes.json') || filePath.includes('indexes.full.json'),
     );
 
     if (offendingFiles.length > 0 || filenameHits.length > 0) {

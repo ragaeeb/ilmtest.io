@@ -9,12 +9,8 @@ describe('route smoke', () => {
         return;
     }
 
-    it(
-        'serves collection, section, and excerpt routes',
-        async () => {
-            const result = await runRouteSmoke(undefined, 4372);
-            expect(result.routeCount).toBeGreaterThan(0);
-        },
-        60_000,
-    );
+    it('serves collection, section, and excerpt routes', async () => {
+        const result = await runRouteSmoke(undefined, 4372);
+        expect(result.routeCount).toBeGreaterThan(0);
+    }, 60_000);
 });

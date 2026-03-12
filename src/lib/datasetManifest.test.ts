@@ -113,15 +113,15 @@ describe('datasetManifest', () => {
                 chunkBytes: 256,
                 srcDataBytes: 384,
             },
-                outputs: {
-                    collectionsFile: 'src/data/collections.json',
-                    translatorsFile: 'src/data/translators.json',
-                    indexesFile: 'src/data/indexes.json',
-                    chunksDir: 'tmp/excerpt-chunks',
-                    routeBootstrapFile: 'src/data/runtime-bootstrap.json',
-                    runtimeArtifactsDir: 'tmp/runtime-artifacts',
-                },
-            };
+            outputs: {
+                collectionsFile: 'src/data/collections.json',
+                translatorsFile: 'src/data/translators.json',
+                indexesFile: 'src/data/indexes.json',
+                chunksDir: 'tmp/excerpt-chunks',
+                routeBootstrapFile: 'src/data/runtime-bootstrap.json',
+                runtimeArtifactsDir: 'tmp/runtime-artifacts',
+            },
+        };
 
         expect(isDatasetBuildMetadata(metadata)).toBe(true);
         expect(assertDatasetBuildMetadata(metadata)).toEqual(metadata);
