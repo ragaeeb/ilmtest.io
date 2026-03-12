@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { Collection, Excerpt } from '../scripts/types/excerpts';
+import type { Collection, Excerpt } from '@/types/excerpts';
 import {
     formatAnonymousCitation,
     formatAuthorName,
@@ -46,12 +46,12 @@ describe('getCitationType', () => {
     });
 
     it('should return quran for surah/ayah metadata', () => {
-        const excerpt = createExcerpt({ meta: { surah: 2, ayah: 103 } as any });
+        const excerpt = createExcerpt({ meta: { surah: 2, ayah: 103 } });
         expect(getCitationType(excerpt)).toBe('quran');
     });
 
     it('should return web for url metadata', () => {
-        const excerpt = createExcerpt({ meta: { url: 'https://example.com' } as any });
+        const excerpt = createExcerpt({ meta: { url: 'https://example.com' } });
         expect(getCitationType(excerpt)).toBe('web');
     });
 
@@ -130,7 +130,7 @@ describe('formatQuranCitation', () => {
     it('should format Quran citation with surah name', () => {
         const excerpt = createExcerpt({
             from: 103,
-            meta: { surah: 2, ayah: 103, surahName: 'al-Baqarah' } as any,
+            meta: { surah: 2, ayah: 103, surahName: 'al-Baqarah' },
         });
         const collection = createCollection({
             authors: [],
@@ -145,7 +145,7 @@ describe('formatQuranCitation', () => {
     it('should format Quran citation without surah name', () => {
         const excerpt = createExcerpt({
             from: 103,
-            meta: { surah: 2, ayah: 103 } as any,
+            meta: { surah: 2, ayah: 103 },
         });
         const collection = createCollection({
             authors: [],
