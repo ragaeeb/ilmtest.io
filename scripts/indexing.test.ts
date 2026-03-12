@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'bun:test';
-import type { Excerpt, Heading } from '../src/types/excerpts';
-import { addEntityMappings, findSectionForExcerpt, generateIndexes, mergeIndexes } from './indexing';
+import type { Compilation, Excerpt, Heading } from '../src/types/excerpts';
+import {
+    addEntityMappings,
+    findSectionForExcerpt,
+    generateIndexes,
+    type LookupIndexes,
+    mergeIndexes,
+} from './indexing';
 
 describe('findSectionForExcerpt', () => {
     const headings: Heading[] = [
@@ -53,7 +59,7 @@ describe('generateIndexes', () => {
             { id: 'P4', from: 15, nass: '', text: '', translator: 890, lastUpdatedAt: 0 },
         ];
 
-        const data = {
+        const data: Compilation = {
             headings,
             excerpts,
             footnotes: [],
@@ -61,6 +67,7 @@ describe('generateIndexes', () => {
             contractVersion: '1.0',
             createdAt: 0,
             lastUpdatedAt: 0,
+            sourceDocument: { pages: [], timestamp: new Date(0) },
         };
 
         const indexes = generateIndexes(data, 'test-collection');
@@ -106,11 +113,13 @@ describe('mergeIndexes', () => {
 
 describe('addEntityMappings', () => {
     it('should add author mappings to indexes', () => {
-        const indexes = {
+        const indexes: LookupIndexes = {
             sectionToExcerpts: {},
             excerptToSection: {},
             pageToHeading: {},
             collectionToSections: {},
+            sectionToChunks: {},
+            excerptToChunk: {},
             entityToCollections: {},
         };
 

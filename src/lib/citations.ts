@@ -11,33 +11,53 @@ export type CitationMeta =
     | { type: 'web'; url: string }
     | { type: 'unknown' };
 
+type HadithCitationMeta = Extract<CitationMeta, { type: 'hadith' }>;
+type BookCitationMeta = Extract<CitationMeta, { type: 'book' }>;
+type QuranCitationMeta = Extract<CitationMeta, { type: 'quran' }>;
+type WebCitationMeta = Extract<CitationMeta, { type: 'web' }>;
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
+const getCitationMeta = (excerpt: Excerpt): CitationMeta => {
+    const meta = excerpt.meta;
+
+    if (!isRecord(meta)) {
+        return { type: 'unknown' };
+    }
+
+    if ('num' in meta && typeof meta.num === 'string') {
+        return { type: 'hadith', num: meta.num };
+    }
+
+    if ('vol' in meta && typeof meta.vol === 'number') {
+        return {
+            type: 'book',
+            vol: meta.vol,
+            page: 'vp' in meta && typeof meta.vp === 'number' ? meta.vp : undefined,
+        };
+    }
+
+    if ('surah' in meta && typeof meta.surah === 'number' && 'ayah' in meta && typeof meta.ayah === 'number') {
+        return {
+            type: 'quran',
+            surah: meta.surah,
+            ayah: meta.ayah,
+            surahName: 'surahName' in meta && typeof meta.surahName === 'string' ? meta.surahName : undefined,
+        };
+    }
+
+    if ('url' in meta && typeof meta.url === 'string') {
+        return { type: 'web', url: meta.url };
+    }
+
+    return { type: 'unknown' };
+};
+
 /**
  * Get citation type from excerpt metadata.
  */
 export const getCitationType = (excerpt: Excerpt): CitationMeta['type'] => {
-    const meta = excerpt.meta as Record<string, unknown> | undefined;
-
-    if (!meta) {
-        return 'unknown';
-    }
-
-    if ('num' in meta && typeof meta.num === 'string') {
-        return 'hadith';
-    }
-
-    if ('vol' in meta && typeof meta.vol === 'number') {
-        return 'book';
-    }
-
-    if ('surah' in meta && 'ayah' in meta) {
-        return 'quran';
-    }
-
-    if ('url' in meta && typeof meta.url === 'string') {
-        return 'web';
-    }
-
-    return 'unknown';
+    return getCitationMeta(excerpt).type;
 };
 
 /**
@@ -65,7 +85,7 @@ export const formatAuthorName = (collection: Collection): string => {
 export const formatHadithCitation = (excerpt: Excerpt, collection: Collection): string => {
     const author = formatAuthorName(collection);
     const title = collection.roman;
-    const meta = excerpt.meta as { num: string };
+    const meta = getCitationMeta(excerpt) as HadithCitationMeta;
     const num = arabicToWestern(meta.num);
     if (author) {
         return `${author}, ${title} #${num}`;
@@ -80,9 +100,9 @@ export const formatHadithCitation = (excerpt: Excerpt, collection: Collection): 
 export const formatBookCitation = (excerpt: Excerpt, collection: Collection): string => {
     const author = formatAuthorName(collection);
     const title = collection.roman;
-    const meta = excerpt.meta as { vol: number; vp?: number };
+    const meta = getCitationMeta(excerpt) as BookCitationMeta;
 
-    const volPage = meta.vp ? `${meta.vol}/${meta.vp}` : `${meta.vol}`;
+    const volPage = meta.page ? `${meta.vol}/${meta.page}` : `${meta.vol}`;
 
     if (author) {
         return `${author}, ${title} ${volPage}`;
@@ -96,7 +116,7 @@ export const formatBookCitation = (excerpt: Excerpt, collection: Collection): st
  */
 export const formatQuranCitation = (excerpt: Excerpt, collection: Collection): string => {
     void collection;
-    const meta = excerpt.meta as { surah: number; ayah: number; surahName?: string };
+    const meta = getCitationMeta(excerpt) as QuranCitationMeta;
     const surahDisplay = meta.surahName || `Surah ${meta.surah}`;
     return `${surahDisplay} ${meta.surah}:${meta.ayah}`;
 };
@@ -136,9 +156,9 @@ export type CitationParts = {
 };
 
 export const getCitationParts = (excerpt: Excerpt, collection: Collection): CitationParts => {
-    const type = getCitationType(excerpt);
+    const meta = getCitationMeta(excerpt);
 
-    switch (type) {
+    switch (meta.type) {
         case 'hadith':
             return {
                 label: formatHadithCitation(excerpt, collection),
@@ -150,7 +170,6 @@ export const getCitationParts = (excerpt: Excerpt, collection: Collection): Cita
                 url: collection.citationTemplate.replace(':page', excerpt.from.toString()),
             };
         case 'quran': {
-            const meta = excerpt.meta as { surah: number; ayah: number };
             return {
                 label: formatQuranCitation(excerpt, collection),
                 url: collection.citationTemplate
@@ -160,10 +179,10 @@ export const getCitationParts = (excerpt: Excerpt, collection: Collection): Cita
             };
         }
         case 'web': {
-            const meta = excerpt.meta as { url: string };
+            const webMeta = meta as WebCitationMeta;
             return {
                 label: formatWebCitation(excerpt, collection),
-                url: meta.url,
+                url: webMeta.url,
             };
         }
         case 'unknown':

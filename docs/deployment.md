@@ -1,5 +1,12 @@
 # Deploying IlmTest to Cloudflare Pages
 
+This document is now legacy/current-state deployment guidance. The new corpus publish flow is documented in:
+
+- [Publish Corpus](/Users/rhaq/workspace/ilmtest.io/docs/runbooks/publish-corpus.md)
+- [Roll Back Corpus](/Users/rhaq/workspace/ilmtest.io/docs/runbooks/rollback-corpus.md)
+
+Pages deployment still exists for continuity until the `M4` Workers cutover is complete.
+
 This guide outlines the steps to deploy the IlmTest Astro application to Cloudflare Pages.
 
 ## Prerequisites
@@ -16,9 +23,14 @@ This guide outlines the steps to deploy the IlmTest Astro application to Cloudfl
 - **Build command**: `bun run build`
 - **Build output directory**: `dist`
 - **Helper scripts**:
-  - `bun run upload-r2` (bulk upload chunks to R2)
-  - `bun run resume` (resume upload with skip-existing)
-  - `bun run deploy` (build → upload chunks → deploy Pages project)
+  - `bun run validate-dataset` (validate local dataset inputs before publish)
+  - `bun run publish-dataset` (publish immutable dataset artifacts to R2)
+  - `bun run promote-dataset` (move the preview or prod dataset pointer)
+  - `bun run rollback-dataset` (move a dataset pointer back to a prior dataset)
+  - `bun run prune-datasets` (delete older preview datasets not protected by history)
+  - `bun run upload-r2` (legacy bulk upload helper)
+  - `bun run resume` (legacy resume helper)
+  - `bun run deploy` (legacy Pages-oriented build → upload → deploy flow)
   - `bun run create-r2-bucket` (creates R2 bucket)
 
 ## Option A: Deploy from your machine (Wrangler)

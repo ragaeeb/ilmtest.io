@@ -1,6 +1,6 @@
 export type WebPage = BasePage & ({ body: string } | { title: string });
 
-interface BasePage {
+type BasePage = {
     accessed?: Date; // serialized "2025-02-25T12:07:16.438Z"
     body?: string;
     footnotes?: string;
@@ -20,7 +20,7 @@ interface BasePage {
     publishTimestamp?: Date;
     title?: string;
     url?: string;
-}
+};
 
 export type ScrapeResult = {
     pages: WebPage[];

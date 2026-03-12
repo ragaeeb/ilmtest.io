@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readdir } from 'node:fs/promises';
 import { format, join } from 'node:path';
 import {
     doApiGet,
@@ -11,8 +11,28 @@ import {
 import type { BookData } from 'shamela';
 import { slugify } from '@/lib/textUtils';
 import type { Collection, Compilation, Excerpt, Heading } from '@/types/excerpts';
+import pkg from '../package.json';
+import {
+    APP_MIN_DATASET_SCHEMA_VERSION,
+    ARTIFACT_SCHEMA_VERSION,
+    assertDatasetBuildMetadata,
+    CHUNK_SCHEMA_VERSION,
+    DATASET_SCHEMA_VERSION,
+    type DatasetBuildMetadata,
+    type DatasetSourceProvenance,
+} from '../src/lib/datasetManifest';
 import { chunkExcerpts } from './chunking';
-import { HF_ASL_STORE, HF_EXCERPT_STORE, HF_SHAMELA4_STORE, HF_TOKEN, ILMTEST_API_URL, OUTPUT_DIR } from './env';
+import {
+    HF_ASL_REVISION,
+    HF_ASL_STORE,
+    HF_EXCERPT_REVISION,
+    HF_EXCERPT_STORE,
+    HF_SHAMELA4_REVISION,
+    HF_SHAMELA4_STORE,
+    HF_TOKEN,
+    ILMTEST_API_URL,
+    OUTPUT_DIR,
+} from './env';
 import { downloadDataSet } from './huggingface';
 import { addEntityMappings, generateIndexes, type LookupIndexes } from './indexing';
 import { decompressJson } from './io';
@@ -21,13 +41,74 @@ import { mapHeadingIdToShamelaTitleId, mapTitlesToTableOfContents, type TitleNod
 const SHAMELA4_LIBRARY_ID = '75';
 const OUTPUT_DATA_DIR = 'src/data';
 const CONTENT_CHUNKS_DIR = 'tmp/excerpt-chunks';
+const DATASET_BUILD_DIR = 'tmp/dataset-build';
 const COLLECTIONS_FILE = 'collections.json';
 const TRANSLATORS_FILE = 'translators.json';
 const INDEXES_FILE = 'indexes.json';
+const DATASET_METADATA_FILE = 'metadata.json';
 
-const downloadAndUnzipFile = async <T = unknown>({ id, dataset }: { id: string; dataset: string }) => {
+const getGitCommit = async () => {
+    const proc = Bun.spawn(['git', 'rev-parse', '--short', 'HEAD'], {
+        stdout: 'pipe',
+        stderr: 'ignore',
+    });
+    const stdout = (await new Response(proc.stdout).text()).trim();
+
+    if ((await proc.exited) === 0 && stdout) {
+        return stdout;
+    }
+
+    return 'unknown';
+};
+
+const walkDirectoryBytes = async (dir: string): Promise<number> => {
+    const entries = await readdir(dir, { encoding: 'utf8', withFileTypes: true }).catch(() => null);
+    if (!entries) {
+        return 0;
+    }
+    let total = 0;
+    for (const entry of entries) {
+        const fullPath = join(dir, entry.name);
+        if (entry.isDirectory()) {
+            total += await walkDirectoryBytes(fullPath);
+            continue;
+        }
+
+        total += Bun.file(fullPath).size;
+    }
+
+    return total;
+};
+
+const buildSourceProvenance = (): DatasetSourceProvenance[] => [
+    {
+        name: 'excerptStore',
+        dataset: HF_EXCERPT_STORE,
+        revision: HF_EXCERPT_REVISION,
+    },
+    {
+        name: 'aslStore',
+        dataset: HF_ASL_STORE,
+        revision: HF_ASL_REVISION,
+    },
+    {
+        name: 'shamelaStore',
+        dataset: HF_SHAMELA4_STORE,
+        revision: HF_SHAMELA4_REVISION,
+    },
+];
+
+const downloadAndUnzipFile = async <T = unknown>({
+    id,
+    dataset,
+    revision,
+}: {
+    id: string;
+    dataset: string;
+    revision: string;
+}) => {
     const fileName = `${id}.json.br`;
-    const buffer = await downloadDataSet(dataset, fileName, { authToken: HF_TOKEN });
+    const buffer = await downloadDataSet(dataset, fileName, { authToken: HF_TOKEN, revision });
     console.log('Uncompressing...', fileName);
     return decompressJson<T>(buffer);
 };
@@ -64,12 +145,14 @@ const getDataSetPropsForCollection = (c: Collection) => {
         return {
             dataset: HF_SHAMELA4_STORE,
             id: c.src.fid,
+            revision: HF_SHAMELA4_REVISION,
         };
     }
 
     return {
         dataset: HF_ASL_STORE,
         id: c.id,
+        revision: HF_ASL_REVISION,
     };
 };
 
@@ -81,7 +164,11 @@ const loadExcerpts = async (collectionId: string): Promise<Compilation> => {
     }
 
     console.log('Downloading excerpts from HuggingFace...');
-    const excerpts: Compilation = await downloadAndUnzipFile({ id: collectionId, dataset: HF_EXCERPT_STORE });
+    const excerpts: Compilation = await downloadAndUnzipFile({
+        id: collectionId,
+        dataset: HF_EXCERPT_STORE,
+        revision: HF_EXCERPT_REVISION,
+    });
 
     console.log('Loading collection metadata...');
     excerpts.collection = await loadCollection(collectionId);
@@ -407,15 +494,20 @@ export const setup = async (...collectionIds: string[]) => {
     console.log('Starting setup\n');
 
     init('3', ILMTEST_API_URL!);
+    const gitCommit = await getGitCommit();
 
     await Promise.all([
         mkdir(OUTPUT_DIR, { recursive: true }),
         mkdir(OUTPUT_DATA_DIR, { recursive: true }),
         mkdir(CONTENT_CHUNKS_DIR, { recursive: true }),
+        mkdir(DATASET_BUILD_DIR, { recursive: true }),
     ]);
 
     const allTranslators = await loadTranslators();
     const collections: Collection[] = [];
+    let totalSections = 0;
+    let totalExcerpts = 0;
+    let totalChunks = 0;
     const indexes: LookupIndexes = {
         sectionToExcerpts: {},
         excerptToSection: {},
@@ -455,6 +547,8 @@ export const setup = async (...collectionIds: string[]) => {
 
         console.log(`  ✓ ${data.excerpts.length} excerpts`);
         console.log(`  ✓ ${headingsWithRanges.length} headings with ranges`);
+        totalExcerpts += data.excerpts.length;
+        totalSections += headingsWithRanges.length;
 
         // Generate lookup indexes for this collection
         const partialIndexes = generateIndexes(data, id);
@@ -475,6 +569,7 @@ export const setup = async (...collectionIds: string[]) => {
         const chunkResult = await writeSectionChunks(id, data, sectionToExcerpts, headingMarkers);
         indexes.sectionToChunks[id] = chunkResult.sectionToChunks;
         indexes.excerptToChunk[id] = chunkResult.excerptToChunk;
+        totalChunks += chunkResult.chunkCount;
         console.log(`  ✓ ${chunkResult.chunkCount} content chunks written to ${CONTENT_CHUNKS_DIR}`);
     }
 
@@ -499,6 +594,49 @@ export const setup = async (...collectionIds: string[]) => {
     const indexesPath = join(OUTPUT_DATA_DIR, INDEXES_FILE);
     await Bun.write(indexesPath, JSON.stringify(indexes, null, 2));
     console.log(`✓ Written ${indexesPath}`);
+
+    const srcDataBytes = Bun.file(collectionsPath).size + Bun.file(translatorsPath).size + Bun.file(indexesPath).size;
+    const chunkBytes = await walkDirectoryBytes(CONTENT_CHUNKS_DIR);
+    const metadata: DatasetBuildMetadata = {
+        generatedAt: new Date().toISOString(),
+        gitCommit,
+        schemaVersions: {
+            datasetSchemaVersion: DATASET_SCHEMA_VERSION,
+            chunkSchemaVersion: CHUNK_SCHEMA_VERSION,
+            artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
+            appMinDatasetSchemaVersion: APP_MIN_DATASET_SCHEMA_VERSION,
+        },
+        sourceProvenance: buildSourceProvenance(),
+        toolVersions: {
+            app: pkg.version,
+            sdk: pkg.devDependencies['@ilmtest/ilmtest-sdk-js'] ?? 'unknown',
+            bun: Bun.version,
+            node: process.versions.node,
+            wrangler: pkg.devDependencies.wrangler ?? undefined,
+        },
+        counts: {
+            collections: collections.length,
+            translators: allTranslators.length,
+            sections: totalSections,
+            excerpts: totalExcerpts,
+            chunks: totalChunks,
+        },
+        bytes: {
+            chunkBytes,
+            srcDataBytes,
+        },
+        outputs: {
+            collectionsFile: collectionsPath,
+            translatorsFile: translatorsPath,
+            indexesFile: indexesPath,
+            chunksDir: CONTENT_CHUNKS_DIR,
+        },
+    };
+
+    const metadataPath = join(DATASET_BUILD_DIR, DATASET_METADATA_FILE);
+    assertDatasetBuildMetadata(metadata);
+    await Bun.write(metadataPath, JSON.stringify(metadata, null, 2));
+    console.log(`✓ Written ${metadataPath}`);
 
     console.log('\n✅ Setup complete!');
 };

@@ -23,7 +23,10 @@ pnpm-debug.log*
 # jetbrains setting folder
 .idea/
 
-src/content/**
+#src/content/**
 src/data/**
 .wrangler
 tmp
+tmp/dataset-build/
+tmp/publish-state/
+docs/baselines/current.json

@@ -2,6 +2,15 @@
 
 This document outlines the high-level system architecture and data flow of IlmTest.
 
+## ADRs
+
+- [ADR 0001: Workers Is The Target Runtime](/Users/rhaq/workspace/ilmtest.io/docs/adr/0001-workers-runtime.md)
+- [ADR 0002: Publish Immutable Datasets](/Users/rhaq/workspace/ilmtest.io/docs/adr/0002-immutable-datasets.md)
+- [ADR 0003: R2 Manifest And Pointer Select The Active Dataset](/Users/rhaq/workspace/ilmtest.io/docs/adr/0003-r2-manifest-pointer.md)
+- [ADR 0004: Pagefind Is The Search MVP](/Users/rhaq/workspace/ilmtest.io/docs/adr/0004-pagefind-search-mvp.md)
+- [ADR 0005: D1 Backs Moderated Reports](/Users/rhaq/workspace/ilmtest.io/docs/adr/0005-d1-reports.md)
+- [ADR 0006: Inline Mentions Are Deferred](/Users/rhaq/workspace/ilmtest.io/docs/adr/0006-inline-mentions-deferred.md)
+
 ## 1. System Context Diagram
 
 High-level view of how users interact with the system and how the system is built.
@@ -103,3 +112,12 @@ sequenceDiagram
 3.  **Edge Strategy**:
     *   **Caching**: SSR responses include `Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400`, honored by Cloudflare Edge.
     *   **R2 Integration**: The Worker fetches granular content chunks from R2 on demand, keeping memory pressure low.
+
+## 3. M0-M1 Dataset Control Plane
+
+The current request path still uses bundled `src/data/*.json` plus legacy flat chunk lookups. During `M0-M1`, the repo adds a separate dataset control plane without changing live route behavior:
+
+- `setup.ts` now emits `tmp/dataset-build/metadata.json` as the publishing input contract.
+- Immutable datasets publish under `datasets/<datasetVersion>/...`.
+- `channels/prod.json` and `channels/preview.json` select the active dataset manifest for the future runtime path.
+- Corpus publishing, code deployment, and dataset promotion are now separate release lanes.

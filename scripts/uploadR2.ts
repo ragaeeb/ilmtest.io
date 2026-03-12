@@ -27,22 +27,6 @@ let r2Endpoint =
     process.env.S3_ENDPOINT ??
     process.env.AWS_ENDPOINT ??
     (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
-const SESSION = 'debug-session';
-const RUN_ID = 'pre-fix';
-const ENDPOINT = 'http://127.0.0.1:7242/ingest/52426cdf-aa70-46f4-bea3-a95a3d7c7923';
-
-const log = (payload: Record<string, unknown>) => {
-    return fetch(ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            timestamp: Date.now(),
-            sessionId: SESSION,
-            runId: RUN_ID,
-            ...payload,
-        }),
-    }).catch(() => {});
-};
 
 const resolveAccountIdFromToken = async (): Promise<string | null> => {
     if (!cfApiToken || accountId) {
@@ -99,20 +83,6 @@ const ensureR2Credentials = async () => {
         await resolveS3AccessFromToken();
     }
 };
-
-// #region agent log
-await log({
-    hypothesisId: 'H4',
-    location: 'scripts/uploadR2.ts:26',
-    message: 'debug-early-args',
-    data: {
-        argvBucket: process.argv[2] ?? null,
-        argvBaseDir: process.argv[3] ?? null,
-        envBucket: process.env.R2_BUCKET ?? null,
-        envBaseDir: process.env.R2_BASE_DIR ?? null,
-    },
-});
-// #endregion
 
 if (!bucketName) {
     console.error('Usage: bun scripts/uploadR2.ts <bucket> [baseDir]');
@@ -198,35 +168,7 @@ const main = async () => {
     let skipped = 0;
     let lastLogged = 0;
 
-    // #region agent log
-    await log({
-        hypothesisId: 'H1',
-        location: 'scripts/uploadR2.ts:39',
-        message: 'upload-start',
-        data: { bucketName, baseDir, concurrency, useRemote, fileCount: files.length },
-    });
-    // #endregion
     await ensureR2Credentials();
-    // #region agent log
-    await log({
-        hypothesisId: 'H1',
-        location: 'scripts/uploadR2.ts:94',
-        message: 'debug-config',
-        data: {
-            bucketName,
-            baseDir,
-            concurrency,
-            useRemote,
-            skipExisting,
-            listPrefix,
-            hasEndpoint: Boolean(r2Endpoint),
-            hasAccessKey: Boolean(accessKeyId),
-            hasSecretKey: Boolean(secretAccessKey),
-            hasCfToken: Boolean(cfApiToken),
-            hasAccountId: Boolean(accountId),
-        },
-    });
-    // #endregion
 
     let fileCursor = 0;
 
@@ -257,20 +199,6 @@ const main = async () => {
         console.error('[uploadR2] Aborting: set R2_CONFIRM=1 after verifying sanity check output.');
         process.exit(1);
     }
-    // #region agent log
-    await log({
-        hypothesisId: 'H2',
-        location: 'scripts/uploadR2.ts:129',
-        message: 'debug-existing-keys',
-        data: {
-            skipExisting,
-            listPrefix,
-            existingCount: existingObjectKeys.size,
-            skipReason: existingKeysReason ?? null,
-        },
-    });
-    // #endregion
-
     const logProgress = () => {
         const completed = successes + failures + skipped;
         if (completed <= lastLogged) {
@@ -286,7 +214,6 @@ const main = async () => {
         );
     };
 
-    let inFlight = 0;
     const runOne = async () => {
         while (fileCursor < files.length) {
             const filePath = files[fileCursor++];
@@ -297,7 +224,6 @@ const main = async () => {
                 logProgress();
                 continue;
             }
-            inFlight += 1;
             const args = [
                 'wrangler',
                 'r2',
@@ -345,48 +271,14 @@ const main = async () => {
                     continue;
                 }
                 failures += 1;
-                // #region agent log
-                await log({
-                    hypothesisId: 'H3',
-                    location: 'scripts/uploadR2.ts:77',
-                    message: 'upload-error',
-                    data: { key, useRemote },
-                });
-                // #endregion
-                // #region agent log
-                await log({
-                    hypothesisId: 'H3',
-                    location: 'scripts/uploadR2.ts:157',
-                    message: 'debug-wrangler-exit',
-                    data: {
-                        key,
-                        exitCode: code,
-                        useRemote,
-                        inFlight,
-                        args,
-                        attempt,
-                        is429,
-                    },
-                });
-                // #endregion
                 succeeded = true;
             }
-            inFlight -= 1;
             logProgress();
         }
     };
 
     const workers = Array.from({ length: Math.min(concurrency, files.length) }, () => runOne());
     await Promise.all(workers);
-
-    // #region agent log
-    await log({
-        hypothesisId: 'H2',
-        location: 'scripts/uploadR2.ts:81',
-        message: 'upload-complete',
-        data: { successes, failures },
-    });
-    // #endregion
 
     if (failures > 0) {
         process.exit(1);

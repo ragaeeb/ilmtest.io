@@ -107,6 +107,22 @@ type HadithMetadata = {
     num: string;
 };
 
+type QuranMeta = {
+    /** Surah number in the Qur'an citation. */
+    surah: number;
+
+    /** Ayah number in the Qur'an citation. */
+    ayah: number;
+
+    /** Optional transliterated or English surah label. */
+    surahName?: string;
+};
+
+type WebMeta = {
+    /** Canonical source URL for scraped/web content. */
+    url: string;
+};
+
 type ArabicAsl = {
     /** The Arabic text of the excerpt */
     nass: string;
@@ -128,5 +144,5 @@ export type Heading = ArabicAsl & AITranslation;
  */
 export type Excerpt = ArabicAsl &
     AITranslation & {
-        meta?: BookMeta | HadithMetadata;
+        meta?: BookMeta | HadithMetadata | QuranMeta | WebMeta;
     };
