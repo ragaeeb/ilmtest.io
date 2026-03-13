@@ -14,12 +14,29 @@ This guide documents the canonical `M4` deploy path. Cloudflare Workers is now t
 3. Node `>=25.0.0`.
 4. Wrangler `^4.72.0` from `devDependencies`.
 
+## First-Time Cloudflare Bootstrap
+
+For the common manual path, prefer:
+
+`bun run cloudflare-guided`
+
+This interactive flow:
+
+- verifies Wrangler authentication
+- defaults the dataset bucket name to `ilmtest-datasets`
+- can create or verify the R2 bucket
+- writes `R2_BUCKET`, `CF_ACCOUNT_ID`, `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` into `.env`
+- updates `wrangler.jsonc` so the `EXCERPT_BUCKET` binding points at the same bucket
+
+Each run writes a timestamped debug bundle under `tmp/cloudflare-guided/` with command stdout, stderr, a structured summary, and any captured errors.
+
 ## Build Output
 
 - Build command: `bun run build`
 - Static asset output: `dist/dist`
 - Worker bundle output: `dist/functions/index.mjs`
 - Generated Wrangler config: `dist/functions/wrangler.json`
+- Search index output: `dist/dist/pagefind`
 
 ## Runtime Environments
 
@@ -31,15 +48,24 @@ The runtime environment is explicit:
 - `ILMTEST_DATASET_VERSION_OVERRIDE` is optional and is only honored in preview or local/dev contexts.
 
 Both environments require the `EXCERPT_BUCKET` R2 binding.
+The repo default bucket name is `ilmtest-datasets`. If you override it, keep `.env` and `wrangler.jsonc` aligned.
 
 ## Canonical Commands
 
+- `bun run cloudflare-guided`
 - `bun run deploy:prod`
 - `bun run deploy:preview`
 - `bun run deploy-check`
 - `bun run deploy-check:preview`
+- `bun run release-guided`
 
 `deploy-check` and `deploy-check:preview` generate target-specific Wrangler configs under `dist/functions/` and then run `wrangler deploy --dry-run` against the built Worker bundle and asset directory.
+
+For the common manual release path, prefer:
+
+`bun run release-guided`
+
+This interactive flow validates the chosen dataset version, promotes `preview` if needed, runs local build and deploy checks, deploys preview, runs smoke and runtime-probe checks against the deployed preview URL, and can then promote and deploy production. Each run writes a timestamped report bundle under `tmp/release-guided/` with per-step stdout, stderr, structured JSON summaries, and any captured errors.
 
 ## Local Validation Flow
 

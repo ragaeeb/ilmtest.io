@@ -53,6 +53,11 @@ export default defineConfig({
         },
         optimizeDeps,
         plugins: [tailwindcss(), disableServerDepScanPlugin],
+        build: {
+            rollupOptions: {
+                external: ['/pagefind/pagefind.js'],
+            },
+        },
     },
 
     build: {

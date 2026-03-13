@@ -1,6 +1,7 @@
 ---
 export const prerender = false;
 
+import { SearchDialog } from '@/components/islands/SearchDialog';
 import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
@@ -59,6 +60,7 @@ runtimeUnavailable ? (
 ) : (
 <BaseLayout title={entity.name} description={`Profile of ${entity.name}`}>
     <Header slot="header" currentPath="/profile">
+        <SearchDialog client:idle slot="search" />
         <ThemeToggle client:only="react" slot="theme-toggle" />
     </Header>
 

@@ -15,6 +15,7 @@ import { getErrorMessage, RuntimeDataError } from './runtimeErrors';
 import { logRuntimeSignal } from './runtimeSignals';
 
 type ModuleMap<T> = Record<string, T>;
+type LazyModuleMap<T> = Record<string, () => Promise<T>>;
 
 type SectionPageData = {
     collection: RuntimeCollectionSummary;
@@ -56,9 +57,8 @@ const translatorModules = import.meta.glob('../data/translators.json', {
 }) as ModuleMap<unknown>;
 const localCollectionShardModules = import.meta.env.DEV
     ? (import.meta.glob('../../tmp/runtime-artifacts/collections/*.json', {
-          eager: true,
           import: 'default',
-      }) as ModuleMap<unknown>)
+      }) as LazyModuleMap<unknown>)
     : {};
 
 const resolveModuleFilePath = (relativePath: string) => {
@@ -93,13 +93,13 @@ const loadBundledCollections = () => assertRuntimeCollectionSummaryArray(getFirs
 
 const loadBundledTranslators = () => getFirstModule(translatorModules, []) as Array<{ id: number; name: string }>;
 
-const loadBundledCollectionShard = (collectionId: string) => {
+const loadBundledCollectionShard = async (collectionId: string) => {
     const match = Object.entries(localCollectionShardModules).find(([path]) => path.endsWith(`/${collectionId}.json`));
     if (!match) {
         return null;
     }
 
-    return assertCollectionRuntimeShard(match[1]);
+    return assertCollectionRuntimeShard(await match[1]());
 };
 
 const getLocalCollectionShardPath = (collectionId: string) =>
@@ -214,6 +214,7 @@ const resolveCollectionBySlugFromContext = async (slug: string, context: Runtime
     return collections.find((collection) => collection.id === collectionId) ?? null;
 };
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: guarded branching for local vs remote artifact loading
 const loadCollectionShardFromContext = async (collectionId: string, context: RuntimeContext) => {
     const startedAt = Date.now();
     const cacheKey = buildRuntimeCacheKey('artifact', context.datasetVersion, 'collection', collectionId);
@@ -221,49 +222,52 @@ const loadCollectionShardFromContext = async (collectionId: string, context: Run
     const cacheStatus = !manifest ? 'local' : runtimeCache.hasFresh(cacheKey) ? 'hit' : 'miss';
 
     try {
-        const shard = !manifest
-            ? import.meta.env.DEV
-                ? (() => {
-                      const localShard = loadBundledCollectionShard(collectionId);
-                      if (!localShard) {
-                          throw new RuntimeDataError(
-                              'local-artifact-missing',
-                              `Missing local runtime shard for collection ${collectionId}`,
-                              {
-                                  datasetVersion: context.datasetVersion,
-                                  manifestKey: context.manifestKey,
-                                  artifactKey: getLocalCollectionShardPath(collectionId),
-                                  collectionId,
-                              },
-                          );
-                      }
-                      return localShard;
-                  })()
-                : assertCollectionRuntimeShard(
-                      await readLocalJson<CollectionRuntimeShard>(getLocalCollectionShardPath(collectionId)),
-                  )
-            : await runtimeCache.getOrLoad(cacheKey, ARTIFACT_CACHE_TTL_MS, async () => {
-                  const descriptor = manifest.runtimeArtifactSet.runtime.collectionShards[collectionId];
-                  if (!descriptor) {
-                      throw new RuntimeDataError(
-                          'artifact-missing',
-                          `Missing runtime shard descriptor for collection ${collectionId}`,
-                          {
-                              datasetVersion: context.datasetVersion,
-                              manifestKey: context.manifestKey,
-                              collectionId,
-                          },
-                      );
-                  }
+        let shard: CollectionRuntimeShard;
+        if (!manifest) {
+            if (import.meta.env.DEV) {
+                const localShard = await loadBundledCollectionShard(collectionId);
+                if (!localShard) {
+                    throw new RuntimeDataError(
+                        'local-artifact-missing',
+                        `Missing local runtime shard for collection ${collectionId}`,
+                        {
+                            datasetVersion: context.datasetVersion,
+                            manifestKey: context.manifestKey,
+                            artifactKey: getLocalCollectionShardPath(collectionId),
+                            collectionId,
+                        },
+                    );
+                }
+                shard = localShard;
+            } else {
+                shard = assertCollectionRuntimeShard(
+                    await readLocalJson<CollectionRuntimeShard>(getLocalCollectionShardPath(collectionId)),
+                );
+            }
+        } else {
+            shard = await runtimeCache.getOrLoad(cacheKey, ARTIFACT_CACHE_TTL_MS, async () => {
+                const descriptor = manifest.runtimeArtifactSet.runtime.collectionShards[collectionId];
+                if (!descriptor) {
+                    throw new RuntimeDataError(
+                        'artifact-missing',
+                        `Missing runtime shard descriptor for collection ${collectionId}`,
+                        {
+                            datasetVersion: context.datasetVersion,
+                            manifestKey: context.manifestKey,
+                            collectionId,
+                        },
+                    );
+                }
 
-                  return assertCollectionRuntimeShard(
-                      await readBucketJson<CollectionRuntimeShard>(descriptor.key, {
-                          datasetVersion: context.datasetVersion,
-                          manifestKey: context.manifestKey,
-                          collectionId,
-                      }),
-                  );
-              });
+                return assertCollectionRuntimeShard(
+                    await readBucketJson<CollectionRuntimeShard>(descriptor.key, {
+                        datasetVersion: context.datasetVersion,
+                        manifestKey: context.manifestKey,
+                        collectionId,
+                    }),
+                );
+            });
+        }
 
         logRuntimeSignal({
             routeType: 'collection-shard',

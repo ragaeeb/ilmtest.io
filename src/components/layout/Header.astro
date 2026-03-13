@@ -7,6 +7,7 @@ const { currentPath = '/' } = Astro.props as Props;
 
 const navLinks = [
     { href: '/browse', label: 'Browse' },
+    { href: '/search', label: 'Search' },
     { href: '/about', label: 'About' },
 ];
 
@@ -44,20 +45,8 @@ void navLinks;
 
     <!-- Actions -->
     <div class="header-actions">
-      <!-- Search placeholder (post-MVP) -->
-      <button 
-        class="search-button" 
-        aria-label="Search (coming soon)"
-        title="Search coming soon"
-        disabled
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="11" cy="11" r="8"></circle>
-          <path d="m21 21-4.3-4.3"></path>
-        </svg>
-      </button>
-
-      <!-- Theme toggle slot for React island -->
+      <!-- Search + Theme toggle slots for React islands -->
+      <slot name="search" />
       <slot name="theme-toggle" />
     </div>
   </div>
@@ -148,23 +137,7 @@ void navLinks;
     gap: var(--space-2);
   }
 
-  .search-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    background: transparent;
-    border: none;
-    border-radius: var(--radius-md);
-    color: var(--color-text-secondary);
-    cursor: not-allowed;
-    opacity: 0.5;
-    transition: 
-      color var(--duration-fast) var(--ease-out),
-      background-color var(--duration-fast) var(--ease-out);
-  }
+
 
   /* Mobile responsive */
   @media (max-width: 640px) {

@@ -2,6 +2,7 @@
 // Enable SSR for this route
 export const prerender = false;
 
+import { SearchDialog } from '@/components/islands/SearchDialog';
 import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
@@ -63,6 +64,7 @@ runtimeUnavailable || !pageData ? (
 ) : (
 <BaseLayout title={pageData.collection.roman} description={`Browse ${pageData.collection.roman}`}>
     <Header slot="header" currentPath="/browse">
+        <SearchDialog client:idle slot="search" />
         <ThemeToggle client:only="react" slot="theme-toggle" />
     </Header>
 

@@ -168,3 +168,12 @@ The app runtime now deploys through Cloudflare Workers only:
 - `bun run deploy:preview` builds and deploys the shared preview Worker.
 - `bun run deploy-check` validates the generated Worker bundle plus asset binding through `wrangler deploy --dry-run`.
 - Preview and production select `preview.json` vs `prod.json` through explicit Wrangler environment variables, not just hostname heuristics.
+
+## 7. M5 Search MVP
+
+A lexical search MVP is provided via Pagefind:
+
+- **Indexing**: Custom records are generated from local excerpt chunks at build time via `scripts/buildSearchIndex.ts` utilizing the Pagefind Node API. Extracted content includes Arabic (`nass`) and English (`text`) with necessary collection and section metadata for filtering and result display.
+- **Client UI**: The `SearchDialog` React island is lazily loaded only when the user opens the search modal (via `⌘K` or the header button), ensuring 0KB search payload on reading routes.
+- **Dedicated Route**: `/search` provides a dedicated landing page for search functionality and keyboard shortcut hints.
+- **Filtering**: Users can scope search queries dynamically by collection and section via Pagefind's filter support.

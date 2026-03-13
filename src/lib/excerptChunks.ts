@@ -25,9 +25,8 @@ const resolveModuleFilePath = (relativePath: string) => {
 
 const localChunkModules = import.meta.env.DEV
     ? (import.meta.glob('../../tmp/excerpt-chunks/**/*.json', {
-          eager: true,
           import: 'default',
-      }) as Record<string, unknown>)
+      }) as Record<string, () => Promise<unknown>>)
     : {};
 
 const getExcerptBucket = (): ExcerptBucket | undefined => env.EXCERPT_BUCKET as ExcerptBucket | undefined;
@@ -35,7 +34,7 @@ const getExcerptBucket = (): ExcerptBucket | undefined => env.EXCERPT_BUCKET as 
 const readLocalChunk = async (chunkKey: string) => {
     if (import.meta.env.DEV) {
         const match = Object.entries(localChunkModules).find(([path]) => path.endsWith(`/${chunkKey}`));
-        return (match?.[1] as ChunkPayload | undefined) ?? null;
+        return ((await match?.[1]()) as ChunkPayload | undefined) ?? null;
     }
 
     const filePath = resolveModuleFilePath(`../../tmp/excerpt-chunks/${chunkKey}`);

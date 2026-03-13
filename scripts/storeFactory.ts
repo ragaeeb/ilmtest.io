@@ -1,11 +1,13 @@
 import { FileSystemObjectStore, S3CompatibleObjectStore } from './datasetControl';
 
+const DEFAULT_R2_BUCKET_NAME = 'ilmtest-datasets';
+
 export const getStore = () => {
     if (process.env.DATASET_STORE_ROOT) {
         return new FileSystemObjectStore(process.env.DATASET_STORE_ROOT);
     }
 
-    const bucketName = process.env.R2_BUCKET;
+    const bucketName = process.env.R2_BUCKET ?? DEFAULT_R2_BUCKET_NAME;
     const endpoint =
         process.env.R2_ENDPOINT ??
         (process.env.R2_ACCOUNT_ID || process.env.CF_ACCOUNT_ID
@@ -16,7 +18,7 @@ export const getStore = () => {
 
     if (!bucketName || !endpoint || !accessKeyId || !secretAccessKey) {
         throw new Error(
-            'Missing R2 configuration. Set DATASET_STORE_ROOT for local testing or provide R2_BUCKET, R2_ENDPOINT/R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY.',
+            'Missing R2 configuration. Set DATASET_STORE_ROOT for local testing or run `bun run cloudflare-guided`. Manual configuration requires R2_BUCKET (defaults to ilmtest-datasets), R2_ENDPOINT/R2_ACCOUNT_ID/CF_ACCOUNT_ID, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY.',
         );
     }
 

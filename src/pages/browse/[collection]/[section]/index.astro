@@ -107,10 +107,47 @@ runtimeUnavailable || !sectionData ? (
         </div>
     </div>
 
+    <div id="excerpt-loading-overlay" class="excerpt-loading-overlay" aria-hidden="true">
+        <div class="excerpt-loading-card" role="status" aria-live="polite">
+            <div class="excerpt-loading-spinner" aria-hidden="true"></div>
+            <span>Loading excerpt…</span>
+        </div>
+    </div>
+
     <Footer slot="footer" />
 </BaseLayout>
 )
 }
+
+<script>
+    const overlay = document.getElementById('excerpt-loading-overlay');
+    const excerptsList = document.querySelector('.excerpts-list');
+
+    if (overlay && excerptsList) {
+        excerptsList.addEventListener('click', (event) => {
+            if (!(event instanceof MouseEvent)) {
+                return;
+            }
+
+            const target = event.target;
+            if (!(target instanceof HTMLElement)) {
+                return;
+            }
+
+            const link = target.closest('a.card');
+            if (!link) {
+                return;
+            }
+
+            if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) {
+                return;
+            }
+
+            overlay.classList.add('is-visible');
+            overlay.setAttribute('aria-hidden', 'false');
+        });
+    }
+</script>
 
 <style>
     .section-container {
@@ -148,6 +185,59 @@ runtimeUnavailable || !sectionData ? (
         display: flex;
         flex-direction: column;
         gap: var(--space-6);
+    }
+
+    .excerpt-loading-overlay {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: color-mix(in srgb, var(--color-background) 70%, transparent);
+        backdrop-filter: blur(6px);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--duration-fast) var(--ease-out);
+        z-index: var(--z-sticky);
+    }
+
+    .excerpt-loading-overlay.is-visible {
+        opacity: 1;
+        pointer-events: all;
+    }
+
+    .excerpt-loading-card {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-4) var(--space-6);
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-md);
+        font-size: var(--text-sm);
+        color: var(--color-text-secondary);
+    }
+
+    .excerpt-loading-spinner {
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        border: 2px solid var(--color-border);
+        border-top-color: var(--color-primary);
+        animation: excerptSpin 0.7s linear infinite;
+    }
+
+    @keyframes excerptSpin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .excerpt-loading-spinner {
+            animation: none;
+        }
     }
 
     @media (max-width: 640px) {

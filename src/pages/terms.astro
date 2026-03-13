@@ -1,10 +1,12 @@
 ---
+import { SearchDialog } from '@/components/islands/SearchDialog';
 import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 
 // Biome doesn't see template usage in .astro files.
+void SearchDialog;
 void ThemeToggle;
 void Footer;
 void Header;
@@ -13,6 +15,7 @@ void BaseLayout;
 
 <BaseLayout title="Terms of Use">
   <Header slot="header" currentPath="/terms">
+    <SearchDialog client:idle slot="search" />
     <ThemeToggle client:only="react" slot="theme-toggle" />
   </Header>
 

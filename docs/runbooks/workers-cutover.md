@@ -34,6 +34,12 @@ Preview traffic should remain maintainer-only and negligible. Production traffic
 
 ## Preview Validation
 
+For the common manual path, prefer:
+
+`bun run release-guided`
+
+It records the full release session under `tmp/release-guided/<timestamp>/`, including per-step stdout/stderr logs, smoke and runtime-probe JSON outputs, and a `summary.json` file that is easy to hand to another agent for debugging.
+
 1. Confirm preview channel state if needed:
    `bun scripts/validateDataset.ts remote --channel preview`
 2. Deploy preview:
