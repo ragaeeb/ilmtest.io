@@ -12,6 +12,7 @@ import {
 import {
     FileSystemObjectStore,
     generateDatasetVersion,
+    type ObjectStore,
     prepareDatasetPublish,
     promoteDataset,
     pruneDatasets,
@@ -45,10 +46,6 @@ const createFixture = async () => {
         mkdir(storeRoot, { recursive: true }),
         mkdir(stateDir, { recursive: true }),
     ]);
-
-    await Promise.all([Bun.write(join(dataDir, '.keep'), ''), Bun.write(join(chunksDir, '.keep'), '')]);
-    await rm(join(dataDir, '.keep'));
-    await rm(join(chunksDir, '.keep'));
 
     await Bun.write(
         join(dataDir, 'collections.json'),
@@ -90,6 +87,7 @@ const createFixture = async () => {
         join(chunksDir, '1118', 'S1', 'chunk-0.json'),
         JSON.stringify({
             sectionId: 'S1',
+            chunkIndex: 0,
             excerptIds: ['S1', 'E1'],
             excerpts: [
                 { id: 'S1', from: 1, nass: 'عنوان', text: 'Heading', translator: 1, lastUpdatedAt: 0 },
@@ -101,6 +99,7 @@ const createFixture = async () => {
         join(chunksDir, '1118', 'S2', 'chunk-0.json'),
         JSON.stringify({
             sectionId: 'S2',
+            chunkIndex: 0,
             excerptIds: ['S2', 'E2'],
             excerpts: [
                 { id: 'S2', from: 2, nass: 'عنوان', text: 'Heading', translator: 1, lastUpdatedAt: 0 },
@@ -202,7 +201,40 @@ const createFixture = async () => {
     return {
         buildMetadataPath,
         stateDir,
+        storeRoot,
         store: new FileSystemObjectStore(storeRoot),
+    };
+};
+
+const createCountingStore = (store: ObjectStore) => {
+    const counts = {
+        getObject: 0,
+        putObject: 0,
+        headObject: 0,
+    };
+
+    return {
+        store: {
+            async putObject(key: string, body: string | Uint8Array, contentType: string) {
+                counts.putObject += 1;
+                await store.putObject(key, body, contentType);
+            },
+            async getObject(key: string) {
+                counts.getObject += 1;
+                return await store.getObject(key);
+            },
+            async headObject(key: string) {
+                counts.headObject += 1;
+                return await store.headObject(key);
+            },
+            async listObjects(prefix: string) {
+                return await store.listObjects(prefix);
+            },
+            async deleteObject(key: string) {
+                await store.deleteObject(key);
+            },
+        } satisfies ObjectStore,
+        counts,
     };
 };
 
@@ -257,6 +289,31 @@ describe('datasetControl', () => {
 
         const remoteValidation = await validateRemoteDataset(fixture.store, { datasetVersion });
         expect(remoteValidation.chunkCount).toBe(2);
+    });
+
+    it('trusts matching head metadata when resuming against an already uploaded dataset', async () => {
+        const fixture = await createFixture();
+        const datasetVersion = '2026-03-12T18-42-10Z-abc1234';
+
+        await publishDataset(fixture.store, {
+            buildMetadataPath: fixture.buildMetadataPath,
+            datasetVersion,
+            stateDir: fixture.stateDir,
+        });
+
+        const secondStateDir = join(fixture.storeRoot, 'state-second');
+        await mkdir(secondStateDir, { recursive: true });
+        const prepared = await prepareDatasetPublish(fixture.buildMetadataPath, datasetVersion);
+        const counting = createCountingStore(fixture.store);
+
+        await publishDataset(counting.store, {
+            buildMetadataPath: fixture.buildMetadataPath,
+            datasetVersion,
+            stateDir: secondStateDir,
+        });
+
+        expect(counting.counts.getObject).toBe(prepared.verificationKeys.length);
+        expect(counting.counts.putObject).toBe(1);
     });
 
     it('promotes, rolls back, and prunes preview datasets', async () => {

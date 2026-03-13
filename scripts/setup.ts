@@ -629,7 +629,7 @@ export const setup = async (...collectionIds: string[]) => {
             sdk: pkg.devDependencies['@ilmtest/ilmtest-sdk-js'] ?? 'unknown',
             bun: Bun.version,
             node: process.versions.node,
-            wrangler: pkg.devDependencies.wrangler ?? undefined,
+            wrangler: pkg.devDependencies.wrangler,
         },
         counts: {
             collections: collections.length,

@@ -1,5 +1,5 @@
 import { mkdir, readdir, rm } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join, relative } from 'node:path';
 import type { Collection, Entity, Excerpt } from '@/types/excerpts';
 import pkg from '../package.json';
 import {
@@ -213,6 +213,7 @@ const createChunkPayloads = (
             key: chunkKey,
             payload: {
                 sectionId,
+                chunkIndex,
                 excerptIds: chunkExcerpts.map((excerpt) => excerpt.id),
                 excerpts: chunkExcerpts,
             },
@@ -222,6 +223,92 @@ const createChunkPayloads = (
     }
 
     return chunks;
+};
+
+type SectionFixture = {
+    sectionId: string;
+    pageBase: number;
+    excerpts: Excerpt[];
+    chunks: FixtureChunkFile[];
+};
+
+const buildSectionFixture = (
+    collection: FixtureCollectionSpec,
+    sectionIndex: number,
+    translators: TranslatorRecord[],
+): SectionFixture => {
+    const translatorId = translators[(sectionIndex - 1) % translators.length]?.id ?? translators[0].id;
+    const sectionId = makeSectionId(collection, sectionIndex);
+    const pageBase = sectionIndex * 10;
+    const heading = buildHeading(collection, sectionIndex, translatorId, pageBase, sectionIndex * 100);
+    const excerpts = Array.from({ length: collection.excerptsPerSection }, (_, excerptOffset) =>
+        buildExcerpt(
+            collection,
+            sectionIndex,
+            excerptOffset + 1,
+            translators[(sectionIndex + excerptOffset) % translators.length]?.id ?? translatorId,
+            pageBase + excerptOffset + 1,
+            sectionIndex * 100 + excerptOffset + 1,
+        ),
+    );
+
+    return {
+        sectionId,
+        pageBase,
+        excerpts,
+        chunks: createChunkPayloads(collection, heading, excerpts),
+    };
+};
+
+const indexSectionFixture = (
+    collectionId: string,
+    section: SectionFixture,
+    indexes: BuiltCollectionFixture['indexes'],
+) => {
+    indexes.collectionToSections[collectionId].push(section.sectionId);
+    indexes.pageToHeading[collectionId][section.pageBase] = section.sectionId;
+    indexes.sectionToExcerpts[collectionId][section.sectionId] = section.excerpts.map((excerpt) => excerpt.id);
+    indexes.sectionToChunks[collectionId][section.sectionId] = section.chunks.map((chunk) => chunk.key);
+
+    for (const excerpt of section.excerpts) {
+        indexes.excerptToSection[collectionId][excerpt.id] = section.sectionId;
+    }
+};
+
+const appendSectionChunks = (
+    collectionId: string,
+    section: SectionFixture,
+    indexes: BuiltCollectionFixture['indexes'],
+    chunkFiles: FixtureChunkFile[],
+) => {
+    for (const chunk of section.chunks) {
+        chunkFiles.push(chunk);
+        for (const excerpt of chunk.payload.excerpts) {
+            if (excerpt.id === section.sectionId) {
+                continue;
+            }
+
+            indexes.excerptToChunk[collectionId][excerpt.id] = chunk.key;
+        }
+    }
+};
+
+const appendCollectionSmokeRoutes = (
+    collection: FixtureCollectionSpec,
+    section: SectionFixture,
+    smokeRoutes: string[],
+    sectionIndex: number,
+) => {
+    const firstExcerptId = section.excerpts[0]?.id;
+    if (sectionIndex !== 1 || !firstExcerptId) {
+        return;
+    }
+
+    smokeRoutes.push(
+        `/browse/${collection.slug}`,
+        `/browse/${collection.slug}/${section.sectionId}`,
+        `/browse/${collection.slug}/${section.sectionId}/e/${firstExcerptId}`,
+    );
 };
 
 const buildCollectionFixture = (
@@ -253,50 +340,11 @@ const buildCollectionFixture = (
     let totalExcerpts = 0;
 
     for (let sectionIndex = 1; sectionIndex <= collection.sectionCount; sectionIndex += 1) {
-        const translatorId = translators[(sectionIndex - 1) % translators.length]?.id ?? translators[0].id;
-        const sectionId = makeSectionId(collection, sectionIndex);
-        const pageBase = sectionIndex * 10;
-        const heading = buildHeading(collection, sectionIndex, translatorId, pageBase, sectionIndex * 100);
-        const excerpts = Array.from({ length: collection.excerptsPerSection }, (_, excerptOffset) =>
-            buildExcerpt(
-                collection,
-                sectionIndex,
-                excerptOffset + 1,
-                translators[(sectionIndex + excerptOffset) % translators.length]?.id ?? translatorId,
-                pageBase + excerptOffset + 1,
-                sectionIndex * 100 + excerptOffset + 1,
-            ),
-        );
-        const chunks = createChunkPayloads(collection, heading, excerpts);
-
-        localIndexes.collectionToSections[collection.id].push(sectionId);
-        localIndexes.pageToHeading[collection.id][pageBase] = sectionId;
-        localIndexes.sectionToExcerpts[collection.id][sectionId] = excerpts.map((excerpt) => excerpt.id);
-        localIndexes.sectionToChunks[collection.id][sectionId] = chunks.map((chunk) => chunk.key);
-
-        for (const excerpt of excerpts) {
-            localIndexes.excerptToSection[collection.id][excerpt.id] = sectionId;
-        }
-
-        for (const chunk of chunks) {
-            chunkFiles.push(chunk);
-            for (const excerpt of chunk.payload.excerpts) {
-                if (excerpt.id === sectionId) {
-                    continue;
-                }
-                localIndexes.excerptToChunk[collection.id][excerpt.id] = chunk.key;
-            }
-        }
-
-        if (sectionIndex === 1) {
-            smokeRoutes.push(
-                `/browse/${collection.slug}`,
-                `/browse/${collection.slug}/${sectionId}`,
-                `/browse/${collection.slug}/${sectionId}/e/${excerpts[0].id}`,
-            );
-        }
-
-        totalExcerpts += excerpts.length;
+        const section = buildSectionFixture(collection, sectionIndex, translators);
+        indexSectionFixture(collection.id, section, localIndexes);
+        appendSectionChunks(collection.id, section, localIndexes, chunkFiles);
+        appendCollectionSmokeRoutes(collection, section, smokeRoutes, sectionIndex);
+        totalExcerpts += section.excerpts.length;
     }
 
     return {
@@ -321,7 +369,14 @@ const mergeCollectionFixture = (indexes: LookupIndexes, built: BuiltCollectionFi
     Object.assign(indexes.collectionToSections, built.indexes.collectionToSections);
     Object.assign(indexes.sectionToChunks, built.indexes.sectionToChunks);
     Object.assign(indexes.excerptToChunk, built.indexes.excerptToChunk);
-    indexes.entityToCollections[authorId] = built.entityMapping;
+    const existing = indexes.entityToCollections[authorId];
+    indexes.entityToCollections[authorId] = existing
+        ? {
+              ...existing,
+              ...built.entityMapping,
+              authorOf: [...new Set([...(existing.authorOf ?? []), ...built.entityMapping.authorOf])],
+          }
+        : built.entityMapping;
 };
 
 const buildFixtureCorpus = (spec: FixtureSpec, _generatedAt: string, _gitCommit: string, _paths: LocalCorpusPaths) => {
@@ -369,12 +424,47 @@ const buildFixtureCorpus = (spec: FixtureSpec, _generatedAt: string, _gitCommit:
 
 const textSize = (value: string) => new TextEncoder().encode(value).byteLength;
 
+const validateFixtureSpec = (spec: FixtureSpec, expectedVariant: FixtureVariant) => {
+    if (spec.variant !== expectedVariant) {
+        throw new Error(`Fixture spec mismatch: expected ${expectedVariant} but found ${spec.variant}`);
+    }
+    if (!Array.isArray(spec.translators) || spec.translators.length === 0) {
+        throw new Error('Malformed fixture spec: translators must be a non-empty array');
+    }
+
+    for (const translator of spec.translators) {
+        if (!Number.isInteger(translator.id) || translator.id < 1 || !translator.name) {
+            throw new Error('Malformed fixture spec: translators must define a positive integer id and non-empty name');
+        }
+    }
+
+    for (const collection of spec.collections) {
+        for (const [field, value] of Object.entries({
+            sectionCount: collection.sectionCount,
+            excerptsPerSection: collection.excerptsPerSection,
+            chunkSize: collection.chunkSize,
+        })) {
+            if (!Number.isInteger(value) || value < 1) {
+                throw new Error(`Invalid fixture spec for ${collection.id}: ${field} must be a positive integer`);
+            }
+        }
+    }
+};
+
 export const loadFixtureSpec = async (variant: FixtureVariant) => {
     const spec = await readJsonFile<FixtureSpec>(getFixtureSpecPath(variant));
-    if (spec.variant !== variant) {
-        throw new Error(`Fixture spec mismatch: expected ${variant} but found ${spec.variant}`);
-    }
+    validateFixtureSpec(spec, variant);
     return spec;
+};
+
+const resolveChunkOutputPath = (chunksDir: string, chunkKey: string) => {
+    const outputPath = join(chunksDir, chunkKey);
+    const relativePath = relative(chunksDir, outputPath);
+    if (relativePath.startsWith('..') || isAbsolute(relativePath)) {
+        throw new Error(`Refusing to write chunk outside ${chunksDir}: ${chunkKey}`);
+    }
+
+    return outputPath;
 };
 
 export const materializeFixture = async (variant: FixtureVariant, options: MaterializeFixtureOptions = {}) => {
@@ -407,8 +497,9 @@ export const materializeFixture = async (variant: FixtureVariant, options: Mater
         writeJsonFile(join(paths.dataDir, 'translators.json'), corpus.translators),
         writeJsonFile(join(paths.dataDir, 'indexes.json'), corpus.indexes),
         ...corpus.chunkFiles.map(async (chunk) => {
-            await mkdir(dirname(join(paths.chunksDir, chunk.key)), { recursive: true });
-            await writeJsonFile(join(paths.chunksDir, chunk.key), chunk.payload);
+            const outputPath = resolveChunkOutputPath(paths.chunksDir, chunk.key);
+            await mkdir(dirname(outputPath), { recursive: true });
+            await writeJsonFile(outputPath, chunk.payload);
         }),
         Bun.write(join(paths.curatedRoot, 'entities', '.gitkeep'), ''),
         Bun.write(join(paths.curatedRoot, 'relations', '.gitkeep'), ''),

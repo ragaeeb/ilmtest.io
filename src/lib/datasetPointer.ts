@@ -11,8 +11,10 @@ export type DatasetPointer = {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
+const ISO_UTC_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+
 const isIsoDateString = (value: unknown): value is string => {
-    if (typeof value !== 'string') {
+    if (typeof value !== 'string' || !ISO_UTC_DATE_TIME_PATTERN.test(value)) {
         return false;
     }
 

@@ -40,6 +40,7 @@ describe('reportBaseline', () => {
         expect(report.routeReadFanOut.collectionRoute.pageSize).toBe(100);
         expect(report.commands).toHaveLength(1);
         expect(report.deployCoupling.usesPagesDeploy).toBe(false);
+        expect(report.deployCoupling.usesLegacyUploadR2).toBe(false);
         expect(report.deployCoupling.publishDatasetScript).toBeNull();
     });
 });

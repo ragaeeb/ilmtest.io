@@ -1,12 +1,24 @@
+import { resolveDefaultRobotsPolicy, resolveRuntimeChannel } from '../src/lib/runtimeEnvironment';
 import { startAstroDevServer } from './devServerHarness';
 import { loadLocalRuntimeData, readChunkFromDisk } from './runtimeData';
+
+const CACHE_HEADER = 'public, s-maxage=3600, stale-while-revalidate=86400';
+const FETCH_TIMEOUT_MS = 10_000;
+
+type HeaderExpectation = {
+    name: string;
+    value: string;
+    match?: 'equals' | 'includes';
+};
 
 type SmokeRoute = {
     label: string;
     path: string;
-    expectText: string;
+    expectStatus?: number;
+    expectText?: string;
     expectStrings?: string[];
     forbidStrings?: string[];
+    expectHeaders?: HeaderExpectation[];
 };
 
 const getFlagValue = (args: string[], flag: string) => {
@@ -17,8 +29,10 @@ const getFlagValue = (args: string[], flag: string) => {
     return args[index + 1];
 };
 
-const collectSmokeRoutes = async () => {
+const collectSmokeRoutes = async (baseUrl: string) => {
     const { collections, indexes, paths } = await loadLocalRuntimeData();
+    const channel = resolveRuntimeChannel({ requestUrl: baseUrl });
+    const origin = new URL(baseUrl).origin;
     const routes: SmokeRoute[] = [
         {
             label: 'homepage',
@@ -29,6 +43,28 @@ const collectSmokeRoutes = async () => {
             label: 'browse',
             path: '/browse',
             expectText: collections[0]?.roman ?? 'Browse Collections',
+            expectHeaders: [{ name: 'Cache-Control', value: CACHE_HEADER }],
+        },
+        {
+            label: 'robots',
+            path: '/robots.txt',
+            expectText: resolveDefaultRobotsPolicy(channel) === 'allow' ? 'Allow: /' : 'Disallow: /',
+            expectStrings:
+                resolveDefaultRobotsPolicy(channel) === 'allow'
+                    ? [`Sitemap: ${new URL('/sitemap.xml', origin).toString()}`]
+                    : undefined,
+        },
+        {
+            label: 'sitemap',
+            path: '/sitemap.xml',
+            expectText: '<urlset',
+            expectStrings: [new URL('/browse', origin).toString()],
+            expectHeaders: [{ name: 'Cache-Control', value: CACHE_HEADER }],
+        },
+        {
+            label: 'not-found',
+            path: '/__smoke_missing_route__',
+            expectStatus: 404,
         },
     ];
 
@@ -61,16 +97,19 @@ const collectSmokeRoutes = async () => {
                 expectText: collection.roman,
                 expectStrings: [`/browse/${collection.slug}/${sectionId}`],
                 forbidStrings: ['/undefined'],
+                expectHeaders: [{ name: 'Cache-Control', value: CACHE_HEADER }],
             },
             {
                 label: `${collection.slug}:section`,
                 path: `/browse/${collection.slug}/${sectionId}`,
                 expectText: heading.text,
+                expectHeaders: [{ name: 'Cache-Control', value: CACHE_HEADER }],
             },
             {
                 label: `${collection.slug}:excerpt`,
                 path: `/browse/${collection.slug}/${sectionId}/e/${excerptId}`,
                 expectText: excerpt.text.split('\n')[0],
+                expectHeaders: [{ name: 'Cache-Control', value: CACHE_HEADER }],
             },
         );
     }
@@ -78,8 +117,67 @@ const collectSmokeRoutes = async () => {
     return routes;
 };
 
+const assertSmokeRouteStatus = (route: SmokeRoute, response: Response) => {
+    const expectedStatus = route.expectStatus ?? 200;
+    if (response.status !== expectedStatus) {
+        throw new Error(`${route.label} failed with ${response.status} at ${route.path}`);
+    }
+};
+
+const assertSmokeRouteBody = (route: SmokeRoute, body: string) => {
+    if (route.expectText && !body.includes(route.expectText)) {
+        throw new Error(`${route.label} did not include expected text "${route.expectText}"`);
+    }
+
+    for (const expected of route.expectStrings ?? []) {
+        if (!body.includes(expected)) {
+            throw new Error(`${route.label} did not include expected string "${expected}"`);
+        }
+    }
+
+    for (const forbidden of route.forbidStrings ?? []) {
+        if (body.includes(forbidden)) {
+            throw new Error(`${route.label} unexpectedly included "${forbidden}"`);
+        }
+    }
+};
+
+const assertSmokeRouteHeaders = (route: SmokeRoute, response: Response) => {
+    for (const headerExpectation of route.expectHeaders ?? []) {
+        const actualValue = response.headers.get(headerExpectation.name);
+        if (!actualValue) {
+            throw new Error(`${route.label} did not include header "${headerExpectation.name}"`);
+        }
+
+        if ((headerExpectation.match ?? 'equals') === 'includes') {
+            if (!actualValue.includes(headerExpectation.value)) {
+                throw new Error(
+                    `${route.label} header "${headerExpectation.name}" did not include "${headerExpectation.value}"`,
+                );
+            }
+            continue;
+        }
+
+        if (actualValue !== headerExpectation.value) {
+            throw new Error(
+                `${route.label} header "${headerExpectation.name}" was "${actualValue}" instead of "${headerExpectation.value}"`,
+            );
+        }
+    }
+};
+
+const assertSmokeRoute = async (route: SmokeRoute, targetBaseUrl: string) => {
+    const response = await fetch(new URL(route.path, targetBaseUrl), {
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    assertSmokeRouteStatus(route, response);
+
+    const body = await response.text();
+    assertSmokeRouteBody(route, body);
+    assertSmokeRouteHeaders(route, response);
+};
+
 export const runRouteSmoke = async (baseUrl?: string, port = 4321) => {
-    const routes = await collectSmokeRoutes();
     const server = baseUrl ? null : await startAstroDevServer(port);
     const targetBaseUrl = baseUrl ?? server?.baseUrl;
 
@@ -87,27 +185,11 @@ export const runRouteSmoke = async (baseUrl?: string, port = 4321) => {
         throw new Error('Failed to determine smoke test base URL');
     }
 
+    const routes = await collectSmokeRoutes(targetBaseUrl);
+
     try {
         for (const route of routes) {
-            const response = await fetch(new URL(route.path, targetBaseUrl));
-            if (!response.ok) {
-                throw new Error(`${route.label} failed with ${response.status} at ${route.path}`);
-            }
-
-            const body = await response.text();
-            if (!body.includes(route.expectText)) {
-                throw new Error(`${route.label} did not include expected text "${route.expectText}"`);
-            }
-            for (const expected of route.expectStrings ?? []) {
-                if (!body.includes(expected)) {
-                    throw new Error(`${route.label} did not include expected string "${expected}"`);
-                }
-            }
-            for (const forbidden of route.forbidStrings ?? []) {
-                if (body.includes(forbidden)) {
-                    throw new Error(`${route.label} unexpectedly included "${forbidden}"`);
-                }
-            }
+            await assertSmokeRoute(route, targetBaseUrl);
         }
     } finally {
         await server?.dispose();

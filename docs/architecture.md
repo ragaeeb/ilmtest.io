@@ -4,20 +4,21 @@ This document outlines the high-level system architecture and data flow of IlmTe
 
 ## ADRs
 
-- [ADR 0001: Workers Is The Target Runtime](/Users/rhaq/workspace/ilmtest.io/docs/adr/0001-workers-runtime.md)
-- [ADR 0002: Publish Immutable Datasets](/Users/rhaq/workspace/ilmtest.io/docs/adr/0002-immutable-datasets.md)
-- [ADR 0003: R2 Manifest And Pointer Select The Active Dataset](/Users/rhaq/workspace/ilmtest.io/docs/adr/0003-r2-manifest-pointer.md)
-- [ADR 0004: Pagefind Is The Search MVP](/Users/rhaq/workspace/ilmtest.io/docs/adr/0004-pagefind-search-mvp.md)
-- [ADR 0005: D1 Backs Moderated Reports](/Users/rhaq/workspace/ilmtest.io/docs/adr/0005-d1-reports.md)
-- [ADR 0006: Inline Mentions Are Deferred](/Users/rhaq/workspace/ilmtest.io/docs/adr/0006-inline-mentions-deferred.md)
+- [ADR 0001: Workers Is The Target Runtime](docs/adr/0001-workers-runtime.md)
+- [ADR 0002: Publish Immutable Datasets](docs/adr/0002-immutable-datasets.md)
+- [ADR 0003: R2 Manifest And Pointer Select The Active Dataset](docs/adr/0003-r2-manifest-pointer.md)
+- [ADR 0004: Pagefind Is The Search MVP](docs/adr/0004-pagefind-search-mvp.md)
+- [ADR 0005: D1 Backs Moderated Reports](docs/adr/0005-d1-reports.md)
+- [ADR 0006: Inline Mentions Are Deferred](docs/adr/0006-inline-mentions-deferred.md)
 
 ## Operational Docs
 
-- [Fixture Corpus Workflow](/Users/rhaq/workspace/ilmtest.io/docs/fixtures.md)
-- [QA And Observability Baseline](/Users/rhaq/workspace/ilmtest.io/docs/qa.md)
-- [Cloudflare Security Baseline](/Users/rhaq/workspace/ilmtest.io/docs/security-baseline.md)
-- [Source Continuity](/Users/rhaq/workspace/ilmtest.io/docs/source-continuity.md)
-- [Support Matrix](/Users/rhaq/workspace/ilmtest.io/docs/support-matrix.md)
+- [Fixture Corpus Workflow](docs/fixtures.md)
+- [QA And Observability Baseline](docs/qa.md)
+- [Cloudflare Security Baseline](docs/security-baseline.md)
+- [Workers Cutover](docs/runbooks/workers-cutover.md)
+- [Source Continuity](docs/source-continuity.md)
+- [Support Matrix](docs/support-matrix.md)
 
 ## 1. System Context Diagram
 
@@ -36,7 +37,7 @@ graph TD
     subgraph Cloudflare["Cloudflare Platform"]
         Edge[Cloudflare Edge Network]
         Workers[Cloudflare Workers\n(SSR Runtime)]
-        Pages[Cloudflare Pages\n(Static Assets)]
+        Assets[Workers Static Assets\n(ASSETS Binding)]
         R2[(R2 Storage\nContent Chunks)]
     end
 
@@ -44,25 +45,28 @@ graph TD
     subgraph "Build Process"
         ETL[Build Pipeline\n(scripts/)]
         Setup[setup.ts\n(Ingest & Transform)]
-        Upload[uploadR2.ts\n(Distribute)]
-        Astro[Astro Build\n(SSG + Server Adaptor)]
+        Publish[publishDataset.ts\n(Publish Dataset)]
+        Astro[Astro Build\n(Static Assets + Worker Bundle)]
+        Deploy[wrangler deploy\n(Preview / Prod)]
     end
 
     %% Relationships - Runtime
     User -->|HTTPS Request| Edge
     Edge -->|Cache Hit| User
     Edge -->|Cache Miss| Workers
+    Workers -->|Serve Asset| Assets
     Workers -->|Fetch Chunk| R2
     Workers -->|SSR HTML| Edge
 
     %% Relationships - Build
-    Dev -->|git push| Pages
-    Pages -->|Trigger| Astro
+    Dev -->|bun run build| Astro
+    Dev -->|bun run deploy:preview / deploy:prod| Deploy
+    Deploy -->|Publish Worker| Workers
     Setup -->|Download| HF
-    Upload -->|Upload| R2
+    Publish -->|Upload Immutable Dataset| R2
     Setup -->|Generate JSON| Astro
     ETL --- Setup
-    ETL --- Upload
+    ETL --- Publish
 ```
 
 ## 2. Data Flow: The "54k Page" Architecture
@@ -155,3 +159,12 @@ Operational checks for this layer are:
 - `bun run bundle-check`
 - `bun run smoke-routes`
 - `bun run runtime-probe`
+
+## 6. M4 Workers Cutover
+
+The app runtime now deploys through Cloudflare Workers only:
+
+- `bun run deploy:prod` builds and deploys the production Worker.
+- `bun run deploy:preview` builds and deploys the shared preview Worker.
+- `bun run deploy-check` validates the generated Worker bundle plus asset binding through `wrangler deploy --dry-run`.
+- Preview and production select `preview.json` vs `prod.json` through explicit Wrangler environment variables, not just hostname heuristics.

@@ -5,6 +5,7 @@ import type { LookupIndexes } from './indexing';
 
 export type ChunkPayload = {
     sectionId: string;
+    chunkIndex: number;
     excerptIds: string[];
     excerpts: Excerpt[];
 };

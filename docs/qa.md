@@ -44,10 +44,12 @@ Minimum log fields:
 
 Current implementation notes:
 
-- runtime loaders emit structured log lines with a `[runtime]` prefix from [`src/lib/data.ts`](/Users/rhaq/workspace/ilmtest.io/src/lib/data.ts) and [`src/lib/excerptChunks.ts`](/Users/rhaq/workspace/ilmtest.io/src/lib/excerptChunks.ts)
+- runtime loaders emit structured log lines with a `[runtime]` prefix from [`src/lib/data.ts`](src/lib/data.ts) and [`src/lib/excerptChunks.ts`](src/lib/excerptChunks.ts)
 - missing runtime artifacts return a controlled `503` route response instead of a silent fallback
 - `bun run runtime-probe` measures cold/warm section timings, verifies excerpt citation rendering, and checks the local missing-shard error path
+- `bun run smoke-routes` now covers browse, collection, section, excerpt, `robots.txt`, `sitemap.xml`, 404 behavior, and cache headers
 - `bun run runtime-probe -- --base-url <preview-url>` targets a deployed preview for maintainer validation
+- `bun run smoke-routes -- --base-url <preview-url>` validates the deployed preview route surface before cutover
 
 Minimum operational counters:
 
@@ -65,5 +67,6 @@ Minimum operational counters:
 - `bun run integrity`
 - `bun run build`
 - `bun run bundle-check`
+- `bun run deploy-check`
 - `bun run smoke-routes`
 - `bun run runtime-probe`

@@ -1,7 +1,4 @@
-import { env } from 'cloudflare:workers';
 import type { Entity, Excerpt } from '@/types/excerpts';
-import type { DatasetManifest } from './datasetManifest';
-import type { DatasetChannel } from './datasetPointer';
 import { fetchExcerptChunk } from './excerptChunks';
 import {
     assertCollectionRuntimeShard,
@@ -13,26 +10,11 @@ import {
     type SectionSummary,
 } from './runtimeArtifacts';
 import { ARTIFACT_CACHE_TTL_MS, buildRuntimeCacheKey, runtimeCache } from './runtimeCache';
+import { loadRuntimeContext, type RuntimeContext, readBucketJson } from './runtimeContext';
 import { getErrorMessage, RuntimeDataError } from './runtimeErrors';
-import { resolveDatasetManifest, resolveDatasetPointer } from './runtimeLoader';
 import { logRuntimeSignal } from './runtimeSignals';
 
 type ModuleMap<T> = Record<string, T>;
-
-type BucketObject = {
-    text(): Promise<string>;
-};
-
-type ExcerptBucket = {
-    get(key: string): Promise<BucketObject | null>;
-};
-
-type RuntimeContext = {
-    channel: DatasetChannel;
-    datasetVersion: string;
-    manifest: DatasetManifest | null;
-    manifestKey: string | null;
-};
 
 type SectionPageData = {
     collection: RuntimeCollectionSummary;
@@ -79,13 +61,13 @@ const localCollectionShardModules = import.meta.env.DEV
       }) as ModuleMap<unknown>)
     : {};
 
-const LOCAL_COLLECTIONS_PATH = new URL('../data/collections.json', import.meta.url).pathname;
-const LOCAL_TRANSLATORS_PATH = new URL('../data/translators.json', import.meta.url).pathname;
-const LOCAL_COLLECTION_SHARDS_DIR = new URL('../../tmp/runtime-artifacts/collections/', import.meta.url).pathname;
+const resolveModuleFilePath = (relativePath: string) => {
+    const pathname = decodeURIComponent(new URL(relativePath, import.meta.url).pathname);
+    return pathname.replace(/^\/([A-Za-z]:\/)/, '$1');
+};
 
-const getExcerptBucket = (): ExcerptBucket | undefined => env.EXCERPT_BUCKET as ExcerptBucket | undefined;
-
-const isProductionHost = (hostname: string) => hostname === 'ilmtest.io' || hostname === 'www.ilmtest.io';
+const LOCAL_COLLECTIONS_PATH = resolveModuleFilePath('../data/collections.json');
+const LOCAL_TRANSLATORS_PATH = resolveModuleFilePath('../data/translators.json');
 
 const readLocalJson = async <T>(filePath: string) => {
     if (typeof Bun === 'undefined') {
@@ -96,45 +78,6 @@ const readLocalJson = async <T>(filePath: string) => {
     }
 
     return (await Bun.file(filePath).json()) as T;
-};
-
-const readBucketJson = async <T>(
-    key: string,
-    details: {
-        datasetVersion?: string;
-        manifestKey?: string | null;
-        collectionId?: string;
-    } = {},
-) => {
-    const bucket = getExcerptBucket();
-    if (!bucket) {
-        throw new RuntimeDataError('binding-missing', `Missing EXCERPT_BUCKET binding for runtime artifact: ${key}`, {
-            ...details,
-            artifactKey: key,
-        });
-    }
-
-    const object = await bucket.get(key);
-    if (!object) {
-        throw new RuntimeDataError('artifact-missing', `Missing runtime artifact in R2: ${key}`, {
-            ...details,
-            artifactKey: key,
-        });
-    }
-
-    try {
-        return JSON.parse(await object.text()) as T;
-    } catch (error) {
-        throw new RuntimeDataError(
-            'invalid-artifact',
-            `Invalid runtime artifact JSON at ${key}: ${getErrorMessage(error)}`,
-            {
-                ...details,
-                artifactKey: key,
-                statusCode: 500,
-            },
-        );
-    }
 };
 
 const loadBundledRouteBootstrap = () =>
@@ -159,98 +102,8 @@ const loadBundledCollectionShard = (collectionId: string) => {
     return assertCollectionRuntimeShard(match[1]);
 };
 
-const isLocalRuntimeMode = () => import.meta.env.DEV || !getExcerptBucket();
-
-export const resolveRuntimeChannel = (requestUrl?: string): DatasetChannel => {
-    if (import.meta.env.DEV) {
-        return 'preview';
-    }
-
-    if (!requestUrl) {
-        return 'prod';
-    }
-
-    try {
-        const url = new URL(requestUrl, 'https://ilmtest.io');
-        return isProductionHost(url.hostname) ? 'prod' : 'preview';
-    } catch {
-        return 'prod';
-    }
-};
-
-const loadRuntimeContext = async (requestUrl?: string): Promise<RuntimeContext> => {
-    const startedAt = Date.now();
-    const channel = resolveRuntimeChannel(requestUrl);
-    const localRuntime = isLocalRuntimeMode();
-    let datasetVersion = 'local';
-    let manifestKey: string | null = null;
-    let cacheStatus: 'hit' | 'miss' | 'local' = 'local';
-
-    try {
-        if (localRuntime) {
-            const context = {
-                channel,
-                datasetVersion,
-                manifest: null,
-                manifestKey,
-            } satisfies RuntimeContext;
-
-            logRuntimeSignal({
-                routeType: 'runtime-context',
-                datasetVersion,
-                cacheStatus,
-                durationMs: Date.now() - startedAt,
-                status: 'ok',
-            });
-            return context;
-        }
-
-        const pointerCacheKey = buildRuntimeCacheKey('pointer', channel);
-        const pointerCacheStatus = runtimeCache.hasFresh(pointerCacheKey) ? 'hit' : 'miss';
-        const pointer = await resolveDatasetPointer(channel, (key) => readBucketJson(key), runtimeCache);
-        manifestKey = pointer.manifestKey;
-
-        const manifestCacheKey = buildRuntimeCacheKey('manifest', manifestKey);
-        const manifestCacheStatus = runtimeCache.hasFresh(manifestCacheKey) ? 'hit' : 'miss';
-        const manifest = await resolveDatasetManifest(
-            manifestKey,
-            (key) => readBucketJson(key, { manifestKey }),
-            runtimeCache,
-        );
-        datasetVersion = manifest.datasetVersion;
-        cacheStatus = pointerCacheStatus === 'hit' && manifestCacheStatus === 'hit' ? 'hit' : 'miss';
-
-        const context = {
-            channel,
-            datasetVersion,
-            manifest,
-            manifestKey,
-        } satisfies RuntimeContext;
-
-        logRuntimeSignal({
-            routeType: 'runtime-context',
-            datasetVersion,
-            manifestKey,
-            cacheStatus,
-            r2Operation: cacheStatus === 'miss' ? 'get' : undefined,
-            durationMs: Date.now() - startedAt,
-            status: 'ok',
-        });
-        return context;
-    } catch (error) {
-        logRuntimeSignal({
-            routeType: 'runtime-context',
-            datasetVersion,
-            manifestKey: manifestKey ?? undefined,
-            cacheStatus,
-            r2Operation: localRuntime ? undefined : 'get',
-            durationMs: Date.now() - startedAt,
-            status: 'error',
-            message: getErrorMessage(error),
-        });
-        throw error;
-    }
-};
+const getLocalCollectionShardPath = (collectionId: string) =>
+    resolveModuleFilePath(`../../tmp/runtime-artifacts/collections/${collectionId}.json`);
 
 const loadCollectionsArtifactFromContext = async (context: RuntimeContext) => {
     const startedAt = Date.now();
@@ -379,7 +232,7 @@ const loadCollectionShardFromContext = async (collectionId: string, context: Run
                               {
                                   datasetVersion: context.datasetVersion,
                                   manifestKey: context.manifestKey,
-                                  artifactKey: `${LOCAL_COLLECTION_SHARDS_DIR}${collectionId}.json`,
+                                  artifactKey: getLocalCollectionShardPath(collectionId),
                                   collectionId,
                               },
                           );
@@ -387,7 +240,7 @@ const loadCollectionShardFromContext = async (collectionId: string, context: Run
                       return localShard;
                   })()
                 : assertCollectionRuntimeShard(
-                      await readLocalJson<CollectionRuntimeShard>(`${LOCAL_COLLECTION_SHARDS_DIR}${collectionId}.json`),
+                      await readLocalJson<CollectionRuntimeShard>(getLocalCollectionShardPath(collectionId)),
                   )
             : await runtimeCache.getOrLoad(cacheKey, ARTIFACT_CACHE_TTL_MS, async () => {
                   const descriptor = manifest.runtimeArtifactSet.runtime.collectionShards[collectionId];

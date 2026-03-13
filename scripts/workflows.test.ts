@@ -16,14 +16,18 @@ describe('workflow contracts', () => {
         expect(workflow).toContain('bun run integrity');
         expect(workflow).toContain('bun run build');
         expect(workflow).toContain('bun run bundle-check');
+        expect(workflow).toContain('bun run deploy-check');
+        expect(workflow).toContain('bun run deploy-check:preview');
         expect(workflow).toContain('bun run smoke-routes');
     });
 
-    it('requires runtime probing in the maintainer and release lanes', async () => {
+    it('requires preview validation in the maintainer and release lanes', async () => {
         const maintainer = await readWorkflow('maintainer-fixture.yml');
         const release = await readWorkflow('release-corpus.yml');
 
         expect(maintainer).toContain('bun run runtime-probe');
+        expect(maintainer).toContain('bun run smoke-routes -- --base-url');
         expect(release).toContain('bun run runtime-probe');
+        expect(release).toContain('bun run smoke-routes -- --base-url');
     });
 });

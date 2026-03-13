@@ -13,11 +13,16 @@ type ExcerptBucket = {
 
 export type ChunkPayload = {
     sectionId: string;
+    chunkIndex: number;
     excerptIds: string[];
     excerpts: Excerpt[];
 };
 
-const LOCAL_CHUNKS_ROOT = new URL('../../tmp/excerpt-chunks/', import.meta.url).pathname;
+const resolveModuleFilePath = (relativePath: string) => {
+    const pathname = decodeURIComponent(new URL(relativePath, import.meta.url).pathname);
+    return pathname.replace(/^\/([A-Za-z]:\/)/, '$1');
+};
+
 const localChunkModules = import.meta.env.DEV
     ? (import.meta.glob('../../tmp/excerpt-chunks/**/*.json', {
           eager: true,
@@ -33,7 +38,7 @@ const readLocalChunk = async (chunkKey: string) => {
         return (match?.[1] as ChunkPayload | undefined) ?? null;
     }
 
-    const filePath = `${LOCAL_CHUNKS_ROOT}${chunkKey}`;
+    const filePath = resolveModuleFilePath(`../../tmp/excerpt-chunks/${chunkKey}`);
 
     if (typeof Bun !== 'undefined') {
         const file = Bun.file(filePath);
@@ -47,6 +52,72 @@ const readLocalChunk = async (chunkKey: string) => {
     return null;
 };
 
+const logChunkFetch = (details: {
+    datasetVersion?: string;
+    cacheStatus: 'hit' | 'miss' | 'local';
+    chunkKey: string;
+    startedAt: number;
+    status: 'ok' | 'error';
+    message?: string;
+    r2Operation?: string;
+}) => {
+    logRuntimeSignal({
+        routeType: 'chunk-fetch',
+        datasetVersion: details.datasetVersion,
+        cacheStatus: details.cacheStatus,
+        chunkKey: details.chunkKey,
+        r2Operation: details.r2Operation,
+        durationMs: Date.now() - details.startedAt,
+        status: details.status,
+        message: details.message,
+    });
+};
+
+const loadLocalChunkWithSignal = async (
+    chunkKey: string,
+    datasetVersion: string | undefined,
+    startedAt: number,
+    messagePrefix: string,
+) => {
+    const chunk = await readLocalChunk(chunkKey);
+    logChunkFetch({
+        datasetVersion: datasetVersion ?? 'local',
+        cacheStatus: 'local',
+        chunkKey,
+        startedAt,
+        status: chunk ? 'ok' : 'error',
+        message: chunk ? undefined : `${messagePrefix} ${chunkKey}`,
+    });
+    return chunk;
+};
+
+const loadRemoteChunk = async (bucket: ExcerptBucket, chunkKey: string, datasetVersion: string, startedAt: number) => {
+    const object = await bucket.get(`datasets/${datasetVersion}/chunks/${chunkKey}`);
+    if (!object) {
+        logChunkFetch({
+            datasetVersion,
+            cacheStatus: 'miss',
+            chunkKey,
+            startedAt,
+            status: 'error',
+            message: `Missing remote chunk payload for ${chunkKey}`,
+            r2Operation: 'get',
+        });
+        return null;
+    }
+
+    const chunk = JSON.parse(await object.text()) as ChunkPayload;
+    logChunkFetch({
+        datasetVersion,
+        cacheStatus: 'miss',
+        chunkKey,
+        startedAt,
+        status: 'ok',
+        r2Operation: 'get',
+    });
+    return chunk;
+};
+
 export const fetchExcerptChunk = async (
     chunkKey: string,
     _requestUrl?: string,
@@ -57,32 +128,17 @@ export const fetchExcerptChunk = async (
 
     try {
         if (localRuntime) {
-            const chunk = await readLocalChunk(chunkKey);
-            logRuntimeSignal({
-                routeType: 'chunk-fetch',
-                datasetVersion: datasetVersion ?? 'local',
-                cacheStatus: 'local',
-                chunkKey,
-                durationMs: Date.now() - startedAt,
-                status: chunk ? 'ok' : 'error',
-                message: chunk ? undefined : `Missing local chunk payload for ${chunkKey}`,
-            });
-            return chunk;
+            return loadLocalChunkWithSignal(chunkKey, datasetVersion, startedAt, 'Missing local chunk payload for');
         }
 
         const bucket = getExcerptBucket();
         if (!bucket) {
-            const chunk = await readLocalChunk(chunkKey);
-            logRuntimeSignal({
-                routeType: 'chunk-fetch',
-                datasetVersion: datasetVersion ?? 'local',
-                cacheStatus: 'local',
+            return loadLocalChunkWithSignal(
                 chunkKey,
-                durationMs: Date.now() - startedAt,
-                status: chunk ? 'ok' : 'error',
-                message: chunk ? undefined : `Missing fallback local chunk payload for ${chunkKey}`,
-            });
-            return chunk;
+                datasetVersion,
+                startedAt,
+                'Missing fallback local chunk payload for',
+            );
         }
 
         if (!datasetVersion) {
@@ -95,42 +151,16 @@ export const fetchExcerptChunk = async (
             );
         }
 
-        const object = await bucket.get(`datasets/${datasetVersion}/chunks/${chunkKey}`);
-        if (!object) {
-            logRuntimeSignal({
-                routeType: 'chunk-fetch',
-                datasetVersion,
-                cacheStatus: 'miss',
-                chunkKey,
-                r2Operation: 'get',
-                durationMs: Date.now() - startedAt,
-                status: 'error',
-                message: `Missing remote chunk payload for ${chunkKey}`,
-            });
-            return null;
-        }
-
-        const chunk = JSON.parse(await object.text()) as ChunkPayload;
-        logRuntimeSignal({
-            routeType: 'chunk-fetch',
-            datasetVersion,
-            cacheStatus: 'miss',
-            chunkKey,
-            r2Operation: 'get',
-            durationMs: Date.now() - startedAt,
-            status: 'ok',
-        });
-        return chunk;
+        return await loadRemoteChunk(bucket, chunkKey, datasetVersion, startedAt);
     } catch (error) {
-        logRuntimeSignal({
-            routeType: 'chunk-fetch',
+        logChunkFetch({
             datasetVersion: datasetVersion ?? (localRuntime ? 'local' : undefined),
             cacheStatus: localRuntime ? 'local' : 'miss',
             chunkKey,
-            r2Operation: localRuntime ? undefined : 'get',
-            durationMs: Date.now() - startedAt,
+            startedAt,
             status: 'error',
             message: getErrorMessage(error),
+            r2Operation: localRuntime ? undefined : 'get',
         });
         throw error;
     }

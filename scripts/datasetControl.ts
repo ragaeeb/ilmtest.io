@@ -104,6 +104,7 @@ export type PublishDatasetOptions = {
     maxConcurrency?: number;
     stateDir?: string;
     simulateFailureAfter?: number;
+    verifyExistingChecksum?: boolean;
 };
 
 export type PromoteDatasetOptions = {
@@ -433,6 +434,20 @@ const verifyObject = async (store: ObjectStore, object: PreparedObject) => {
     }
 };
 
+const hasMatchingRemoteObject = async (store: ObjectStore, object: PreparedObject, verifyExistingChecksum = false) => {
+    const remote = await store.headObject(object.key);
+    if (!remote || remote.bytes !== object.bytes) {
+        return false;
+    }
+
+    if (!verifyExistingChecksum) {
+        return true;
+    }
+
+    const existing = await store.getObject(object.key);
+    return Boolean(existing && sha256Hex(existing.body) === object.sha256);
+};
+
 const runWithConcurrency = async <T>(
     items: T[],
     concurrency: number,
@@ -488,13 +503,9 @@ export const publishDataset = async (store: ObjectStore, options: PublishDataset
             return;
         }
 
-        const remote = await store.headObject(object.key);
-        if (remote && remote.bytes === object.bytes) {
-            const existing = await store.getObject(object.key);
-            if (existing && sha256Hex(existing.body) === object.sha256) {
-                uploadedKeys.add(object.key);
-                return;
-            }
+        if (await hasMatchingRemoteObject(store, object, options.verifyExistingChecksum)) {
+            uploadedKeys.add(object.key);
+            return;
         }
 
         await store.putObject(object.key, object.body, object.contentType);

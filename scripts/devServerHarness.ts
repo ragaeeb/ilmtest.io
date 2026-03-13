@@ -1,3 +1,5 @@
+const FETCH_TIMEOUT_MS = 10_000;
+
 const waitForServer = async (baseUrl: string, server: Bun.Subprocess, timeoutMs = 30_000) => {
     const start = Date.now();
 
@@ -7,7 +9,9 @@ const waitForServer = async (baseUrl: string, server: Bun.Subprocess, timeoutMs 
         }
 
         try {
-            const response = await fetch(new URL('/', baseUrl));
+            const response = await fetch(new URL('/', baseUrl), {
+                signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+            });
             if (response.ok) {
                 return;
             }

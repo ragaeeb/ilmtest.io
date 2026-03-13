@@ -4,6 +4,7 @@ import {
     assertCollectionRuntimeShard,
     assertRuntimeCollectionSummaryArray,
     assertRuntimeRouteBootstrap,
+    buildRuntimeArtifactPayload,
 } from './runtimeArtifacts';
 
 describe('runtimeArtifacts', () => {
@@ -65,5 +66,105 @@ describe('runtimeArtifacts', () => {
 
     it('rejects invalid shard payloads', () => {
         expect(() => assertCollectionRuntimeShard({})).toThrow();
+        expect(() =>
+            assertCollectionRuntimeShard({
+                artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION + 1,
+                generatedAt: '2026-03-12T18:42:10.000Z',
+                collectionId: '1118',
+                sectionOrder: ['S1'],
+                sectionSummaries: {
+                    S1: {
+                        sectionId: 'S1',
+                        title: 'Section S1',
+                        titleArabic: '',
+                        excerptCount: 1,
+                        firstPage: 1,
+                    },
+                },
+                sectionDescriptors: {
+                    S1: [{ chunkKey: '1118/S1/chunk-0.json', start: 1, end: 1 }],
+                },
+                sectionExcerpts: {
+                    S1: ['E1'],
+                },
+                excerptLookup: {
+                    E1: { sectionId: 'S1', chunkKey: '1118/S1/chunk-0.json', preview: 'Text' },
+                },
+            }),
+        ).toThrow();
+        expect(() =>
+            assertCollectionRuntimeShard({
+                artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
+                generatedAt: '2026-03-12T18:42:10.000Z',
+                collectionId: '1118',
+                sectionOrder: ['S1'],
+                sectionSummaries: {
+                    S1: {
+                        sectionId: 'S1',
+                        title: 'Section S1',
+                        titleArabic: '',
+                        excerptCount: 1,
+                        firstPage: 1,
+                    },
+                },
+                sectionDescriptors: {
+                    S1: [{ chunkKey: '1118/S1/chunk-0.json', start: 2, end: 1 }],
+                },
+                sectionExcerpts: {
+                    S1: ['E1'],
+                },
+                excerptLookup: {
+                    E1: { sectionId: 'S1', chunkKey: '1118/S1/chunk-0.json', preview: 'Text' },
+                },
+            }),
+        ).toThrow();
+        expect(() =>
+            assertCollectionRuntimeShard({
+                artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
+                generatedAt: '2026-03-12T18:42:10.000Z',
+                collectionId: '1118',
+                sectionOrder: ['S1'],
+                sectionSummaries: {
+                    S1: {
+                        sectionId: 'S1',
+                        title: 'Section S1',
+                        titleArabic: '',
+                        excerptCount: 1,
+                        firstPage: 1,
+                    },
+                },
+                sectionDescriptors: {},
+                sectionExcerpts: {
+                    S1: ['E1'],
+                },
+                excerptLookup: {
+                    E1: { sectionId: 'S1', chunkKey: '1118/S1/chunk-0.json', preview: 'Text' },
+                },
+            }),
+        ).toThrow();
+    });
+
+    it('keeps the runtime artifact schema version authoritative', () => {
+        expect(
+            buildRuntimeArtifactPayload({
+                artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION + 1,
+                generatedAt: '2026-03-12T18:42:10.000Z',
+            }),
+        ).toEqual({
+            artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
+            generatedAt: '2026-03-12T18:42:10.000Z',
+        });
+    });
+
+    it('rejects route bootstrap payloads with the wrong schema version', () => {
+        expect(() =>
+            assertRuntimeRouteBootstrap({
+                artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION + 1,
+                generatedAt: '2026-03-12T18:42:10.000Z',
+                collectionsBySlug: {
+                    sample: { id: '1118' },
+                },
+            }),
+        ).toThrow();
     });
 });

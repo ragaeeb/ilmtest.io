@@ -49,6 +49,12 @@ jobs:
       - name: Bundle check
         run: bun run bundle-check
 
+      - name: Workers deploy dry run
+        run: bun run deploy-check
+
+      - name: Workers preview deploy dry run
+        run: bun run deploy-check:preview
+
       - name: Route smoke
         run: bun run smoke-routes -- --port 4322
 

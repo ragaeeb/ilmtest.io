@@ -113,11 +113,7 @@ const validatePageHeadings = (collectionId: string, sections: string[], pageToHe
     }
 };
 
-const validateSectionIntegrity = async (collectionId: string, sectionId: string, context: IntegrityContext) => {
-    context.sectionIds.add(sectionId);
-    const sectionExcerpts = context.indexes.sectionToExcerpts[collectionId]?.[sectionId] ?? [];
-    const sectionChunkIds = context.indexes.sectionToChunks[collectionId]?.[sectionId] ?? [];
-
+const assertSectionChunkFanout = (collectionId: string, sectionId: string, sectionChunkIds: string[]) => {
     if (sectionChunkIds.length === 0) {
         throw new Error(`Section ${collectionId}/${sectionId} has no chunk mappings`);
     }
@@ -131,8 +127,14 @@ const validateSectionIntegrity = async (collectionId: string, sectionId: string,
             `⚠️  Section ${collectionId}/${sectionId} exceeds p95 fan-out target with ${sectionChunkIds.length} chunks.`,
         );
     }
+};
 
-    const firstChunkKey = sectionChunkIds[0];
+const assertSectionHeadingChunk = async (collectionId: string, sectionId: string, context: IntegrityContext) => {
+    const firstChunkKey = context.indexes.sectionToChunks[collectionId]?.[sectionId]?.[0];
+    if (!firstChunkKey) {
+        throw new Error(`Section ${collectionId}/${sectionId} has no chunk mappings`);
+    }
+
     if (!context.availableChunkKeys.has(firstChunkKey)) {
         throw new Error(`First chunk ${firstChunkKey} for section ${collectionId}/${sectionId} is missing`);
     }
@@ -141,31 +143,58 @@ const validateSectionIntegrity = async (collectionId: string, sectionId: string,
     if (!firstChunk.excerpts.some((excerpt) => excerpt.id === sectionId)) {
         throw new Error(`Section heading marker ${sectionId} is missing from chunk ${firstChunkKey}`);
     }
+};
 
+const assertSectionChunkReferences = (
+    collectionId: string,
+    sectionId: string,
+    sectionChunkIds: string[],
+    context: IntegrityContext,
+) => {
     for (const chunkKey of sectionChunkIds) {
         context.referencedChunkKeys.add(chunkKey);
         if (!context.availableChunkKeys.has(chunkKey)) {
             throw new Error(`Section ${collectionId}/${sectionId} references missing chunk ${chunkKey}`);
         }
     }
+};
+
+const validateSectionExcerptIntegrity = async (
+    collectionId: string,
+    sectionId: string,
+    excerptId: string,
+    context: IntegrityContext,
+) => {
+    context.excerptIds.add(excerptId);
+    if (context.indexes.excerptToSection[collectionId]?.[excerptId] !== sectionId) {
+        throw new Error(`Excerpt ${excerptId} does not point back to section ${sectionId}`);
+    }
+
+    const chunkKey = context.indexes.excerptToChunk[collectionId]?.[excerptId];
+    if (!chunkKey) {
+        throw new Error(`Excerpt ${excerptId} is missing an excerptToChunk mapping`);
+    }
+
+    context.referencedChunkKeys.add(chunkKey);
+    if (!context.availableChunkKeys.has(chunkKey)) {
+        throw new Error(`Excerpt ${excerptId} references missing chunk ${chunkKey}`);
+    }
+
+    const chunk = await readChunkFromDisk(context.chunksDir, chunkKey);
+    assertChunkContainsExcerpt(chunk, excerptId, chunkKey);
+};
+
+const validateSectionIntegrity = async (collectionId: string, sectionId: string, context: IntegrityContext) => {
+    context.sectionIds.add(sectionId);
+    const sectionExcerpts = context.indexes.sectionToExcerpts[collectionId]?.[sectionId] ?? [];
+    const sectionChunkIds = context.indexes.sectionToChunks[collectionId]?.[sectionId] ?? [];
+
+    assertSectionChunkFanout(collectionId, sectionId, sectionChunkIds);
+    await assertSectionHeadingChunk(collectionId, sectionId, context);
+    assertSectionChunkReferences(collectionId, sectionId, sectionChunkIds, context);
 
     for (const excerptId of sectionExcerpts) {
-        context.excerptIds.add(excerptId);
-        if (context.indexes.excerptToSection[collectionId]?.[excerptId] !== sectionId) {
-            throw new Error(`Excerpt ${excerptId} does not point back to section ${sectionId}`);
-        }
-
-        const chunkKey = context.indexes.excerptToChunk[collectionId]?.[excerptId];
-        if (!chunkKey) {
-            throw new Error(`Excerpt ${excerptId} is missing an excerptToChunk mapping`);
-        }
-        context.referencedChunkKeys.add(chunkKey);
-        if (!context.availableChunkKeys.has(chunkKey)) {
-            throw new Error(`Excerpt ${excerptId} references missing chunk ${chunkKey}`);
-        }
-
-        const chunk = await readChunkFromDisk(context.chunksDir, chunkKey);
-        assertChunkContainsExcerpt(chunk, excerptId, chunkKey);
+        await validateSectionExcerptIntegrity(collectionId, sectionId, excerptId, context);
     }
 
     return sectionExcerpts.length;
@@ -227,7 +256,7 @@ export const runIntegrityChecks = async (rootDir = '.') => {
         entityIds: new Set<string>(),
     };
     const collectionIds = new Set(collections.map((collection) => collection.id));
-    let generatedRoutes = collections.length + 2;
+    let generatedRoutes = collections.length + 2; // Root and browse index routes are global, then each collection adds its own routes.
 
     for (const collection of collections) {
         const result = await validateCollectionIntegrity(collection, context);

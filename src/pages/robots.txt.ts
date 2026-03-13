@@ -1,23 +1,31 @@
-const normalizeSite = (value?: string) => {
-    const trimmed = value?.trim();
-    if (!trimmed) {
-        return 'https://ilmtest.io';
-    }
-    if (!/^https?:\/\//i.test(trimmed)) {
-        return `https://${trimmed}`;
-    }
-    return trimmed;
-};
+import { env } from 'cloudflare:workers';
+import {
+    resolveDefaultRobotsPolicy,
+    resolvePublicOrigin,
+    resolveRequestOrigin,
+    resolveRuntimeChannel,
+} from '@/lib/runtimeEnvironment';
 
-const site = normalizeSite(import.meta.env.SITE);
-const host = new URL(site).hostname;
-const robotsPolicy =
-    (import.meta.env.PUBLIC_ROBOTS_POLICY as string | undefined) ??
-    (host === 'ilmtest.io' || host === 'www.ilmtest.io' ? 'allow' : 'disallow');
-const aiCrawlPolicy = (import.meta.env.PUBLIC_AI_CRAWL_POLICY as string | undefined) ?? robotsPolicy;
+export const prerender = false;
+
 const aiCrawlerAgents = ['GPTBot', 'ChatGPT-User', 'ClaudeBot', 'Claude-Web', 'CCBot', 'PerplexityBot', 'Bytespider'];
 
-export const GET = () => {
+export const GET = ({ request }: { request: Request }) => {
+    const channel = resolveRuntimeChannel({
+        requestUrl: request.url,
+        requestHost: request.headers.get('host'),
+        configuredChannel: env.ILMTEST_RUNTIME_CHANNEL,
+        isDev: import.meta.env.DEV,
+    });
+    const site = resolvePublicOrigin({
+        requestUrl: request.url,
+        requestOrigin: resolveRequestOrigin(request),
+        configuredSite: import.meta.env.SITE,
+        channel,
+    });
+    const robotsPolicy =
+        (import.meta.env.PUBLIC_ROBOTS_POLICY as string | undefined) ?? resolveDefaultRobotsPolicy(channel);
+    const aiCrawlPolicy = (import.meta.env.PUBLIC_AI_CRAWL_POLICY as string | undefined) ?? robotsPolicy;
     const bodyLines: string[] = [];
 
     if (robotsPolicy === 'allow') {

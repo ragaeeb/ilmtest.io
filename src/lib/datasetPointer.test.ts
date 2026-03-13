@@ -22,6 +22,13 @@ describe('datasetPointer', () => {
                 publishedAt: 'not-a-date',
             }),
         ).toBe(false);
+        expect(
+            isDatasetPointer({
+                datasetVersion: '2026-03-12T18-42-10Z-abc1234',
+                manifestKey: 'datasets/v1/manifest.json',
+                publishedAt: 'March 12, 2026',
+            }),
+        ).toBe(false);
     });
 
     it('builds channel pointer keys', () => {

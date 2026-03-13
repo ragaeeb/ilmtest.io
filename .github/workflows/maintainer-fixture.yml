@@ -55,8 +55,18 @@ jobs:
       - name: Bundle check
         run: bun run bundle-check
 
+      - name: Workers deploy dry run
+        run: bun run deploy-check
+
+      - name: Workers preview deploy dry run
+        run: bun run deploy-check:preview
+
       - name: Route smoke
         run: bun run smoke-routes -- --port 4323
+
+      - name: Route smoke (preview)
+        if: inputs.preview_base_url != ''
+        run: bun run smoke-routes -- --base-url "${{ inputs.preview_base_url }}"
 
       - name: Runtime probe (local)
         if: inputs.preview_base_url == ''
@@ -67,7 +77,7 @@ jobs:
         run: bun run runtime-probe -- --base-url "${{ inputs.preview_base_url }}" --output tmp/runtime-probe.json
 
       - name: Upload runtime probe artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: runtime-probe-${{ inputs.fixture }}
           path: tmp/runtime-probe.json
@@ -76,7 +86,7 @@ jobs:
         run: bun run baseline
 
       - name: Upload baseline artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: baseline-${{ inputs.fixture }}
           path: docs/baselines/current.json

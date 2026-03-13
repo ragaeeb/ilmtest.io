@@ -43,12 +43,12 @@ The review pass was useful, but several review claims were either outdated or to
 
 These facts should anchor implementation:
 
-- [`package.json`](/Users/rhaq/workspace/ilmtest.io/package.json) still couples build, chunk upload, and Pages deploy in one command.
-- [`scripts/uploadR2.ts`](/Users/rhaq/workspace/ilmtest.io/scripts/uploadR2.ts) still uploads by spawning `wrangler r2 object put` per object and still contains hardcoded local debug telemetry.
-- [`src/lib/data.ts`](/Users/rhaq/workspace/ilmtest.io/src/lib/data.ts) eagerly imports local `src/data/*.json` into the server bundle.
-- [`src/lib/excerptChunks.ts`](/Users/rhaq/workspace/ilmtest.io/src/lib/excerptChunks.ts) already fetches chunk objects from the `EXCERPT_BUCKET` R2 binding using `cloudflare:workers`.
-- [`astro.config.mjs`](/Users/rhaq/workspace/ilmtest.io/astro.config.mjs) uses Astro's Cloudflare adapter while keeping `output: 'static'` and opting specific routes into SSR.
-- [`wrangler.jsonc`](/Users/rhaq/workspace/ilmtest.io/wrangler.jsonc) already defines the R2 binding and compatibility date, but the deploy script still targets Pages.
+- [`package.json`](package.json) still couples build, chunk upload, and Pages deploy in one command.
+- [`scripts/uploadR2.ts`](scripts/uploadR2.ts) still uploads by spawning `wrangler r2 object put` per object and still contains hardcoded local debug telemetry.
+- [`src/lib/data.ts`](src/lib/data.ts) eagerly imports local `src/data/*.json` into the server bundle.
+- [`src/lib/excerptChunks.ts`](src/lib/excerptChunks.ts) already fetches chunk objects from the `EXCERPT_BUCKET` R2 binding using `cloudflare:workers`.
+- [`astro.config.mjs`](astro.config.mjs) uses Astro's Cloudflare adapter while keeping `output: 'static'` and opting specific routes into SSR.
+- [`wrangler.jsonc`](wrangler.jsonc) already defines the R2 binding and compatibility date, but the deploy script still targets Pages.
 
 ## Delivery Order
 
@@ -692,7 +692,7 @@ Replace the current deploy behavior:
 - use `wrangler deploy`
 - configure static assets for the Astro output
 
-Update scripts in [`package.json`](/Users/rhaq/workspace/ilmtest.io/package.json) accordingly.
+Update scripts in [`package.json`](package.json) accordingly.
 
 #### Preview strategy
 

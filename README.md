@@ -1,7 +1,7 @@
 # IlmTest
 
 ![Astro](https://img.shields.io/badge/Astro-BC52EE?style=flat&logo=astro&logoColor=white)
-![Cloudflare Pages](https://img.shields.io/badge/Cloudflare%20Pages-F38020?style=flat&logo=cloudflare&logoColor=white)
+![Cloudflare Workers](https://img.shields.io/badge/Cloudflare%20Workers-F38020?style=flat&logo=cloudflare&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=flat&logo=tailwind-css&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat&logo=typescript&logoColor=white)
 ![Bun](https://img.shields.io/badge/Bun-000000?style=flat&logo=bun&logoColor=white)
@@ -26,13 +26,13 @@ IlmTest is a **digital research desk** for authentic Islamic texts. It solves th
 
 We chose a **Hybrid Rendering** approach to solve the "54k Page Problem". Statically generating 54k+ excerpts exceeds practical build and deployment limits.
 
--   **Static Generators (SSG)**: Landing, About, Browse Index, Collection/Section Indexes.
--   **Server-Side Rendering (SSR)**: Individual Excerpt pages (`/browse/.../e/[excerpt]`) are rendered on-demand at the Edge.
+-   **Static Generators (SSG)**: Landing and other fixed informational pages.
+-   **Server-Side Rendering (SSR)**: Browse, section, excerpt, profile, and sitemap surfaces are rendered on-demand at the edge.
 -   **Edge Caching**: SSR responses are cached (stale-while-revalidate) to ensure near-static performance after the first hit.
 
 ### The Stack
 -   **Framework**: [Astro 6.0](https://astro.build) (Static + SSR)
--   **Runtime**: [Cloudflare Pages](https://pages.cloudflare.com) + Pages Functions + R2
+-   **Runtime**: [Cloudflare Workers](https://workers.cloudflare.com) + R2
 -   **Language**: TypeScript (Strict Mode)
 -   **Styling**: [Tailwind CSS 4.0](https://tailwindcss.com) + Scoped CSS Variables
 -   **Package Manager**: [Bun](https://bun.sh)
@@ -57,14 +57,18 @@ All commands are run from the root of the project:
 | `bun install`             | Installs dependencies                            |
 | `bun dev`                 | Starts local dev server at `localhost:4321`      |
 | `bun build`               | Build your production site to `./dist/`          |
-| `bun preview`             | Preview your build locally, before deploying     |
 | `bun run setup`           | Runs the ETL pipeline to generate content/data   |
+| `bun run setup-fixture`   | Materialize the tiny or medium fixture corpus    |
 | `bun run clean`           | Removes generated content, data, and build files |
+| `bun run smoke-routes`    | Verify core routes, robots, sitemap, and 404s   |
+| `bun run runtime-probe`   | Measure route timings and failure behavior       |
 | `bun run create-r2-bucket`| Creates the R2 bucket (uses `R2_BUCKET`)         |
 | `bun run upload-r2`       | Uploads chunks to R2                             |
-| `bun run deploy`          | Build + upload chunks + Pages deploy             |
+| `bun run deploy`          | Build + deploy the production Worker             |
+| `bun run deploy:preview`  | Build + deploy the shared preview Worker         |
+| `bun run deploy-check`    | Dry-run the Worker deploy contract               |
+| `bun run deploy-check:preview` | Dry-run the preview Worker deploy contract  |
 | `bun run resume`          | Resume upload with skip-existing                 |
-| `bun astro ...`           | Run CLI commands like `astro add`, `astro check` |
 
 ## 🔐 Environment Variables
 
@@ -75,8 +79,8 @@ Place these in `.env` so Bun picks them up. See `docs/deployment.md` for the ful
 - **Browse shows `0 excerpts`**  
   The `EXCERPT_BUCKET` binding is missing or pointing at the wrong R2 bucket.
 
-- **Pages deploy fails**  
-  Ensure the Cloudflare API token can deploy the `ilmtest-io` Pages project and access the configured R2 bucket.
+- **Worker deploy fails**  
+  Run `bun run deploy-check` after `bun run build` to verify the generated Worker bundle, asset binding, and Wrangler config before a real deploy.
 
 - **403 Forbidden uploading to R2**  
   Ensure R2 is enabled in Cloudflare and your API token includes **Account → R2 Storage → Edit** for the correct account.

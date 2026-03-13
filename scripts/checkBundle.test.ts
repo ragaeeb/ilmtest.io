@@ -28,26 +28,48 @@ describe('checkBundle', () => {
 
     it('fails when index signatures appear in bundle output', async () => {
         const tempRoot = await mkdtemp(join(tmpdir(), 'ilmtest-bundle-'));
-        const distDir = join(tempRoot, 'dist', 'functions', 'chunks');
-        await mkdir(distDir, { recursive: true });
-        await writeFile(join(distDir, 'bad.js'), 'const data = {"sectionToExcerpts":{}};');
+        try {
+            const distDir = join(tempRoot, 'dist', 'functions', 'chunks');
+            await mkdir(distDir, { recursive: true });
+            await writeFile(join(distDir, 'bad.js'), 'const data = {"sectionToExcerpts":{}};');
 
-        const result = await runBundleCheck(tempRoot, scriptPath);
-        await rm(tempRoot, { recursive: true, force: true });
+            const result = await runBundleCheck(tempRoot, scriptPath);
 
-        expect(result.exitCode).not.toBe(0);
-        expect(result.stderr + result.stdout).toContain('indexes');
+            expect(result.exitCode).not.toBe(0);
+            expect(result.stderr + result.stdout).toContain('indexes');
+        } finally {
+            await rm(tempRoot, { recursive: true, force: true });
+        }
     });
 
     it('passes when bundle output is clean', async () => {
         const tempRoot = await mkdtemp(join(tmpdir(), 'ilmtest-bundle-'));
-        const distDir = join(tempRoot, 'dist', 'functions', 'chunks');
-        await mkdir(distDir, { recursive: true });
-        await writeFile(join(distDir, 'ok.js'), 'console.log("ok");');
+        try {
+            const distDir = join(tempRoot, 'dist', 'functions', 'chunks');
+            await mkdir(distDir, { recursive: true });
+            await writeFile(join(distDir, 'ok.js'), 'console.log("ok");');
 
-        const result = await runBundleCheck(tempRoot, scriptPath);
-        await rm(tempRoot, { recursive: true, force: true });
+            const result = await runBundleCheck(tempRoot, scriptPath);
 
-        expect(result.exitCode).toBe(0);
+            expect(result.exitCode).toBe(0);
+        } finally {
+            await rm(tempRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('scans worker bundle files when dist/_worker.js is a file', async () => {
+        const tempRoot = await mkdtemp(join(tmpdir(), 'ilmtest-bundle-'));
+        try {
+            const distDir = join(tempRoot, 'dist');
+            await mkdir(distDir, { recursive: true });
+            await writeFile(join(distDir, '_worker.js'), 'const data = {"pageToHeading":{}};');
+
+            const result = await runBundleCheck(tempRoot, scriptPath);
+
+            expect(result.exitCode).not.toBe(0);
+            expect(result.stderr + result.stdout).toContain('indexes');
+        } finally {
+            await rm(tempRoot, { recursive: true, force: true });
+        }
     });
 });

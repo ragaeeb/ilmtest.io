@@ -51,12 +51,14 @@ Use the versions in `package.json` as the canonical floor unless a later ADR cha
 
 ### App runtime / Cloudflare
 
-- `EXCERPT_BUCKET` binding in Workers/Pages runtime
+- `EXCERPT_BUCKET` binding in Workers runtime
+- `ILMTEST_RUNTIME_CHANNEL=prod|preview`
 - `PUBLIC_ROBOTS_POLICY` optional
 - `PUBLIC_AI_CRAWL_POLICY` optional
+- `ILMTEST_DATASET_VERSION_OVERRIDE` optional for preview/dev validation only
 
 ## Policy Notes
 
 - Use fixture corpora for contributor-safe validation.
 - Reserve production dataset promotion and rollback commands for maintainers.
-- Treat legacy Pages upload helpers as compatibility tooling, not the canonical publish lane.
+- Treat `upload-r2` and `resume` as compatibility tooling, not the canonical deploy lane.

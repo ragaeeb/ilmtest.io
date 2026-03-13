@@ -27,6 +27,4 @@ pnpm-debug.log*
 src/data/**
 .wrangler
 tmp
-tmp/dataset-build/
-tmp/publish-state/
 docs/baselines/current.json

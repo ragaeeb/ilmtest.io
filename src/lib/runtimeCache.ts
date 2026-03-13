@@ -45,7 +45,10 @@ export class RuntimeCache {
         try {
             return await value;
         } catch (error) {
-            this.#entries.delete(key);
+            const latest = this.#entries.get(key) as CacheEntry<T> | undefined;
+            if (latest?.value === value) {
+                this.#entries.delete(key);
+            }
             throw error;
         }
     }

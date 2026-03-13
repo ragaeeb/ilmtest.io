@@ -34,8 +34,60 @@ describe('runtimeCache', () => {
             throw new Error('fail');
         };
 
-        await expect(cache.getOrLoad('key', 1000, loader)).rejects.toThrow('fail');
-        await expect(cache.getOrLoad('key', 1000, loader)).rejects.toThrow('fail');
+        const expectFailure = async () => {
+            try {
+                await cache.getOrLoad('key', 1000, loader);
+                throw new Error('Expected loader to fail');
+            } catch (error) {
+                expect(error).toBeInstanceOf(Error);
+                expect((error as Error).message).toBe('fail');
+            }
+        };
+
+        await expectFailure();
+        await expectFailure();
         expect(calls).toBe(2);
+    });
+
+    it('keeps a newer cached value when a stale loader fails later', async () => {
+        let now = 0;
+        const cache = new RuntimeCache(() => now);
+        const staleLoadControl: {
+            reject?: (error: Error) => void;
+        } = {};
+        let freshCalls = 0;
+
+        const staleLoad = cache.getOrLoad(
+            'key',
+            1000,
+            () =>
+                new Promise<string>((_resolve, reject) => {
+                    staleLoadControl.reject = (error: Error) => reject(error);
+                }),
+        );
+
+        now = 1500;
+        const freshValue = await cache.getOrLoad('key', 1000, async () => {
+            freshCalls += 1;
+            return 'fresh';
+        });
+
+        expect(freshValue).toBe('fresh');
+
+        const rejectStaleLoadFn = staleLoadControl.reject;
+        if (!rejectStaleLoadFn) {
+            throw new Error('Expected stale loader reject handle');
+        }
+        rejectStaleLoadFn(new Error('stale failure'));
+        try {
+            await staleLoad;
+            throw new Error('Expected stale loader to fail');
+        } catch (error) {
+            expect(error).toBeInstanceOf(Error);
+            expect((error as Error).message).toBe('stale failure');
+        }
+
+        expect(await cache.getOrLoad('key', 1000, async () => 'unexpected')).toBe('fresh');
+        expect(freshCalls).toBe(1);
     });
 });

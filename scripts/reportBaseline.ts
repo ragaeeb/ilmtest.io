@@ -252,7 +252,7 @@ export const generateBaselineReport = async (options: GenerateBaselineOptions = 
         deployCoupling: {
             deployScript: scripts.deploy ?? null,
             usesPagesDeploy: (scripts.deploy ?? '').includes('wrangler pages deploy'),
-            usesLegacyUploadR2: (scripts.deploy ?? '').includes('uploadR2.ts') || Boolean(scripts['upload-r2']),
+            usesLegacyUploadR2: (scripts.deploy ?? '').includes('uploadR2.ts'),
             publishDatasetScript: scripts['publish-dataset'] ?? null,
         },
     };
@@ -261,13 +261,14 @@ export const generateBaselineReport = async (options: GenerateBaselineOptions = 
 const main = async () => {
     const baseline = await generateBaselineReport();
 
+    if (baseline.commands.some((status) => !status.ok)) {
+        console.error(JSON.stringify({ commands: baseline.commands }, null, 2));
+        process.exit(1);
+    }
+
     await mkdir(dirname(BASELINE_OUTPUT_PATH), { recursive: true });
     await Bun.write(BASELINE_OUTPUT_PATH, JSON.stringify(baseline, null, 2));
     console.log(JSON.stringify(baseline, null, 2));
-
-    if (baseline.commands.some((status) => !status.ok)) {
-        process.exit(1);
-    }
 };
 
 if (import.meta.main) {

@@ -66,7 +66,7 @@ void ogImageResolved;
       crossorigin
     />
     {jsonLdContent && (
-      <script type="application/ld+json" set:html={jsonLdContent} />
+      <script is:inline type="application/ld+json" set:html={jsonLdContent} />
     )}
   </head>
   <body>

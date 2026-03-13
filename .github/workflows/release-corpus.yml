@@ -64,8 +64,18 @@ jobs:
       - name: Bundle check
         run: bun run bundle-check
 
+      - name: Workers deploy dry run
+        run: bun run deploy-check
+
+      - name: Workers preview deploy dry run
+        run: bun run deploy-check:preview
+
       - name: Route smoke
         run: bun run smoke-routes -- --port 4324
+
+      - name: Route smoke (preview)
+        if: inputs.preview_base_url != ''
+        run: bun run smoke-routes -- --base-url "${{ inputs.preview_base_url }}"
 
       - name: Runtime probe (local)
         if: inputs.preview_base_url == ''

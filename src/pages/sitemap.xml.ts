@@ -1,25 +1,25 @@
+import { env } from 'cloudflare:workers';
 import { loadSitemapCollectionData } from '@/lib/data';
+import { resolvePublicOrigin, resolveRequestOrigin, resolveRuntimeChannel } from '@/lib/runtimeEnvironment';
 import { isRuntimeDataError } from '@/lib/runtimeErrors';
 
 export const prerender = false;
 
-const normalizeSite = (value?: string) => {
-    const trimmed = value?.trim();
-    if (!trimmed) {
-        return 'https://ilmtest.io';
-    }
-    if (!/^https?:\/\//i.test(trimmed)) {
-        return `https://${trimmed}`;
-    }
-    return trimmed;
-};
-
-const site = normalizeSite(import.meta.env.SITE);
-
-const buildUrl = (path: string) => new URL(path, site).toString();
-
 export const GET = async ({ request }: { request: Request }) => {
     try {
+        const channel = resolveRuntimeChannel({
+            requestUrl: request.url,
+            requestHost: request.headers.get('host'),
+            configuredChannel: env.ILMTEST_RUNTIME_CHANNEL,
+            isDev: import.meta.env.DEV,
+        });
+        const site = resolvePublicOrigin({
+            requestUrl: request.url,
+            requestOrigin: resolveRequestOrigin(request),
+            configuredSite: import.meta.env.SITE,
+            channel,
+        });
+        const buildUrl = (path: string) => new URL(path, site).toString();
         const collections = await loadSitemapCollectionData(request.url);
         const staticPaths = ['/', '/about', '/browse', '/privacy', '/terms'];
         const urls: string[] = staticPaths.map((path) => buildUrl(path));

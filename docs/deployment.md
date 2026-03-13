@@ -1,282 +1,166 @@
-# Deploying IlmTest to Cloudflare Pages
+# Deploying IlmTest to Cloudflare Workers
 
-This document is now legacy/current-state deployment guidance. The new corpus publish flow is documented in:
+This guide documents the canonical `M4` deploy path. Cloudflare Workers is now the only supported runtime path for the app. Corpus publishing remains a separate lane documented in:
 
-- [Publish Corpus](/Users/rhaq/workspace/ilmtest.io/docs/runbooks/publish-corpus.md)
-- [Roll Back Corpus](/Users/rhaq/workspace/ilmtest.io/docs/runbooks/rollback-corpus.md)
-- [Fixture Corpus Workflow](/Users/rhaq/workspace/ilmtest.io/docs/fixtures.md)
-- [QA And Observability Baseline](/Users/rhaq/workspace/ilmtest.io/docs/qa.md)
-- [Cloudflare Security Baseline](/Users/rhaq/workspace/ilmtest.io/docs/security-baseline.md)
-
-Pages deployment still exists for continuity until the `M4` Workers cutover is complete.
-
-This guide outlines the steps to deploy the IlmTest Astro application to Cloudflare Pages.
+- [Publish Corpus](docs/runbooks/publish-corpus.md)
+- [Roll Back Corpus](docs/runbooks/rollback-corpus.md)
+- [Workers Cutover](docs/runbooks/workers-cutover.md)
+- [QA And Observability Baseline](docs/qa.md)
 
 ## Prerequisites
 
-1.  **Cloudflare Account**: You need an active Cloudflare account.
-2.  **Domain**: You already own `ilmtest.io` and it should be active in your Cloudflare account.
-3.  **Runtime**:
-    - **Bun**: `>=1.3.6`
-    - **Node**: `>=25.0.0`
-4.  **Repository (for CI deploys)**: The project code must be pushed to a Git provider (GitHub or GitLab).
+1. Cloudflare account with Workers, R2, and the target domain configured.
+2. Bun `>=1.3.10`.
+3. Node `>=25.0.0`.
+4. Wrangler `^4.72.0` from `devDependencies`.
 
-## Build output
+## Build Output
 
-- **Build command**: `bun run build`
-- **Build output directory**: `dist`
-- **Helper scripts**:
-  - `bun run setup-fixture -- tiny|medium` (materialize PR-safe or maintainer fixtures without secrets)
-  - `bun run integrity` (validate local routes, chunk mappings, schema, and curated references)
-  - `bun run smoke-routes` (fetch homepage, browse, collection, section, and excerpt routes against local dev)
-  - `bun run validate-dataset` (validate local dataset inputs before publish)
-  - `bun run publish-dataset` (publish immutable dataset artifacts to R2)
-  - `bun run promote-dataset` (move the preview or prod dataset pointer)
-  - `bun run rollback-dataset` (move a dataset pointer back to a prior dataset)
-  - `bun run prune-datasets` (delete older preview datasets not protected by history)
-  - `bun run upload-r2` (legacy bulk upload helper)
-  - `bun run resume` (legacy resume helper)
-  - `bun run deploy` (legacy Pages-oriented build → upload → deploy flow)
-  - `bun run create-r2-bucket` (creates R2 bucket)
+- Build command: `bun run build`
+- Static asset output: `dist/dist`
+- Worker bundle output: `dist/functions/index.mjs`
+- Generated Wrangler config: `dist/functions/wrangler.json`
 
-## Option A: Deploy from your machine (Wrangler)
+## Runtime Environments
 
-This path deploys the Astro build output directly to your Cloudflare Pages project using Wrangler.
+The runtime environment is explicit:
 
-### 1. Install Wrangler (local)
+- Production deploys use the default Wrangler environment and set `ILMTEST_RUNTIME_CHANNEL=prod`.
+- Preview deploys use `wrangler --env preview` and set `ILMTEST_RUNTIME_CHANNEL=preview`.
+- Preview also defaults `PUBLIC_ROBOTS_POLICY=disallow` and `PUBLIC_AI_CRAWL_POLICY=disallow`.
+- `ILMTEST_DATASET_VERSION_OVERRIDE` is optional and is only honored in preview or local/dev contexts.
 
-```bash
-bun add -g wrangler
-```
+Both environments require the `EXCERPT_BUCKET` R2 binding.
 
-### 2. Authenticate
+## Canonical Commands
 
-```bash
-wrangler login
-```
+- `bun run deploy:prod`
+- `bun run deploy:preview`
+- `bun run deploy-check`
+- `bun run deploy-check:preview`
 
-### 3. Build locally
+`deploy-check` and `deploy-check:preview` generate target-specific Wrangler configs under `dist/functions/` and then run `wrangler deploy --dry-run` against the built Worker bundle and asset directory.
 
-```bash
-bun install
+## Local Validation Flow
 
-# If you need to regenerate data first:
-# bun run setup 1118 2576
+1. Materialize the intended corpus:
+   `bun run setup-fixture -- tiny`
+   or
+   `bun run setup <collection ids...>`
+2. Build the Worker bundle:
+   `bun run build`
+3. Validate the deploy contract:
+   `bun run deploy-check`
+4. Validate route behavior locally:
+   `bun run smoke-routes`
+   `bun run runtime-probe`
 
-bun run build
-```
+## Preview Deployment Flow
 
-### 4. Deploy
+1. Promote or validate the preview dataset pointer if needed:
+   `bun run promote-dataset -- --channel preview --dataset-version <dataset-version>`
+2. Deploy the Worker preview:
+   `bun run deploy:preview`
+3. Capture the preview URL returned by Wrangler.
+4. Run preview validation against that URL:
+   `bun run smoke-routes -- --base-url <preview-url>`
+   `bun run runtime-probe -- --base-url <preview-url>`
+5. Confirm:
+   - `robots.txt` disallows indexing
+   - `sitemap.xml` uses the preview origin, not `https://ilmtest.io`
+   - browse, collection, section, excerpt, and 404 routes behave correctly
 
-```bash
-wrangler pages deploy ./dist --project-name ilmtest-io
-```
+## Production Deployment Flow
 
-> Tip: `bun run deploy` wraps the same flow once `R2_BUCKET` is set for the chunk upload step.
+1. Confirm the production channel points at the intended dataset:
+   `bun scripts/validateDataset.ts remote --channel prod`
+2. Deploy the Worker:
+   `bun run deploy:prod`
+3. Validate the production routes:
+   `bun run smoke-routes -- --base-url https://ilmtest.io`
+   `bun run runtime-probe -- --base-url https://ilmtest.io`
 
-> Note: the checked-in [wrangler.jsonc](/Users/rhaq/workspace/ilmtest.io/wrangler.jsonc) is kept compatible with Astro's local Cloudflare build. The Pages project itself should be created and configured in the Cloudflare dashboard.
+## Cloudflare Configuration Notes
 
-> **Note:** Direct Upload projects cannot be converted to Git-based deployments later. If you want CI, prefer Option B.
+- `wrangler.jsonc` defines the runtime channel mapping and preview robots posture.
+- The Astro build generates the deployable Worker config at `dist/functions/wrangler.json`.
+- `scripts/prepareWorkerDeploy.ts` materializes `dist/functions/wrangler.prod.json` or `dist/functions/wrangler.preview.json` from that generated bundle config plus `wrangler.jsonc`.
+- The Worker serves static assets through the generated `ASSETS` binding from `dist/dist`.
+- Keep the `EXCERPT_BUCKET` binding present in both default and `preview` environments.
 
-## Option B: Deploy via CI (Git Integration)
+## Cache Rules
 
-### 1. Connect Git Repository to Cloudflare Pages
+Browse and excerpt routes still rely on application-set cache headers:
 
-1.  Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com/).
-2.  Navigate to **Workers & Pages** → **Create application** → **Pages** → **Connect to Git**.
-3.  Select your Git provider (e.g., GitHub) and authorize Cloudflare if needed.
-4.  Select the **ilmtest.io** repository from the list.
-5.  Click **Begin setup**.
+- `Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400`
+- `CDN-Cache-Control: max-age=3600`
 
-### 2. Configure Build Settings
+Keep the Cloudflare cache rule for `/browse/*` and respect origin headers.
 
-Cloudflare should detect Astro, but set the following explicitly:
+## M4 Cost Model
 
-- **Project Name**: `ilmtest` (or your preferred project name)
-- **Production Branch**: `main` (required for `ilmtest.io`)
-- **Framework Preset**: `Astro`
-- **Build Command**: `bun run build`
-- **Build Output Directory**: `dist`
-- **Node.js Version**: set `NODE_VERSION=25.0.0` (or higher)
+M4 requires the runtime cost model to be explicit before sign-off.
 
-### 3. Environment Variables
+### Worker invocation rule
 
-Add any required environment variables in **Project Settings → Environment Variables**.
+Every request still incurs one Worker invocation, even when the HTML response is edge-cached. The cache policy reduces origin recomputation and R2 activity, but it does not reduce Worker request count.
 
-### 4. Deploy
+### Cold-path R2 Class B read assumptions
 
-1.  Click **Save and Deploy**.
-2.  Cloudflare will clone your repository, install dependencies, build the site, and deploy it to a `*.pages.dev` subdomain.
+These are the expected remote reads on a cold request when the in-process runtime cache is empty:
 
-### Production vs Preview Branches
+- Browse index: `prod.json` or `preview.json` pointer, dataset manifest, collections bootstrap artifact.
+- Collection page: browse baseline plus one collection shard.
+- Section page: collection baseline plus `N` excerpt chunk reads for that section.
+- Excerpt page: current implementation uses the section loader first, so it matches the section baseline plus one additional target chunk read.
+- `robots.txt`: no R2 reads.
+- `sitemap.xml`: browse baseline plus one collection shard per collection while enumerating section URLs.
 
-- **Production** always serves the custom domain (`ilmtest.io`).
-- **Preview** deployments are for non-production branches (e.g., `feature/*` or `v1`).
-- If you deploy a preview branch only, `ilmtest.io` will show **"Nothing is here yet"**.
-- Keep the **Production Branch** set to `main`, and deploy from `main` for prod.
+Section fan-out is intentionally bounded. The runtime rejects a section with more than `8` chunk descriptors, so the worst-case cold-path section read shape is known and treated as an ETL bug if exceeded.
 
-## Custom Domain Setup
+### Warm-path assumptions
 
-Once the production deployment is successful:
+When the Worker runtime cache is warm:
 
-1.  Go to your Pages project settings.
-2.  Click on the **Custom domains** tab.
-3.  Click **Set up a custom domain**.
-4.  Enter `ilmtest.io` (and optionally `www.ilmtest.io`).
-5.  Cloudflare will automatically configure the DNS records since the domain is managed by Cloudflare.
+- pointer, manifest, collections bootstrap, and collection shards are served from memory until their TTL expires
+- section routes still read the excerpt chunks required for that section
+- excerpt routes still read the target excerpt chunk after the section data is loaded
 
-**If you see "Nothing is here yet" on `ilmtest.io`:**
-- Verify the **Production Branch** is `main`.
-- Confirm a **production** deployment succeeded (not just a preview branch).
+This means warm traffic primarily shifts cost from metadata/object-discovery reads to the chunk reads required by the requested reading route.
 
-## Cache Rules (Required for SSR Browse Pages)
+### Traffic-mix assumptions
 
-To keep Pages Functions usage low on the free tier, add a Cache Rule that **caches HTML** for `/browse/*`:
+Use this simple planning model for sign-off:
 
-1.  Cloudflare Dashboard → **Rules** → **Cache Rules** → **Create rule**.
-2.  **If**: `URI Path` **starts with** `/browse/`.
-3.  **Then**: **Cache eligibility** → **Cache everything**.
-4.  **Cache TTL**: **Respect existing headers**.
+- Production: mostly human browse traffic, with section and excerpt routes dominating read volume.
+- Preview: maintainer-only validation traffic, short-lived, low volume, and expected to be negligible relative to production.
+- Production mix assumption for reasoning: browse and collection routes are a minority of requests; section and excerpt routes dominate both Worker invocations and R2 reads.
 
-Note: use **Cache Rules** (not Page Rules). This is required for SSR HTML caching.
+This model is sufficient for M4 because the goal is to validate that the route classes are bounded and observable, not to build a full forecasting spreadsheet.
 
-This ensures the `Cache-Control` headers set by SSR routes are honored at the edge.
+### Sign-off checks
 
-### Cache Verification Checklist
+Before treating the cutover as complete, confirm:
 
-After deployment, confirm caching is working:
+- `bun run deploy-check`
+- `bun run deploy-check:preview`
+- `bun run smoke-routes`
+- `bun run runtime-probe`
+- preview validation against the deployed preview URL
+- production canary validation against `https://ilmtest.io`
 
-1.  Cloudflare Dashboard → **Analytics** → **Caching**.
-2.  Filter by `/browse/` paths and confirm cache **HIT** rates are rising.
-3.  Use DevTools on a `/browse/...` page and verify response headers include:
-    - `Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400`
-    - `CF-Cache-Status: HIT` (after the first request)
-
-## Bot Protection (Recommended)
-
-To prevent crawlers from exhausting the free tier:
-
-1.  Cloudflare Dashboard → **Security** → **Bots**.
-2.  Enable **Bot Fight Mode** (or **Super Bot Fight Mode** if available).
-3.  Add **WAF/Rate limiting** rule for `/browse/*` (e.g., limit requests per minute per IP).
-4.  Optionally block known AI crawlers via **User-Agent** rules if needed.
-
-## Long-term: R2 Migration Path (Recommended for Scale)
-
-When file counts exceed Pages limits, move `excerpt-chunks` to R2:
-
-1.  **Create an R2 bucket** in Cloudflare.
-2.  **Upload chunks to R2** (from `tmp/excerpt-chunks/`).
-    - `R2_BUCKET=<bucket-name> bun run upload-r2`
-    - To resume after an interruption: `bun run resume`
-3.  **Create the bucket** (if not already created):
-    - `R2_BUCKET=<bucket-name> bun run create-r2-bucket`
-4.  **Configure R2 binding** in Pages project settings:
-    - Binding name: `EXCERPT_BUCKET`
-    - Add it to **both Production and Preview** environments if you deploy previews.
-5.  **Update runtime fetches** to read chunk JSON from R2 instead of local files.
-6.  **Keep cache headers** on SSR routes so `/browse/*` and excerpt pages stay cached.
-7.  **Purge cache only when needed** (e.g., if a collection changes).
-
-This removes the pressure from the Pages static file limit and lets the library scale without redeploy pressure.
-
-## Data Size Optimizations
-
-To reduce storage and transfer costs:
-
-1.  **Minify chunk JSON** (remove whitespace) when writing chunk files.
-2.  **Increase chunk size** (fewer files, fewer metadata lookups).
-3.  **Rely on Cloudflare compression** (Brotli/Gzip for responses).
-4.  **Optional**: Precompress `.json.br` and serve with `Content-Encoding: br` if needed.
-5.  **Optional**: Compact JSON schemas (arrays instead of objects) for larger gains.
-
-## DNS Cutover from Vercel
-
-If the domain is currently pointed to Vercel, update DNS in Cloudflare:
-
-1.  Remove or replace existing Vercel records (commonly `A`/`CNAME` pointing to Vercel).
-2.  Ensure the Pages-generated records exist:
-    - Apex (`ilmtest.io`) uses Cloudflare CNAME flattening.
-    - `www` (optional) should be a CNAME to your `*.pages.dev` URL.
-3.  Wait for DNS propagation and verify `https://ilmtest.io` serves the Pages deployment.
-
-## Post-Deployment Verification
-
-1.  Visit `https://ilmtest.io`.
-2.  Verify that all pages load correctly (Landing, About, Browse, Excerpts).
-3.  Check that the specific font subsets (Arabic) are loading.
-4.  Test navigation between pages.
+The smoke and probe flow covers browse, collection, section, excerpt, `robots.txt`, `sitemap.xml`, and `404` behavior, plus the cache headers expected by the SSR reading routes.
 
 ## Troubleshooting
 
-- **"Nothing is here yet" on `ilmtest.io`**
-  - Custom domains serve **production** only. Ensure Production Branch is `main` and a production deploy completed.
-- **Preview works, production fails / 522 on custom domain**
-  - Check that production deploy finished successfully and DNS is pointing to Pages.
-- **Browse shows "Section T123" and `0 excerpts`**
-  - The `EXCERPT_BUCKET` binding is missing or pointing at the wrong R2 bucket.
-  - Add the binding to both **Production and Preview** if you use previews.
-- **Pages deploy fails with `Authentication error [code: 10000]`**
-  - Your `CLOUDFLARE_API_TOKEN` needs:
-    - `Account → Cloudflare Pages → Edit`
-    - `User → User Details → Read`
-    - `User → Memberships → Read`
-- **R2 upload errors like `put: Unspecified error (0)` / R2 500s**
-  - Ensure `R2_REMOTE=1` (remote mode) and that `R2_BUCKET` is set.
-- **Skip-existing not skipping**
-  - Listing requires `R2_ENDPOINT` or `R2_ACCOUNT_ID/CF_ACCOUNT_ID` and S3 keys (or a `CLOUDFLARE_API_TOKEN` that can derive them).
-  - Ensure `R2_LIST_PREFIX` matches your upload key prefix and `R2_BASE_DIR` matches the local root used to build object keys.
-- **CI builds without data**
-  - The app now tolerates missing `src/data/*.json` and will build with empty content.
-  - To render real content, run `bun run setup` before deploying.
-
-## Updates
-
-Any new commits pushed to the `main` branch will automatically trigger a new deployment when using Git integration. You can monitor build status in the Cloudflare Pages dashboard.
-
-## R2 Upload Helpers
-
-The upload script supports resume, dry runs, and sanity checks to avoid re-uploading chunks.
-
-### Common commands
-
-- `bun run upload-r2` — upload all chunks
-- `bun run resume` — resume upload with skip-existing and `R2_REMOTE=1`
-
-### Dry run and confirmation
-
-Use these when you want to validate configuration before uploading:
-
-```bash
-# Print sanity check and exit
-R2_DRY_RUN=1 bun run resume
-
-# Require confirmation before uploading
-R2_REQUIRE_CONFIRM=1 R2_CONFIRM=1 bun run resume
-```
-
-### Environment variables (local uploads)
-
-Place these in `.env` for local runs:
-
-- `CLOUDFLARE_API_TOKEN` — API token with R2 edit permission
-- If you use `bun run deploy`, the token also needs **Cloudflare Pages → Edit** and **User → User Details/Memberships → Read**
-- `R2_BUCKET` — R2 bucket name (e.g., `ilmtest-excerpts`)
-- `R2_CONCURRENCY` — Upload parallelism (default: `8`)
-- `PAGES_PROJECT` — Pages project name (e.g., `ilmtest`)
-
-### Optional R2 list config (skip-existing)
-
-Skip-existing uses Bun’s S3 list API. Provide either:
-
-- `R2_ENDPOINT` **or** `R2_ACCOUNT_ID`/`CF_ACCOUNT_ID`
-
-If you prefer explicit S3 credentials, set:
-
-- `R2_ACCESS_KEY_ID`
-- `R2_SECRET_ACCESS_KEY`
-
-### Retry behavior
-
-- `R2_RETRY_429` — number of retries when a `429`/`TooManyRequests` is detected (default: `3`)
-- `R2_PROGRESS_EVERY` — progress log interval in processed items (default: `50`)
+- Preview `robots.txt` allows indexing:
+  - Confirm the deploy used `bun run deploy:preview`.
+  - Confirm `ILMTEST_RUNTIME_CHANNEL=preview` is present in the preview environment.
+- Preview `sitemap.xml` points at `https://ilmtest.io`:
+  - Confirm the route is using the deployed preview URL and not a production alias.
+  - Re-run `bun run smoke-routes -- --base-url <preview-url>`.
+- Worker deploy fails after a successful build:
+  - Run `bun run deploy-check` locally to isolate asset/binding configuration errors.
+- Browse pages show missing data:
+  - Confirm the deployed environment has the `EXCERPT_BUCKET` binding.
+  - Confirm the channel pointer (`prod.json` or `preview.json`) references a valid manifest.
