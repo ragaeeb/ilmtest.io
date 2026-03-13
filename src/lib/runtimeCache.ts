@@ -25,6 +25,11 @@ export class RuntimeCache {
         this.#entries.delete(key);
     }
 
+    hasFresh(key: string) {
+        const current = this.#entries.get(key);
+        return Boolean(current && current.expiresAt > this.#now());
+    }
+
     async getOrLoad<T>(key: string, ttlMs: number, loader: () => Promise<T>) {
         const current = this.#entries.get(key) as CacheEntry<T> | undefined;
         if (current && current.expiresAt > this.#now()) {
@@ -40,7 +45,10 @@ export class RuntimeCache {
         try {
             return await value;
         } catch (error) {
-            this.#entries.delete(key);
+            const latest = this.#entries.get(key) as CacheEntry<T> | undefined;
+            if (latest?.value === value) {
+                this.#entries.delete(key);
+            }
             throw error;
         }
     }

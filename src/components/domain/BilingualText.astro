@@ -43,22 +43,26 @@ void ariaLabel;
 
 <style>
   .bilingual-text {
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    display: block;
   }
 
   .is-arabic {
     font-family: var(--font-arabic-content);
-    line-height: var(--leading-arabic);
-    text-align: right;
+    font-size: 19px;
+    line-height: 1.8;
+    text-align: justify;
     direction: rtl;
-    line-break: strict;
+    white-space: pre-line;
+    overflow-wrap: normal;
+    word-break: normal;
   }
 
   .is-english {
     font-family: var(--font-english);
     text-align: left;
     direction: ltr;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 </style>

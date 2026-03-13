@@ -14,7 +14,6 @@ export type CitationMeta =
 type HadithCitationMeta = Extract<CitationMeta, { type: 'hadith' }>;
 type BookCitationMeta = Extract<CitationMeta, { type: 'book' }>;
 type QuranCitationMeta = Extract<CitationMeta, { type: 'quran' }>;
-type WebCitationMeta = Extract<CitationMeta, { type: 'web' }>;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
@@ -179,10 +178,9 @@ export const getCitationParts = (excerpt: Excerpt, collection: Collection): Cita
             };
         }
         case 'web': {
-            const webMeta = meta as WebCitationMeta;
             return {
                 label: formatWebCitation(excerpt, collection),
-                url: webMeta.url,
+                url: meta.url,
             };
         }
         case 'unknown':

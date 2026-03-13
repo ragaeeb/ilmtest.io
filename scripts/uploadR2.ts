@@ -160,19 +160,19 @@ const fetchExistingKeys = async (bucket: string): Promise<{ keys: Set<string>; r
     return { keys };
 };
 
-const main = async () => {
-    const allFiles = await walk(baseDir);
-    const files = limit > 0 ? allFiles.slice(0, limit) : allFiles;
-    let failures = 0;
-    let successes = 0;
-    let skipped = 0;
-    let lastLogged = 0;
+type UploadCounters = {
+    failures: number;
+    successes: number;
+    skipped: number;
+    lastLogged: number;
+};
 
-    await ensureR2Credentials();
+type UploadTarget = {
+    filePath: string;
+    key: string;
+};
 
-    let fileCursor = 0;
-
-    const { keys: existingObjectKeys, reason: existingKeysReason } = await fetchExistingKeys(bucketName);
+const logUploadSanityCheck = (existingObjectKeys: Set<string>, existingKeysReason?: string) => {
     console.log(
         `[uploadR2] Existing keys loaded: ${existingObjectKeys.size}${existingKeysReason ? ` (skip list: ${existingKeysReason})` : ''}`,
     );
@@ -191,6 +191,127 @@ const main = async () => {
     if (existingKeysReason) {
         console.log(`  skipListReason: ${existingKeysReason}`);
     }
+};
+
+const createProgressLogger = (files: string[], counters: UploadCounters) => () => {
+    const completed = counters.successes + counters.failures + counters.skipped;
+    if (completed <= counters.lastLogged) {
+        return;
+    }
+    if (completed !== files.length && completed - counters.lastLogged < progressEvery) {
+        return;
+    }
+
+    counters.lastLogged = completed;
+    const remaining = files.length - completed;
+    console.log(
+        `[uploadR2] ${completed}/${files.length} processed (${remaining} remaining, ${counters.successes} uploaded, ${counters.skipped} skipped, ${counters.failures} failed)`,
+    );
+};
+
+const getNextUploadTarget = (files: string[], cursor: { value: number }): UploadTarget | null => {
+    const filePath = files[cursor.value++];
+    if (!filePath) {
+        return null;
+    }
+
+    return {
+        filePath,
+        key: relative(baseDir, filePath).replace(/\\/g, '/'),
+    };
+};
+
+const buildUploadArgs = (key: string, filePath: string) => {
+    const args = [
+        'wrangler',
+        'r2',
+        'object',
+        'put',
+        `${bucketName}/${key}`,
+        '--file',
+        filePath,
+        '--content-type',
+        'application/json',
+    ];
+    if (useRemote) {
+        args.push('--remote');
+    }
+    return args;
+};
+
+const writeWranglerOutput = (stdoutText: string, stderrText: string) => {
+    if (stdoutText) {
+        process.stdout.write(stdoutText);
+    }
+    if (stderrText) {
+        process.stderr.write(stderrText);
+    }
+};
+
+const uploadTarget = async (target: UploadTarget) => {
+    let attempt = 0;
+
+    while (true) {
+        attempt += 1;
+        const proc = Bun.spawn(buildUploadArgs(target.key, target.filePath), { stdout: 'pipe', stderr: 'pipe' });
+        const stdoutText = await new Response(proc.stdout).text();
+        const stderrText = await new Response(proc.stderr).text();
+        const code = await proc.exited;
+        const is429 = /\b429\b|TooManyRequests/i.test(stderrText);
+
+        if (code === 0) {
+            if (wranglerVerbose) {
+                writeWranglerOutput(stdoutText, stderrText);
+            }
+            return true;
+        }
+
+        writeWranglerOutput(stdoutText, stderrText);
+        if (is429 && attempt <= retry429) {
+            console.warn(`[uploadR2] 429 detected for ${target.key} (attempt ${attempt}/${retry429}). Retrying.`);
+            continue;
+        }
+
+        return false;
+    }
+};
+
+const processUploadTarget = async (
+    target: UploadTarget,
+    existingObjectKeys: Set<string>,
+    counters: UploadCounters,
+    logProgress: () => void,
+) => {
+    if (skipExisting && existingObjectKeys.has(target.key)) {
+        counters.skipped += 1;
+        console.log(`[uploadR2] Skipping existing ${target.key}`);
+        logProgress();
+        return;
+    }
+
+    if (await uploadTarget(target)) {
+        counters.successes += 1;
+    } else {
+        counters.failures += 1;
+    }
+    logProgress();
+};
+
+const main = async () => {
+    const allFiles = await walk(baseDir);
+    const files = limit > 0 ? allFiles.slice(0, limit) : allFiles;
+    const counters: UploadCounters = {
+        failures: 0,
+        successes: 0,
+        skipped: 0,
+        lastLogged: 0,
+    };
+
+    await ensureR2Credentials();
+
+    const fileCursor = { value: 0 };
+    const { keys: existingObjectKeys, reason: existingKeysReason } = await fetchExistingKeys(bucketName);
+    logUploadSanityCheck(existingObjectKeys, existingKeysReason);
     if (dryRun) {
         console.log('[uploadR2] Dry run enabled. Exiting before upload.');
         return;
@@ -199,88 +320,23 @@ const main = async () => {
         console.error('[uploadR2] Aborting: set R2_CONFIRM=1 after verifying sanity check output.');
         process.exit(1);
     }
-    const logProgress = () => {
-        const completed = successes + failures + skipped;
-        if (completed <= lastLogged) {
-            return;
-        }
-        if (completed !== files.length && completed - lastLogged < progressEvery) {
-            return;
-        }
-        lastLogged = completed;
-        const remaining = files.length - completed;
-        console.log(
-            `[uploadR2] ${completed}/${files.length} processed (${remaining} remaining, ${successes} uploaded, ${skipped} skipped, ${failures} failed)`,
-        );
-    };
+    const logProgress = createProgressLogger(files, counters);
 
     const runOne = async () => {
-        while (fileCursor < files.length) {
-            const filePath = files[fileCursor++];
-            const key = relative(baseDir, filePath).replace(/\\/g, '/');
-            if (skipExisting && existingObjectKeys.has(key)) {
-                skipped += 1;
-                console.log(`[uploadR2] Skipping existing ${key}`);
-                logProgress();
-                continue;
+        while (true) {
+            const target = getNextUploadTarget(files, fileCursor);
+            if (!target) {
+                return;
             }
-            const args = [
-                'wrangler',
-                'r2',
-                'object',
-                'put',
-                `${bucketName}/${key}`,
-                '--file',
-                filePath,
-                '--content-type',
-                'application/json',
-            ];
-            if (useRemote) {
-                args.push('--remote');
-            }
-            let attempt = 0;
-            let succeeded = false;
-            while (!succeeded) {
-                attempt += 1;
-                const proc = Bun.spawn(args, { stdout: 'pipe', stderr: 'pipe' });
-                const stdoutText = await new Response(proc.stdout).text();
-                const stderrText = await new Response(proc.stderr).text();
-                const code = await proc.exited;
-                const is429 = /\b429\b|TooManyRequests/i.test(stderrText);
-                if (code === 0) {
-                    if (wranglerVerbose) {
-                        if (stdoutText) {
-                            process.stdout.write(stdoutText);
-                        }
-                        if (stderrText) {
-                            process.stderr.write(stderrText);
-                        }
-                    }
-                    successes += 1;
-                    succeeded = true;
-                    break;
-                }
-                if (stdoutText) {
-                    process.stdout.write(stdoutText);
-                }
-                if (stderrText) {
-                    process.stderr.write(stderrText);
-                }
-                if (is429 && attempt <= retry429) {
-                    console.warn(`[uploadR2] 429 detected for ${key} (attempt ${attempt}/${retry429}). Retrying.`);
-                    continue;
-                }
-                failures += 1;
-                succeeded = true;
-            }
-            logProgress();
+
+            await processUploadTarget(target, existingObjectKeys, counters, logProgress);
         }
     };
 
     const workers = Array.from({ length: Math.min(concurrency, files.length) }, () => runOne());
     await Promise.all(workers);
 
-    if (failures > 0) {
+    if (counters.failures > 0) {
         process.exit(1);
     }
 };

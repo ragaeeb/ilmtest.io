@@ -8,6 +8,7 @@ import {
     assertRuntimeRouteBootstrap,
     buildSectionChunkDescriptor,
     type CollectionRuntimeShard,
+    type ExcerptLookupEntry,
     type RuntimeCollectionSummary,
     type RuntimeRouteBootstrap,
     type SectionSummary,
@@ -35,9 +36,94 @@ type WriteRuntimeArtifactsOptions = {
 };
 
 const buildPreview = (text: string) => {
+    if (text.trim() === '') {
+        return '';
+    }
+
     const words = text.split(/\s+/).filter(Boolean);
     const preview = words.slice(0, 12).join(' ');
     return words.length > 12 ? `${preview}…` : preview;
+};
+
+type BuiltSectionShard = {
+    summary: SectionSummary;
+    descriptors: CollectionRuntimeShard['sectionDescriptors'][string];
+    excerptIds: string[];
+    excerptLookup: Record<string, ExcerptLookupEntry>;
+};
+
+const buildSectionShardArtifacts = async (sectionId: string, chunkKeys: string[], chunksDir: string) => {
+    const descriptors: CollectionRuntimeShard['sectionDescriptors'][string] = [];
+    const excerptLookup: Record<string, ExcerptLookupEntry> = {};
+    let headingTitle = `Section ${sectionId}`;
+    let headingTitleArabic = '';
+    let firstPage = 0;
+
+    for (const chunkKey of chunkKeys) {
+        const chunk = await readChunkFromDisk(chunksDir, chunkKey);
+        const headingIndex = chunk.excerpts.findIndex((excerpt) => excerpt.id === sectionId);
+        const start = headingIndex === -1 ? 0 : headingIndex + 1;
+        const end = chunk.excerpts.length - 1;
+
+        if (headingIndex >= 0) {
+            const heading = chunk.excerpts[headingIndex];
+            headingTitle = heading.text;
+            headingTitleArabic = heading.nass;
+            firstPage = heading.from;
+        }
+
+        if (start <= end) {
+            descriptors.push(buildSectionChunkDescriptor(chunkKey, start, end));
+        }
+
+        for (const excerpt of chunk.excerpts) {
+            if (excerpt.id === sectionId) {
+                continue;
+            }
+
+            excerptLookup[excerpt.id] = {
+                sectionId,
+                chunkKey,
+                preview: buildPreview(excerpt.text),
+            };
+        }
+    }
+
+    return {
+        descriptors,
+        excerptLookup,
+        headingTitle,
+        headingTitleArabic,
+        firstPage,
+    };
+};
+
+const buildSectionRuntimeShard = async (
+    collectionId: string,
+    sectionId: string,
+    indexes: LookupIndexes,
+    chunksDir: string,
+): Promise<BuiltSectionShard> => {
+    const chunkKeys = indexes.sectionToChunks[collectionId]?.[sectionId] ?? [];
+    const excerptIds = indexes.sectionToExcerpts[collectionId]?.[sectionId] ?? [];
+    if (chunkKeys.length === 0) {
+        throw new Error(`Missing chunk descriptors for section ${collectionId}/${sectionId}`);
+    }
+
+    const details = await buildSectionShardArtifacts(sectionId, chunkKeys, chunksDir);
+
+    return {
+        summary: {
+            sectionId,
+            title: details.headingTitle,
+            titleArabic: details.headingTitleArabic,
+            excerptCount: excerptIds.length,
+            firstPage: details.firstPage,
+        },
+        descriptors: details.descriptors,
+        excerptIds,
+        excerptLookup: details.excerptLookup,
+    };
 };
 
 const buildCollectionRuntimeShard = async (
@@ -53,56 +139,11 @@ const buildCollectionRuntimeShard = async (
     const excerptLookup: CollectionRuntimeShard['excerptLookup'] = {};
 
     for (const sectionId of sectionOrder) {
-        const chunkKeys = indexes.sectionToChunks[collection.id]?.[sectionId] ?? [];
-        const excerptIds = indexes.sectionToExcerpts[collection.id]?.[sectionId] ?? [];
-        if (chunkKeys.length === 0) {
-            throw new Error(`Missing chunk descriptors for section ${collection.id}/${sectionId}`);
-        }
-
-        const descriptors: CollectionRuntimeShard['sectionDescriptors'][string] = [];
-        let headingTitle = `Section ${sectionId}`;
-        let headingTitleArabic = '';
-        let firstPage = 0;
-
-        for (const chunkKey of chunkKeys) {
-            const chunk = await readChunkFromDisk(chunksDir, chunkKey);
-            const headingIndex = chunk.excerpts.findIndex((excerpt) => excerpt.id === sectionId);
-            const start = headingIndex === -1 ? 0 : headingIndex + 1;
-            const end = chunk.excerpts.length - 1;
-
-            if (headingIndex >= 0) {
-                const heading = chunk.excerpts[headingIndex];
-                headingTitle = heading.text;
-                headingTitleArabic = heading.nass;
-                firstPage = heading.from;
-            }
-
-            if (start <= end) {
-                descriptors.push(buildSectionChunkDescriptor(chunkKey, start, end));
-            }
-
-            for (const excerpt of chunk.excerpts) {
-                if (excerpt.id === sectionId) {
-                    continue;
-                }
-
-                excerptLookup[excerpt.id] = {
-                    sectionId,
-                    chunkKey,
-                    preview: buildPreview(excerpt.text),
-                };
-            }
-        }
-
-        sectionSummaries[sectionId] = {
-            sectionId,
-            title: headingTitle,
-            titleArabic: headingTitleArabic,
-            excerptCount: excerptIds.length,
-            firstPage,
-        };
-        sectionDescriptors[sectionId] = descriptors;
-        sectionExcerpts[sectionId] = excerptIds;
+        const section = await buildSectionRuntimeShard(collection.id, sectionId, indexes, chunksDir);
+        sectionSummaries[sectionId] = section.summary;
+        sectionDescriptors[sectionId] = section.descriptors;
+        sectionExcerpts[sectionId] = section.excerptIds;
+        Object.assign(excerptLookup, section.excerptLookup);
     }
 
     const shard: CollectionRuntimeShard = {

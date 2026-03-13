@@ -1,7 +1,4 @@
-import { env } from 'cloudflare:workers';
 import type { Entity, Excerpt } from '@/types/excerpts';
-import type { DatasetManifest } from './datasetManifest';
-import type { DatasetChannel } from './datasetPointer';
 import { fetchExcerptChunk } from './excerptChunks';
 import {
     assertCollectionRuntimeShard,
@@ -13,23 +10,11 @@ import {
     type SectionSummary,
 } from './runtimeArtifacts';
 import { ARTIFACT_CACHE_TTL_MS, buildRuntimeCacheKey, runtimeCache } from './runtimeCache';
-import { resolveDatasetManifest, resolveDatasetPointer } from './runtimeLoader';
+import { loadRuntimeContext, type RuntimeContext, readBucketJson } from './runtimeContext';
+import { getErrorMessage, RuntimeDataError } from './runtimeErrors';
+import { logRuntimeSignal } from './runtimeSignals';
 
 type ModuleMap<T> = Record<string, T>;
-
-type BucketObject = {
-    text(): Promise<string>;
-};
-
-type ExcerptBucket = {
-    get(key: string): Promise<BucketObject | null>;
-};
-
-type RuntimeContext = {
-    channel: DatasetChannel;
-    datasetVersion: string;
-    manifest: DatasetManifest | null;
-};
 
 type SectionPageData = {
     collection: RuntimeCollectionSummary;
@@ -76,34 +61,23 @@ const localCollectionShardModules = import.meta.env.DEV
       }) as ModuleMap<unknown>)
     : {};
 
-const LOCAL_COLLECTIONS_PATH = new URL('../data/collections.json', import.meta.url).pathname;
-const LOCAL_TRANSLATORS_PATH = new URL('../data/translators.json', import.meta.url).pathname;
-const LOCAL_COLLECTION_SHARDS_DIR = new URL('../../tmp/runtime-artifacts/collections/', import.meta.url).pathname;
+const resolveModuleFilePath = (relativePath: string) => {
+    const pathname = decodeURIComponent(new URL(relativePath, import.meta.url).pathname);
+    return pathname.replace(/^\/([A-Za-z]:\/)/, '$1');
+};
 
-const getExcerptBucket = (): ExcerptBucket | undefined => env.EXCERPT_BUCKET as ExcerptBucket | undefined;
-
-const isProductionHost = (hostname: string) => hostname === 'ilmtest.io' || hostname === 'www.ilmtest.io';
+const LOCAL_COLLECTIONS_PATH = resolveModuleFilePath('../data/collections.json');
+const LOCAL_TRANSLATORS_PATH = resolveModuleFilePath('../data/translators.json');
 
 const readLocalJson = async <T>(filePath: string) => {
     if (typeof Bun === 'undefined') {
-        throw new Error(`Local runtime artifact mode is unavailable without Bun: ${filePath}`);
+        throw new RuntimeDataError(
+            'local-artifact-missing',
+            `Local runtime artifact mode is unavailable without Bun: ${filePath}`,
+        );
     }
 
     return (await Bun.file(filePath).json()) as T;
-};
-
-const readBucketJson = async <T>(key: string) => {
-    const bucket = getExcerptBucket();
-    if (!bucket) {
-        throw new Error(`Missing EXCERPT_BUCKET binding for runtime artifact: ${key}`);
-    }
-
-    const object = await bucket.get(key);
-    if (!object) {
-        throw new Error(`Missing runtime artifact in R2: ${key}`);
-    }
-
-    return JSON.parse(await object.text()) as T;
 };
 
 const loadBundledRouteBootstrap = () =>
@@ -128,142 +102,246 @@ const loadBundledCollectionShard = (collectionId: string) => {
     return assertCollectionRuntimeShard(match[1]);
 };
 
-const isLocalRuntimeMode = () => import.meta.env.DEV || !getExcerptBucket();
+const getLocalCollectionShardPath = (collectionId: string) =>
+    resolveModuleFilePath(`../../tmp/runtime-artifacts/collections/${collectionId}.json`);
 
-export const resolveRuntimeChannel = (requestUrl?: string): DatasetChannel => {
-    if (import.meta.env.DEV) {
-        return 'preview';
-    }
-
-    if (!requestUrl) {
-        return 'prod';
-    }
+const loadCollectionsArtifactFromContext = async (context: RuntimeContext) => {
+    const startedAt = Date.now();
+    const cacheKey = buildRuntimeCacheKey('artifact', context.datasetVersion, 'collections');
+    const manifest = context.manifest;
+    const cacheStatus = !manifest ? 'local' : runtimeCache.hasFresh(cacheKey) ? 'hit' : 'miss';
 
     try {
-        const url = new URL(requestUrl, 'https://ilmtest.io');
-        return isProductionHost(url.hostname) ? 'prod' : 'preview';
-    } catch {
-        return 'prod';
+        const collections = !manifest
+            ? import.meta.env.DEV
+                ? loadBundledCollections()
+                : assertRuntimeCollectionSummaryArray(
+                      await readLocalJson<RuntimeCollectionSummary[]>(LOCAL_COLLECTIONS_PATH),
+                  )
+            : await runtimeCache.getOrLoad(cacheKey, ARTIFACT_CACHE_TTL_MS, async () =>
+                  assertRuntimeCollectionSummaryArray(
+                      await readBucketJson<RuntimeCollectionSummary[]>(
+                          manifest.runtimeArtifactSet.bootstrap.collections.key,
+                          {
+                              datasetVersion: context.datasetVersion,
+                              manifestKey: context.manifestKey,
+                          },
+                      ),
+                  ),
+              );
+
+        logRuntimeSignal({
+            routeType: 'collections-artifact',
+            datasetVersion: context.datasetVersion,
+            manifestKey: context.manifestKey ?? undefined,
+            cacheStatus,
+            r2Operation: context.manifest && cacheStatus === 'miss' ? 'get' : undefined,
+            durationMs: Date.now() - startedAt,
+            status: 'ok',
+        });
+        return collections;
+    } catch (error) {
+        logRuntimeSignal({
+            routeType: 'collections-artifact',
+            datasetVersion: context.datasetVersion,
+            manifestKey: context.manifestKey ?? undefined,
+            cacheStatus,
+            r2Operation: context.manifest ? 'get' : undefined,
+            durationMs: Date.now() - startedAt,
+            status: 'error',
+            message: getErrorMessage(error),
+        });
+        throw error;
     }
 };
 
-const loadRuntimeContext = async (requestUrl?: string): Promise<RuntimeContext> => {
-    const channel = resolveRuntimeChannel(requestUrl);
-    if (isLocalRuntimeMode()) {
-        return {
-            channel,
-            datasetVersion: 'local',
-            manifest: null,
-        };
+const loadTranslatorsFromContext = async (context: RuntimeContext) => {
+    const startedAt = Date.now();
+    const cacheKey = buildRuntimeCacheKey('artifact', context.datasetVersion, 'translators');
+    const manifest = context.manifest;
+    const cacheStatus = !manifest ? 'local' : runtimeCache.hasFresh(cacheKey) ? 'hit' : 'miss';
+
+    try {
+        const translators = !manifest
+            ? import.meta.env.DEV
+                ? loadBundledTranslators()
+                : ((await readLocalJson<Array<{ id: number; name: string }>>(LOCAL_TRANSLATORS_PATH)) ?? [])
+            : await runtimeCache.getOrLoad(
+                  cacheKey,
+                  ARTIFACT_CACHE_TTL_MS,
+                  async () =>
+                      await readBucketJson<Array<{ id: number; name: string }>>(
+                          manifest.runtimeArtifactSet.bootstrap.translators.key,
+                          {
+                              datasetVersion: context.datasetVersion,
+                              manifestKey: context.manifestKey,
+                          },
+                      ),
+              );
+
+        logRuntimeSignal({
+            routeType: 'translators-artifact',
+            datasetVersion: context.datasetVersion,
+            manifestKey: context.manifestKey ?? undefined,
+            cacheStatus,
+            r2Operation: context.manifest && cacheStatus === 'miss' ? 'get' : undefined,
+            durationMs: Date.now() - startedAt,
+            status: 'ok',
+        });
+        return translators;
+    } catch (error) {
+        logRuntimeSignal({
+            routeType: 'translators-artifact',
+            datasetVersion: context.datasetVersion,
+            manifestKey: context.manifestKey ?? undefined,
+            cacheStatus,
+            r2Operation: context.manifest ? 'get' : undefined,
+            durationMs: Date.now() - startedAt,
+            status: 'error',
+            message: getErrorMessage(error),
+        });
+        throw error;
     }
-
-    const pointer = await resolveDatasetPointer(channel, readBucketJson, runtimeCache);
-    const manifest = await resolveDatasetManifest(pointer.manifestKey, readBucketJson, runtimeCache);
-
-    return {
-        channel,
-        datasetVersion: manifest.datasetVersion,
-        manifest,
-    };
 };
 
-const loadCollectionsArtifact = async (requestUrl?: string) => {
-    const context = await loadRuntimeContext(requestUrl);
-    const { manifest } = context;
-
-    if (!manifest) {
-        if (import.meta.env.DEV) {
-            return loadBundledCollections();
-        }
-
-        return assertRuntimeCollectionSummaryArray(
-            await readLocalJson<RuntimeCollectionSummary[]>(LOCAL_COLLECTIONS_PATH),
-        );
-    }
-
-    return runtimeCache.getOrLoad(
-        buildRuntimeCacheKey('artifact', context.datasetVersion, 'collections'),
-        ARTIFACT_CACHE_TTL_MS,
-        async () =>
-            assertRuntimeCollectionSummaryArray(
-                await readBucketJson<RuntimeCollectionSummary[]>(manifest.runtimeArtifactSet.bootstrap.collections.key),
-            ),
-    );
-};
-
-export const loadTranslatorsData = async (requestUrl?: string) => {
-    const context = await loadRuntimeContext(requestUrl);
-    const { manifest } = context;
-
-    if (!manifest) {
-        if (import.meta.env.DEV) {
-            return loadBundledTranslators();
-        }
-
-        return (await readLocalJson<Array<{ id: number; name: string }>>(LOCAL_TRANSLATORS_PATH)) ?? [];
-    }
-
-    return runtimeCache.getOrLoad(
-        buildRuntimeCacheKey('artifact', context.datasetVersion, 'translators'),
-        ARTIFACT_CACHE_TTL_MS,
-        async () =>
-            await readBucketJson<Array<{ id: number; name: string }>>(
-                manifest.runtimeArtifactSet.bootstrap.translators.key,
-            ),
-    );
-};
-
-export const loadCollectionsData = async (requestUrl?: string) => {
-    return loadCollectionsArtifact(requestUrl);
-};
-
-export const resolveCollectionBySlug = async (slug: string, requestUrl?: string) => {
+const resolveCollectionBySlugFromContext = async (slug: string, context: RuntimeContext) => {
     const collectionId = loadBundledRouteBootstrap().collectionsBySlug[slug]?.id;
     if (!collectionId) {
         return null;
     }
 
-    const collections = await loadCollectionsArtifact(requestUrl);
+    const collections = await loadCollectionsArtifactFromContext(context);
     return collections.find((collection) => collection.id === collectionId) ?? null;
+};
+
+const loadCollectionShardFromContext = async (collectionId: string, context: RuntimeContext) => {
+    const startedAt = Date.now();
+    const cacheKey = buildRuntimeCacheKey('artifact', context.datasetVersion, 'collection', collectionId);
+    const manifest = context.manifest;
+    const cacheStatus = !manifest ? 'local' : runtimeCache.hasFresh(cacheKey) ? 'hit' : 'miss';
+
+    try {
+        const shard = !manifest
+            ? import.meta.env.DEV
+                ? (() => {
+                      const localShard = loadBundledCollectionShard(collectionId);
+                      if (!localShard) {
+                          throw new RuntimeDataError(
+                              'local-artifact-missing',
+                              `Missing local runtime shard for collection ${collectionId}`,
+                              {
+                                  datasetVersion: context.datasetVersion,
+                                  manifestKey: context.manifestKey,
+                                  artifactKey: getLocalCollectionShardPath(collectionId),
+                                  collectionId,
+                              },
+                          );
+                      }
+                      return localShard;
+                  })()
+                : assertCollectionRuntimeShard(
+                      await readLocalJson<CollectionRuntimeShard>(getLocalCollectionShardPath(collectionId)),
+                  )
+            : await runtimeCache.getOrLoad(cacheKey, ARTIFACT_CACHE_TTL_MS, async () => {
+                  const descriptor = manifest.runtimeArtifactSet.runtime.collectionShards[collectionId];
+                  if (!descriptor) {
+                      throw new RuntimeDataError(
+                          'artifact-missing',
+                          `Missing runtime shard descriptor for collection ${collectionId}`,
+                          {
+                              datasetVersion: context.datasetVersion,
+                              manifestKey: context.manifestKey,
+                              collectionId,
+                          },
+                      );
+                  }
+
+                  return assertCollectionRuntimeShard(
+                      await readBucketJson<CollectionRuntimeShard>(descriptor.key, {
+                          datasetVersion: context.datasetVersion,
+                          manifestKey: context.manifestKey,
+                          collectionId,
+                      }),
+                  );
+              });
+
+        logRuntimeSignal({
+            routeType: 'collection-shard',
+            datasetVersion: context.datasetVersion,
+            manifestKey: context.manifestKey ?? undefined,
+            collectionId,
+            cacheStatus,
+            r2Operation: context.manifest && cacheStatus === 'miss' ? 'get' : undefined,
+            durationMs: Date.now() - startedAt,
+            status: 'ok',
+        });
+        return shard;
+    } catch (error) {
+        logRuntimeSignal({
+            routeType: 'collection-shard',
+            datasetVersion: context.datasetVersion,
+            manifestKey: context.manifestKey ?? undefined,
+            collectionId,
+            cacheStatus,
+            r2Operation: context.manifest ? 'get' : undefined,
+            durationMs: Date.now() - startedAt,
+            status: 'error',
+            message: getErrorMessage(error),
+        });
+        throw error;
+    }
+};
+
+export const loadTranslatorsData = async (requestUrl?: string) => {
+    const context = await loadRuntimeContext(requestUrl);
+    return loadTranslatorsFromContext(context);
+};
+
+export const loadCollectionsData = async (requestUrl?: string) => {
+    const startedAt = Date.now();
+    let context: RuntimeContext | null = null;
+
+    try {
+        context = await loadRuntimeContext(requestUrl);
+        const collections = await loadCollectionsArtifactFromContext(context);
+        logRuntimeSignal({
+            routeType: 'browse-route',
+            datasetVersion: context.datasetVersion,
+            manifestKey: context.manifestKey ?? undefined,
+            durationMs: Date.now() - startedAt,
+            status: 'ok',
+        });
+        return collections;
+    } catch (error) {
+        logRuntimeSignal({
+            routeType: 'browse-route',
+            datasetVersion: context?.datasetVersion,
+            manifestKey: context?.manifestKey ?? undefined,
+            durationMs: Date.now() - startedAt,
+            status: 'error',
+            message: getErrorMessage(error),
+        });
+        throw error;
+    }
+};
+
+export const resolveCollectionBySlug = async (slug: string, requestUrl?: string) => {
+    const context = await loadRuntimeContext(requestUrl);
+    return resolveCollectionBySlugFromContext(slug, context);
 };
 
 export const loadCollectionShard = async (collectionId: string, requestUrl?: string) => {
     const context = await loadRuntimeContext(requestUrl);
-
-    if (!context.manifest) {
-        if (import.meta.env.DEV) {
-            const shard = loadBundledCollectionShard(collectionId);
-            if (!shard) {
-                throw new Error(`Missing local runtime shard for collection ${collectionId}`);
-            }
-
-            return shard;
-        }
-
-        return assertCollectionRuntimeShard(
-            await readLocalJson<CollectionRuntimeShard>(`${LOCAL_COLLECTION_SHARDS_DIR}${collectionId}.json`),
-        );
-    }
-
-    const descriptor = context.manifest.runtimeArtifactSet.runtime.collectionShards[collectionId];
-    if (!descriptor) {
-        throw new Error(`Missing runtime shard descriptor for collection ${collectionId}`);
-    }
-
-    return runtimeCache.getOrLoad(
-        buildRuntimeCacheKey('artifact', context.datasetVersion, 'collection', collectionId),
-        ARTIFACT_CACHE_TTL_MS,
-        async () => assertCollectionRuntimeShard(await readBucketJson<CollectionRuntimeShard>(descriptor.key)),
-    );
+    return loadCollectionShardFromContext(collectionId, context);
 };
 
-export const loadCollectionPageData = async (slug: string, page: number, requestUrl?: string) => {
-    const collection = await resolveCollectionBySlug(slug, requestUrl);
+const loadCollectionPageDataFromContext = async (slug: string, page: number, context: RuntimeContext) => {
+    const collection = await resolveCollectionBySlugFromContext(slug, context);
     if (!collection) {
         return null;
     }
 
-    const shard = await loadCollectionShard(collection.id, requestUrl);
+    const shard = await loadCollectionShardFromContext(collection.id, context);
     const pageSize = 100;
     const totalPages = Math.max(1, Math.ceil(shard.sectionOrder.length / pageSize));
     const currentPage = Math.min(Math.max(1, Math.floor(page)), totalPages);
@@ -281,11 +359,45 @@ export const loadCollectionPageData = async (slug: string, page: number, request
     };
 };
 
+export const loadCollectionPageData = async (slug: string, page: number, requestUrl?: string) => {
+    const startedAt = Date.now();
+    let context: RuntimeContext | null = null;
+    let collectionId: string | undefined;
+
+    try {
+        context = await loadRuntimeContext(requestUrl);
+        const pageData = await loadCollectionPageDataFromContext(slug, page, context);
+        collectionId = pageData?.collection.id;
+
+        logRuntimeSignal({
+            routeType: 'collection-route',
+            datasetVersion: context.datasetVersion,
+            manifestKey: context.manifestKey ?? undefined,
+            collectionId,
+            durationMs: Date.now() - startedAt,
+            status: 'ok',
+        });
+        return pageData;
+    } catch (error) {
+        logRuntimeSignal({
+            routeType: 'collection-route',
+            datasetVersion: context?.datasetVersion,
+            manifestKey: context?.manifestKey ?? undefined,
+            collectionId,
+            durationMs: Date.now() - startedAt,
+            status: 'error',
+            message: getErrorMessage(error),
+        });
+        throw error;
+    }
+};
+
 const readSectionChunks = async (
     shard: CollectionRuntimeShard,
     sectionId: string,
+    collectionId: string,
+    context: RuntimeContext,
     requestUrl?: string,
-    datasetVersion?: string,
 ) => {
     const descriptors = shard.sectionDescriptors[sectionId] ?? [];
     if (descriptors.length === 0) {
@@ -297,6 +409,7 @@ const readSectionChunks = async (
         );
     }
 
+    const datasetVersion = context.datasetVersion === 'local' ? undefined : context.datasetVersion;
     const chunks = await Promise.all(
         descriptors.map((descriptor) => fetchExcerptChunk(descriptor.chunkKey, requestUrl, datasetVersion)),
     );
@@ -304,35 +417,35 @@ const readSectionChunks = async (
     return descriptors.flatMap((descriptor, index) => {
         const chunk = chunks[index];
         if (!chunk) {
-            throw new Error(`Missing chunk payload for ${descriptor.chunkKey}`);
+            throw new RuntimeDataError('chunk-missing', `Missing chunk payload for ${descriptor.chunkKey}`, {
+                datasetVersion: context.datasetVersion,
+                manifestKey: context.manifestKey,
+                chunkKey: descriptor.chunkKey,
+                collectionId,
+            });
         }
         return chunk.excerpts.slice(descriptor.start, descriptor.end + 1);
     });
 };
 
-export const loadSectionPageData = async (
+const loadSectionPageDataFromContext = async (
     slug: string,
     sectionId: string,
+    context: RuntimeContext,
     requestUrl?: string,
 ): Promise<SectionPageData | null> => {
-    const collection = await resolveCollectionBySlug(slug, requestUrl);
+    const collection = await resolveCollectionBySlugFromContext(slug, context);
     if (!collection) {
         return null;
     }
 
-    const shard = await loadCollectionShard(collection.id, requestUrl);
+    const shard = await loadCollectionShardFromContext(collection.id, context);
     const sectionSummary = shard.sectionSummaries[sectionId];
     if (!sectionSummary) {
         return null;
     }
 
-    const { datasetVersion } = await loadRuntimeContext(requestUrl);
-    const excerpts = await readSectionChunks(
-        shard,
-        sectionId,
-        requestUrl,
-        datasetVersion === 'local' ? undefined : datasetVersion,
-    );
+    const excerpts = await readSectionChunks(shard, sectionId, collection.id, context, requestUrl);
 
     return {
         collection,
@@ -340,6 +453,43 @@ export const loadSectionPageData = async (
         sectionSummary,
         excerpts: excerpts.filter((excerpt) => excerpt.id !== sectionId).sort((left, right) => left.from - right.from),
     };
+};
+
+export const loadSectionPageData = async (
+    slug: string,
+    sectionId: string,
+    requestUrl?: string,
+): Promise<SectionPageData | null> => {
+    const startedAt = Date.now();
+    let context: RuntimeContext | null = null;
+    let collectionId: string | undefined;
+
+    try {
+        context = await loadRuntimeContext(requestUrl);
+        const sectionData = await loadSectionPageDataFromContext(slug, sectionId, context, requestUrl);
+        collectionId = sectionData?.collection.id;
+
+        logRuntimeSignal({
+            routeType: 'section-route',
+            datasetVersion: context.datasetVersion,
+            manifestKey: context.manifestKey ?? undefined,
+            collectionId,
+            durationMs: Date.now() - startedAt,
+            status: 'ok',
+        });
+        return sectionData;
+    } catch (error) {
+        logRuntimeSignal({
+            routeType: 'section-route',
+            datasetVersion: context?.datasetVersion,
+            manifestKey: context?.manifestKey ?? undefined,
+            collectionId,
+            durationMs: Date.now() - startedAt,
+            status: 'error',
+            message: getErrorMessage(error),
+        });
+        throw error;
+    }
 };
 
 const buildExcerptPagerItem = (
@@ -364,13 +514,14 @@ const buildExcerptPagerItem = (
     };
 };
 
-export const loadExcerptPageData = async (
+const loadExcerptPageDataFromContext = async (
     slug: string,
     sectionId: string,
     excerptId: string,
+    context: RuntimeContext,
     requestUrl?: string,
 ): Promise<ExcerptPageData | null> => {
-    const sectionData = await loadSectionPageData(slug, sectionId, requestUrl);
+    const sectionData = await loadSectionPageDataFromContext(slug, sectionId, context, requestUrl);
     if (!sectionData) {
         return null;
     }
@@ -385,15 +536,19 @@ export const loadExcerptPageData = async (
         return null;
     }
 
-    const { datasetVersion } = await loadRuntimeContext(requestUrl);
     const chunk = await fetchExcerptChunk(
         lookup.chunkKey,
         requestUrl,
-        datasetVersion === 'local' ? undefined : datasetVersion,
+        context.datasetVersion === 'local' ? undefined : context.datasetVersion,
     );
     const excerpt = chunk?.excerpts.find((candidate) => candidate.id === excerptId) ?? null;
     if (!excerpt) {
-        return null;
+        throw new RuntimeDataError('chunk-missing', `Missing excerpt payload for ${lookup.chunkKey}`, {
+            datasetVersion: context.datasetVersion,
+            manifestKey: context.manifestKey,
+            chunkKey: lookup.chunkKey,
+            collectionId: sectionData.collection.id,
+        });
     }
 
     const currentIndex = sectionExcerptList.indexOf(excerptId);
@@ -404,11 +559,49 @@ export const loadExcerptPageData = async (
     return {
         ...sectionData,
         excerpt,
-        translators: await loadTranslatorsData(requestUrl),
+        translators: await loadTranslatorsFromContext(context),
         previousExcerpt: buildExcerptPagerItem(slug, sectionId, previousExcerptId, sectionData.shard.excerptLookup),
         nextExcerpt: buildExcerptPagerItem(slug, sectionId, nextExcerptId, sectionData.shard.excerptLookup),
         sectionExcerptList,
     };
+};
+
+export const loadExcerptPageData = async (
+    slug: string,
+    sectionId: string,
+    excerptId: string,
+    requestUrl?: string,
+): Promise<ExcerptPageData | null> => {
+    const startedAt = Date.now();
+    let context: RuntimeContext | null = null;
+    let collectionId: string | undefined;
+
+    try {
+        context = await loadRuntimeContext(requestUrl);
+        const excerptData = await loadExcerptPageDataFromContext(slug, sectionId, excerptId, context, requestUrl);
+        collectionId = excerptData?.collection.id;
+
+        logRuntimeSignal({
+            routeType: 'excerpt-route',
+            datasetVersion: context.datasetVersion,
+            manifestKey: context.manifestKey ?? undefined,
+            collectionId,
+            durationMs: Date.now() - startedAt,
+            status: 'ok',
+        });
+        return excerptData;
+    } catch (error) {
+        logRuntimeSignal({
+            routeType: 'excerpt-route',
+            datasetVersion: context?.datasetVersion,
+            manifestKey: context?.manifestKey ?? undefined,
+            collectionId,
+            durationMs: Date.now() - startedAt,
+            status: 'error',
+            message: getErrorMessage(error),
+        });
+        throw error;
+    }
 };
 
 const buildEntityCollectionIndex = (collections: RuntimeCollectionSummary[]) => {
@@ -439,20 +632,79 @@ const buildEntityCollectionIndex = (collections: RuntimeCollectionSummary[]) => 
 };
 
 export const loadProfileEntityIds = async (requestUrl?: string) => {
-    return [...buildEntityCollectionIndex(await loadCollectionsArtifact(requestUrl)).keys()];
+    const context = await loadRuntimeContext(requestUrl);
+    return [...buildEntityCollectionIndex(await loadCollectionsArtifactFromContext(context)).keys()];
+};
+
+const loadProfileDataFromContext = async (entityId: string, context: RuntimeContext) => {
+    return buildEntityCollectionIndex(await loadCollectionsArtifactFromContext(context)).get(entityId) ?? null;
 };
 
 export const loadProfileData = async (entityId: string, requestUrl?: string) => {
-    return buildEntityCollectionIndex(await loadCollectionsArtifact(requestUrl)).get(entityId) ?? null;
+    const startedAt = Date.now();
+    let context: RuntimeContext | null = null;
+
+    try {
+        context = await loadRuntimeContext(requestUrl);
+        const profile = await loadProfileDataFromContext(entityId, context);
+
+        logRuntimeSignal({
+            routeType: 'profile-route',
+            datasetVersion: context.datasetVersion,
+            manifestKey: context.manifestKey ?? undefined,
+            durationMs: Date.now() - startedAt,
+            status: 'ok',
+        });
+        return profile;
+    } catch (error) {
+        logRuntimeSignal({
+            routeType: 'profile-route',
+            datasetVersion: context?.datasetVersion,
+            manifestKey: context?.manifestKey ?? undefined,
+            durationMs: Date.now() - startedAt,
+            status: 'error',
+            message: getErrorMessage(error),
+        });
+        throw error;
+    }
 };
 
-export const loadSitemapCollectionData = async (requestUrl?: string) => {
-    const collections = await loadCollectionsArtifact(requestUrl);
+const loadSitemapCollectionDataFromContext = async (context: RuntimeContext) => {
+    const collections = await loadCollectionsArtifactFromContext(context);
 
     return Promise.all(
         collections.map(async (collection) => ({
             collection,
-            sectionIds: (await loadCollectionShard(collection.id, requestUrl)).sectionOrder,
+            sectionIds: (await loadCollectionShardFromContext(collection.id, context)).sectionOrder,
         })),
     );
+};
+
+export const loadSitemapCollectionData = async (requestUrl?: string) => {
+    const startedAt = Date.now();
+    let context: RuntimeContext | null = null;
+
+    try {
+        context = await loadRuntimeContext(requestUrl);
+        const collections = await loadSitemapCollectionDataFromContext(context);
+
+        logRuntimeSignal({
+            routeType: 'sitemap-route',
+            datasetVersion: context.datasetVersion,
+            manifestKey: context.manifestKey ?? undefined,
+            durationMs: Date.now() - startedAt,
+            status: 'ok',
+        });
+        return collections;
+    } catch (error) {
+        logRuntimeSignal({
+            routeType: 'sitemap-route',
+            datasetVersion: context?.datasetVersion,
+            manifestKey: context?.manifestKey ?? undefined,
+            durationMs: Date.now() - startedAt,
+            status: 'error',
+            message: getErrorMessage(error),
+        });
+        throw error;
+    }
 };

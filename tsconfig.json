@@ -8,7 +8,7 @@
             "@/types/*": ["./src/types/*"]
         }
     },
-    "exclude": ["dist"],
+    "exclude": ["dist", "tmp"],
     "extends": "astro/tsconfigs/strict",
     "include": [".astro/types.d.ts", "**/*"]
 }

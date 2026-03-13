@@ -24,7 +24,7 @@ const idleLabel = ariaLabel;
     <Copy size={18} strokeWidth={2} />
 </button>
 
-<script define:vars={{ encodedText, idleLabel }}>
+<script is:inline define:vars={{ encodedText, idleLabel }}>
     const button = document.currentScript?.previousElementSibling;
 
     if (!(button instanceof HTMLButtonElement)) {

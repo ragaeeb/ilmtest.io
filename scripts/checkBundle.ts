@@ -14,17 +14,21 @@ const INDEX_SIGNATURES = [
     '"pageToHeading"',
 ];
 
-const scanDir = async (dir: string) => {
-    const entries = await readdir(dir, { encoding: 'utf8', withFileTypes: true }).catch(() => null);
-    if (!entries) {
+const scanPath = async (targetPath: string): Promise<string[]> => {
+    const metadata = await stat(targetPath).catch(() => null);
+    if (!metadata) {
         return [];
     }
+    if (!metadata.isDirectory()) {
+        return [targetPath];
+    }
 
+    const entries = await readdir(targetPath, { encoding: 'utf8', withFileTypes: true });
     const files: string[] = [];
     for (const entry of entries) {
-        const fullPath = join(dir, entry.name);
+        const fullPath = join(targetPath, entry.name);
         if (entry.isDirectory()) {
-            files.push(...(await scanDir(fullPath)));
+            files.push(...(await scanPath(fullPath)));
             continue;
         }
         files.push(fullPath);
@@ -45,7 +49,7 @@ const main = async () => {
         throw new Error('Missing dist output. Run `bun run build` before bundle checks.');
     }
 
-    const allFiles = [...(await scanDir(FUNCTION_DIR)), ...(await scanDir(WORKER_DIR))];
+    const allFiles = [...(await scanPath(FUNCTION_DIR)), ...(await scanPath(WORKER_DIR))];
 
     const offendingFiles: string[] = [];
     for (const filePath of allFiles) {

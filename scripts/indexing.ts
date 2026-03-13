@@ -99,6 +99,42 @@ export const generateIndexes = (data: Compilation, collectionId: string): Partia
     };
 };
 
+const mergeCollectionMaps = <T>(
+    target: Record<string, Record<string, T>>,
+    source?: Record<string, Record<string, T>>,
+) => {
+    for (const [collectionId, entries] of Object.entries(source ?? {})) {
+        target[collectionId] ??= {};
+        Object.assign(target[collectionId], entries);
+    }
+};
+
+const mergeCollectionArrays = (target: Record<string, string[]>, source?: Record<string, string[]>) => {
+    for (const [collectionId, values] of Object.entries(source ?? {})) {
+        target[collectionId] ??= [];
+        target[collectionId].push(...values);
+    }
+};
+
+const mergeEntityMappings = (
+    target: LookupIndexes['entityToCollections'],
+    source?: LookupIndexes['entityToCollections'],
+) => {
+    for (const [entityId, data] of Object.entries(source ?? {})) {
+        let entity = target[entityId];
+        if (!entity) {
+            entity = { authorOf: [], mentionedIn: [] };
+            target[entityId] = entity;
+        }
+        if (data.authorOf) {
+            entity.authorOf.push(...data.authorOf);
+        }
+        if (data.mentionedIn) {
+            entity.mentionedIn = [...(entity.mentionedIn ?? []), ...data.mentionedIn];
+        }
+    }
+};
+
 /**
  * Merge multiple partial indexes into a complete index.
  */
@@ -114,57 +150,13 @@ export const mergeIndexes = (...partials: Partial<LookupIndexes>[]): LookupIndex
     };
 
     for (const partial of partials) {
-        // Deep merge sectionToExcerpts
-        for (const [collectionId, sections] of Object.entries(partial.sectionToExcerpts || {})) {
-            merged.sectionToExcerpts[collectionId] ??= {};
-            Object.assign(merged.sectionToExcerpts[collectionId], sections);
-        }
-
-        // Deep merge excerptToSection
-        for (const [collectionId, excerpts] of Object.entries(partial.excerptToSection || {})) {
-            merged.excerptToSection[collectionId] ??= {};
-            Object.assign(merged.excerptToSection[collectionId], excerpts);
-        }
-
-        // Deep merge pageToHeading
-        for (const [collectionId, pages] of Object.entries(partial.pageToHeading || {})) {
-            merged.pageToHeading[collectionId] ??= {};
-            Object.assign(merged.pageToHeading[collectionId], pages);
-        }
-
-        // Deep merge collectionToSections
-        for (const [collectionId, sections] of Object.entries(partial.collectionToSections || {})) {
-            merged.collectionToSections[collectionId] ??= [];
-            merged.collectionToSections[collectionId].push(...sections);
-        }
-
-        // Deep merge sectionToChunks
-        for (const [collectionId, sections] of Object.entries(partial.sectionToChunks || {})) {
-            merged.sectionToChunks[collectionId] ??= {};
-            Object.assign(merged.sectionToChunks[collectionId], sections);
-        }
-
-        // Deep merge excerptToChunk
-        for (const [collectionId, excerpts] of Object.entries(partial.excerptToChunk || {})) {
-            merged.excerptToChunk[collectionId] ??= {};
-            Object.assign(merged.excerptToChunk[collectionId], excerpts);
-        }
-
-        // Deep merge entityToCollections
-        for (const [entityId, data] of Object.entries(partial.entityToCollections || {})) {
-            if (!merged.entityToCollections[entityId]) {
-                merged.entityToCollections[entityId] = { authorOf: [], mentionedIn: [] };
-            }
-            if (data.authorOf) {
-                merged.entityToCollections[entityId].authorOf.push(...data.authorOf);
-            }
-            if (data.mentionedIn) {
-                merged.entityToCollections[entityId].mentionedIn = [
-                    ...(merged.entityToCollections[entityId].mentionedIn || []),
-                    ...data.mentionedIn,
-                ];
-            }
-        }
+        mergeCollectionMaps(merged.sectionToExcerpts, partial.sectionToExcerpts);
+        mergeCollectionMaps(merged.excerptToSection, partial.excerptToSection);
+        mergeCollectionMaps(merged.pageToHeading, partial.pageToHeading);
+        mergeCollectionArrays(merged.collectionToSections, partial.collectionToSections);
+        mergeCollectionMaps(merged.sectionToChunks, partial.sectionToChunks);
+        mergeCollectionMaps(merged.excerptToChunk, partial.excerptToChunk);
+        mergeEntityMappings(merged.entityToCollections, partial.entityToCollections);
     }
 
     return merged;

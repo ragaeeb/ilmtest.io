@@ -4,18 +4,21 @@ This document outlines the high-level system architecture and data flow of IlmTe
 
 ## ADRs
 
-- [ADR 0001: Workers Is The Target Runtime](/Users/rhaq/workspace/ilmtest.io/docs/adr/0001-workers-runtime.md)
-- [ADR 0002: Publish Immutable Datasets](/Users/rhaq/workspace/ilmtest.io/docs/adr/0002-immutable-datasets.md)
-- [ADR 0003: R2 Manifest And Pointer Select The Active Dataset](/Users/rhaq/workspace/ilmtest.io/docs/adr/0003-r2-manifest-pointer.md)
-- [ADR 0004: Pagefind Is The Search MVP](/Users/rhaq/workspace/ilmtest.io/docs/adr/0004-pagefind-search-mvp.md)
-- [ADR 0005: D1 Backs Moderated Reports](/Users/rhaq/workspace/ilmtest.io/docs/adr/0005-d1-reports.md)
-- [ADR 0006: Inline Mentions Are Deferred](/Users/rhaq/workspace/ilmtest.io/docs/adr/0006-inline-mentions-deferred.md)
+- [ADR 0001: Workers Is The Target Runtime](docs/adr/0001-workers-runtime.md)
+- [ADR 0002: Publish Immutable Datasets](docs/adr/0002-immutable-datasets.md)
+- [ADR 0003: R2 Manifest And Pointer Select The Active Dataset](docs/adr/0003-r2-manifest-pointer.md)
+- [ADR 0004: Pagefind Is The Search MVP](docs/adr/0004-pagefind-search-mvp.md)
+- [ADR 0005: D1 Backs Moderated Reports](docs/adr/0005-d1-reports.md)
+- [ADR 0006: Inline Mentions Are Deferred](docs/adr/0006-inline-mentions-deferred.md)
 
 ## Operational Docs
 
-- [Fixture Corpus Workflow](/Users/rhaq/workspace/ilmtest.io/docs/fixtures.md)
-- [QA And Observability Baseline](/Users/rhaq/workspace/ilmtest.io/docs/qa.md)
-- [Cloudflare Security Baseline](/Users/rhaq/workspace/ilmtest.io/docs/security-baseline.md)
+- [Fixture Corpus Workflow](docs/fixtures.md)
+- [QA And Observability Baseline](docs/qa.md)
+- [Cloudflare Security Baseline](docs/security-baseline.md)
+- [Workers Cutover](docs/runbooks/workers-cutover.md)
+- [Source Continuity](docs/source-continuity.md)
+- [Support Matrix](docs/support-matrix.md)
 
 ## 1. System Context Diagram
 
@@ -34,7 +37,7 @@ graph TD
     subgraph Cloudflare["Cloudflare Platform"]
         Edge[Cloudflare Edge Network]
         Workers[Cloudflare Workers\n(SSR Runtime)]
-        Pages[Cloudflare Pages\n(Static Assets)]
+        Assets[Workers Static Assets\n(ASSETS Binding)]
         R2[(R2 Storage\nContent Chunks)]
     end
 
@@ -42,25 +45,28 @@ graph TD
     subgraph "Build Process"
         ETL[Build Pipeline\n(scripts/)]
         Setup[setup.ts\n(Ingest & Transform)]
-        Upload[uploadR2.ts\n(Distribute)]
-        Astro[Astro Build\n(SSG + Server Adaptor)]
+        Publish[publishDataset.ts\n(Publish Dataset)]
+        Astro[Astro Build\n(Static Assets + Worker Bundle)]
+        Deploy[wrangler deploy\n(Preview / Prod)]
     end
 
     %% Relationships - Runtime
     User -->|HTTPS Request| Edge
     Edge -->|Cache Hit| User
     Edge -->|Cache Miss| Workers
+    Workers -->|Serve Asset| Assets
     Workers -->|Fetch Chunk| R2
     Workers -->|SSR HTML| Edge
 
     %% Relationships - Build
-    Dev -->|git push| Pages
-    Pages -->|Trigger| Astro
+    Dev -->|bun run build| Astro
+    Dev -->|bun run deploy:preview / deploy:prod| Deploy
+    Deploy -->|Publish Worker| Workers
     Setup -->|Download| HF
-    Upload -->|Upload| R2
+    Publish -->|Upload Immutable Dataset| R2
     Setup -->|Generate JSON| Astro
     ETL --- Setup
-    ETL --- Upload
+    ETL --- Publish
 ```
 
 ## 2. Data Flow: The "54k Page" Architecture
@@ -87,15 +93,16 @@ sequenceDiagram
     ETL->>ETL: Generate Metadata & Indexes
     
     Note over ETL: 3. Distribution Phase
-    ETL->>R2: Upload Content Chunks (uploadR2.ts)
-    ETL->>SSR: Embed Indexes (Build Time)
+    ETL->>R2: Publish Dataset (publishDataset.ts)
+    ETL->>SSR: Embed Runtime Bootstrap (Build Time)
     
     Note over User: 4. Runtime Phase
     User->>Edge: Request /browse/section/123
     host->>Edge: Check Cache
     alt Cache Miss
         Edge->>SSR: Invoke Worker
-        SSR->>SSR: Lookup Indexes (In-memory)
+        SSR->>SSR: Resolve Pointer + Manifest
+        SSR->>SSR: Load Collection Shard (In-memory cache)
         SSR->>R2: Fetch Required Chunk (JSON)
         R2-->>SSR: Return Chunk
         SSR->>SSR: Render HTML
@@ -108,8 +115,8 @@ sequenceDiagram
 
 1.  **Build Pipeline (`scripts/`)**:
     *   **`setup.ts`**: The main transformation engine. It handles disparate source types (Shamela-formatted books and Web-scraped content), computing hierarchical heading ranges and backfilling missing data.
-    *   **Data Artifacts**: Generates `indexes.json` (O(1) lookups for sections, chunks, and entities), `collections.json` (library metadata), and `translators.json`.
-    *   **`uploadR2.ts`**: A high-concurrency distribution script that syncs generated content chunks to Cloudflare R2, supporting resumes and skip-existing checks.
+    *   **Data Artifacts**: Generates runtime bootstraps, runtime collection shards, chunk files, and dataset metadata for immutable publishing.
+    *   **`publishDataset.ts`**: The canonical dataset publisher. It uploads immutable dataset prefixes, writes the manifest, and promotes channel pointers. `uploadR2.ts` remains legacy compatibility tooling only.
 
 2.  **Hybrid Rendering (Astro)**:
     *   **SSG**: Landing page, About, and static collections.
@@ -136,3 +143,28 @@ Before the runtime switches to manifest-selected datasets, the repo now supports
 - `test/fixtures/medium/` defines the larger maintainer corpus used for manual validation.
 - `scripts/checkIntegrity.ts` verifies route inputs, chunk mappings, dataset metadata, and curated-reference integrity.
 - `scripts/smokeRoutes.ts` exercises representative pages against a live Astro dev server without production secrets.
+
+## 5. M3 Runtime Data Plane
+
+The browse, profile, and sitemap surfaces now resolve corpus data through version-aware runtime artifacts instead of relying on bundled monolithic indexes:
+
+- `src/lib/runtimeLoader.ts` resolves the active channel pointer and dataset manifest.
+- `src/lib/data.ts` loads bundle-sized bootstraps plus manifest-selected collection shards.
+- `src/lib/excerptChunks.ts` fetches chunk payloads by dataset version at runtime.
+- `src/lib/runtimeCache.ts` keeps pointer, manifest, and hot artifact shards in per-isolate memory.
+- `src/lib/runtimeSignals.ts` emits structured `[runtime]` logs for route loads, artifact loads, and chunk fetches.
+
+Operational checks for this layer are:
+
+- `bun run bundle-check`
+- `bun run smoke-routes`
+- `bun run runtime-probe`
+
+## 6. M4 Workers Cutover
+
+The app runtime now deploys through Cloudflare Workers only:
+
+- `bun run deploy:prod` builds and deploys the production Worker.
+- `bun run deploy:preview` builds and deploys the shared preview Worker.
+- `bun run deploy-check` validates the generated Worker bundle plus asset binding through `wrangler deploy --dry-run`.
+- Preview and production select `preview.json` vs `prod.json` through explicit Wrangler environment variables, not just hostname heuristics.

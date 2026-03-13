@@ -8,7 +8,9 @@ import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
 import Card from '@/components/ui/Card.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
+import RuntimeUnavailableLayout from '@/layouts/RuntimeUnavailableLayout.astro';
 import { loadCollectionPageData } from '@/lib/data';
+import { isRuntimeDataError } from '@/lib/runtimeErrors';
 
 const { collection: collectionSlug } = Astro.params;
 
@@ -16,26 +18,49 @@ if (!collectionSlug) {
     return Astro.redirect('/404');
 }
 
-const PAGE_SIZE = 100;
 const url = new URL(Astro.request.url, 'https://ilmtest.io');
 const pageParam = Number(url.searchParams.get('page') ?? '1');
 const normalizedPage = Number.isFinite(pageParam) ? pageParam : 1;
-const pageData = await loadCollectionPageData(collectionSlug, normalizedPage, Astro.request.url);
-if (!pageData) {
+let pageData: Awaited<ReturnType<typeof loadCollectionPageData>> = null;
+let runtimeUnavailable = false;
+
+try {
+    pageData = await loadCollectionPageData(collectionSlug, normalizedPage, Astro.request.url);
+} catch (error) {
+    if (!isRuntimeDataError(error)) {
+        throw error;
+    }
+
+    runtimeUnavailable = true;
+    Astro.response.status = error.statusCode;
+    Astro.response.headers.set('Cache-Control', 'no-store');
+    Astro.response.headers.set('CDN-Cache-Control', 'no-store');
+}
+
+if (!runtimeUnavailable && !pageData) {
     return Astro.redirect('/browse');
 }
 
 const buildPageHref = (page: number) =>
     page <= 1 ? `/browse/${collectionSlug}` : `/browse/${collectionSlug}?page=${page}`;
-const breadcrumbItems = [{ label: 'Browse', href: '/browse' }, { label: pageData.collection.roman }];
-const hasPrevPage = pageData.currentPage > 1;
-const hasNextPage = pageData.currentPage < pageData.totalPages;
+const breadcrumbItems = pageData ? [{ label: 'Browse', href: '/browse' }, { label: pageData.collection.roman }] : [];
+const hasPrevPage = pageData ? pageData.currentPage > 1 : false;
+const hasNextPage = pageData ? pageData.currentPage < pageData.totalPages : false;
 
-// Set cache headers for edge caching
-Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
-Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
+if (!runtimeUnavailable) {
+    Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+    Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
+}
 ---
 
+{
+runtimeUnavailable || !pageData ? (
+    <RuntimeUnavailableLayout
+        title="Collection unavailable"
+        message="The active dataset is missing collection browse metadata for this route."
+        backHref="/browse"
+    />
+) : (
 <BaseLayout title={pageData.collection.roman} description={`Browse ${pageData.collection.roman}`}>
     <Header slot="header" currentPath="/browse">
         <ThemeToggle client:only="react" slot="theme-toggle" />
@@ -110,6 +135,8 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
 
     <Footer slot="footer" />
 </BaseLayout>
+)
+}
 
 <style>
     .collection-container {
@@ -126,7 +153,8 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
     .collection-title-arabic {
         font-family: var(--font-arabic-content);
         font-size: var(--text-3xl);
-        line-height: var(--leading-arabic);
+        font-weight: 400;
+        line-height: 1.4;
         margin-bottom: var(--space-3);
         color: var(--color-text-primary);
     }
@@ -178,6 +206,8 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
     .section-title-arabic {
         font-family: var(--font-arabic-content);
         font-size: var(--text-xl);
+        font-weight: 400;
+        line-height: 1.5;
         margin-bottom: var(--space-2);
         color: var(--color-text-primary);
     }

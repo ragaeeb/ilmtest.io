@@ -133,5 +133,230 @@ describe('datasetManifest', () => {
                 datasetVersion: 'v1',
             }),
         ).toBe(false);
+        expect(
+            isDatasetManifest({
+                datasetSchemaVersion: DATASET_SCHEMA_VERSION,
+                chunkSchemaVersion: CHUNK_SCHEMA_VERSION,
+                artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
+                appMinDatasetSchemaVersion: APP_MIN_DATASET_SCHEMA_VERSION,
+                datasetVersion: '2026-03-12T18-42-10Z-abc1234',
+                createdAt: 'March 12, 2026',
+                gitCommit: 'abc1234',
+                sourceProvenance: [{ name: 'excerptStore', dataset: 'org/excerpts', revision: 'main' }],
+                toolVersions: {
+                    app: '0.0.2',
+                    sdk: '^5.0.0',
+                    bun: '1.3.10',
+                    node: '25.0.0',
+                },
+                artifactCounts: {
+                    chunks: 2,
+                    bootstrapArtifacts: 4,
+                    runtimeArtifacts: 1,
+                    integrityArtifacts: 1,
+                    totalObjects: 8,
+                },
+                artifactBytes: {
+                    chunks: 256,
+                    bootstrapArtifacts: 384,
+                    runtimeArtifacts: 192,
+                    integrityArtifacts: 64,
+                    total: 896,
+                },
+                runtimeArtifactSet: {
+                    bootstrap: {
+                        collections: descriptor,
+                        translators: { ...descriptor, key: 'datasets/example/artifacts/bootstrap/translators.json' },
+                        routeBootstrap: {
+                            ...descriptor,
+                            key: 'datasets/example/artifacts/runtime/bootstrap/routes.json',
+                        },
+                        indexesFull: { ...descriptor, key: 'datasets/example/artifacts/bootstrap/indexes.full.json' },
+                    },
+                    runtime: {
+                        collectionShards: {
+                            '1118': {
+                                ...descriptor,
+                                key: 'datasets/example/artifacts/runtime/collections/1118.json',
+                            },
+                        },
+                    },
+                    integrity: {
+                        chunks: { ...descriptor, key: 'datasets/example/artifacts/integrity/chunks.json' },
+                    },
+                },
+            }),
+        ).toBe(false);
+        expect(
+            isDatasetManifest({
+                datasetSchemaVersion: DATASET_SCHEMA_VERSION,
+                chunkSchemaVersion: CHUNK_SCHEMA_VERSION,
+                artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
+                appMinDatasetSchemaVersion: APP_MIN_DATASET_SCHEMA_VERSION,
+                datasetVersion: '2026-03-12T18-42-10Z-abc1234',
+                createdAt: '2026-03-12T18:42:10.000Z',
+                gitCommit: 'abc1234',
+                sourceProvenance: [{ name: 'bad', dataset: 'org/excerpts', revision: 'main' }],
+                toolVersions: {
+                    app: '0.0.2',
+                    sdk: '^5.0.0',
+                    bun: '1.3.10',
+                    node: '25.0.0',
+                },
+                artifactCounts: {
+                    chunks: 2,
+                    bootstrapArtifacts: 4,
+                    runtimeArtifacts: 1,
+                    integrityArtifacts: 1,
+                    totalObjects: 8,
+                },
+                artifactBytes: {
+                    chunks: 256,
+                    bootstrapArtifacts: 384,
+                    runtimeArtifacts: 192,
+                    integrityArtifacts: 64,
+                    total: 896,
+                },
+                runtimeArtifactSet: {
+                    bootstrap: {
+                        collections: descriptor,
+                        translators: { ...descriptor, key: 'datasets/example/artifacts/bootstrap/translators.json' },
+                        routeBootstrap: {
+                            ...descriptor,
+                            key: 'datasets/example/artifacts/runtime/bootstrap/routes.json',
+                        },
+                        indexesFull: { ...descriptor, key: 'datasets/example/artifacts/bootstrap/indexes.full.json' },
+                    },
+                    runtime: {
+                        collectionShards: {
+                            '1118': {
+                                ...descriptor,
+                                key: 'datasets/example/artifacts/runtime/collections/1118.json',
+                            },
+                        },
+                    },
+                    integrity: {
+                        chunks: { ...descriptor, key: 'datasets/example/artifacts/integrity/chunks.json' },
+                    },
+                },
+            }),
+        ).toBe(false);
+        expect(
+            isDatasetManifest({
+                datasetSchemaVersion: DATASET_SCHEMA_VERSION,
+                chunkSchemaVersion: CHUNK_SCHEMA_VERSION,
+                artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
+                appMinDatasetSchemaVersion: APP_MIN_DATASET_SCHEMA_VERSION,
+                datasetVersion: '2026-03-12T18-42-10Z-abc1234',
+                createdAt: '2026-03-12T18:42:10.000Z',
+                gitCommit: 'abc1234',
+                sourceProvenance: [{ name: 'excerptStore', dataset: 'org/excerpts', revision: 'main' }],
+                toolVersions: {
+                    app: '0.0.2',
+                    sdk: '^5.0.0',
+                    bun: '1.3.10',
+                    node: '25.0.0',
+                },
+                artifactCounts: {
+                    chunks: 2,
+                    bootstrapArtifacts: 4,
+                    runtimeArtifacts: 1,
+                    integrityArtifacts: 1,
+                    totalObjects: 8,
+                },
+                artifactBytes: {
+                    chunks: 256,
+                    bootstrapArtifacts: 384,
+                    runtimeArtifacts: 192,
+                    integrityArtifacts: 64,
+                    total: 896,
+                },
+                runtimeArtifactSet: {
+                    bootstrap: {
+                        collections: descriptor,
+                        translators: { ...descriptor, key: 'datasets/example/artifacts/bootstrap/translators.json' },
+                        routeBootstrap: {
+                            ...descriptor,
+                            key: 'datasets/example/artifacts/runtime/bootstrap/routes.json',
+                        },
+                        indexesFull: { ...descriptor, key: 'datasets/example/artifacts/bootstrap/indexes.full.json' },
+                    },
+                    runtime: {
+                        collectionShards: [],
+                    },
+                    integrity: {
+                        chunks: { ...descriptor, key: 'datasets/example/artifacts/integrity/chunks.json' },
+                    },
+                },
+            }),
+        ).toBe(false);
+        expect(
+            isDatasetManifest({
+                datasetSchemaVersion: DATASET_SCHEMA_VERSION,
+                chunkSchemaVersion: CHUNK_SCHEMA_VERSION,
+                artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
+                appMinDatasetSchemaVersion: APP_MIN_DATASET_SCHEMA_VERSION,
+                datasetVersion: '2026-03-12T18-42-10Z-abc1234',
+                createdAt: '2026-03-12T18:42:10.000Z',
+                gitCommit: 'abc1234',
+                sourceProvenance: [{ name: 'excerptStore', dataset: 'org/excerpts', revision: 'main' }],
+                toolVersions: {
+                    app: '0.0.2',
+                    sdk: '^5.0.0',
+                    bun: '1.3.10',
+                    node: '25.0.0',
+                },
+                artifactCounts: {
+                    chunks: 2,
+                    bootstrapArtifacts: 4,
+                    runtimeArtifacts: 1,
+                    integrityArtifacts: 1,
+                    totalObjects: 8,
+                },
+                artifactBytes: {
+                    chunks: '256',
+                    bootstrapArtifacts: 384,
+                    runtimeArtifacts: 192,
+                    integrityArtifacts: 64,
+                    total: 896,
+                },
+                runtimeArtifactSet: {
+                    bootstrap: {
+                        collections: descriptor,
+                        translators: { ...descriptor, key: 'datasets/example/artifacts/bootstrap/translators.json' },
+                        routeBootstrap: {
+                            ...descriptor,
+                            key: 'datasets/example/artifacts/runtime/bootstrap/routes.json',
+                        },
+                        indexesFull: { ...descriptor, key: 'datasets/example/artifacts/bootstrap/indexes.full.json' },
+                    },
+                    runtime: {
+                        collectionShards: {
+                            '1118': {
+                                ...descriptor,
+                                key: 'datasets/example/artifacts/runtime/collections/1118.json',
+                            },
+                        },
+                    },
+                    integrity: {
+                        chunks: { ...descriptor, key: 'datasets/example/artifacts/integrity/chunks.json' },
+                    },
+                },
+            }),
+        ).toBe(false);
+    });
+
+    it('includes the first failing field in assertion errors', () => {
+        expect(() =>
+            assertDatasetManifest({
+                datasetVersion: 'v1',
+            }),
+        ).toThrow(/manifest\.datasetSchemaVersion/);
+        expect(() =>
+            assertDatasetBuildMetadata({
+                generatedAt: 'not-a-date',
+                gitCommit: 'abc1234',
+            }),
+        ).toThrow(/generatedAt/);
     });
 });

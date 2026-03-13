@@ -49,9 +49,12 @@ export type CollectionRuntimeShard = {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
+const isPlainRecord = (value: unknown): value is Record<string, unknown> => isRecord(value) && !Array.isArray(value);
+
 const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
 
-const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const isNonNegativeInteger = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isInteger(value) && value >= 0;
 
 const isIsoDateString = (value: unknown): value is string =>
     isNonEmptyString(value) && !Number.isNaN(Date.parse(value));
@@ -67,7 +70,7 @@ export const isRuntimeCollectionSummary = (value: unknown): value is RuntimeColl
         isNonEmptyString(value.roman) &&
         isNonEmptyString(value.unwan) &&
         Array.isArray(value.authors) &&
-        isFiniteNumber(value.sectionCount)
+        isNonNegativeInteger(value.sectionCount)
     );
 };
 
@@ -80,7 +83,12 @@ export const isSectionChunkDescriptor = (value: unknown): value is SectionChunkD
         return false;
     }
 
-    return isNonEmptyString(value.chunkKey) && isFiniteNumber(value.start) && isFiniteNumber(value.end);
+    return (
+        isNonEmptyString(value.chunkKey) &&
+        isNonNegativeInteger(value.start) &&
+        isNonNegativeInteger(value.end) &&
+        value.start <= value.end
+    );
 };
 
 const isSectionSummary = (value: unknown): value is SectionSummary => {
@@ -92,8 +100,8 @@ const isSectionSummary = (value: unknown): value is SectionSummary => {
         isNonEmptyString(value.sectionId) &&
         isNonEmptyString(value.title) &&
         typeof value.titleArabic === 'string' &&
-        isFiniteNumber(value.excerptCount) &&
-        isFiniteNumber(value.firstPage)
+        isNonNegativeInteger(value.excerptCount) &&
+        isNonNegativeInteger(value.firstPage)
     );
 };
 
@@ -106,21 +114,36 @@ const isExcerptLookupEntry = (value: unknown): value is ExcerptLookupEntry => {
 };
 
 export const isRuntimeRouteBootstrap = (value: unknown): value is RuntimeRouteBootstrap => {
-    if (!isRecord(value) || !isIsoDateString(value.generatedAt) || !isFiniteNumber(value.artifactSchemaVersion)) {
+    if (
+        !isPlainRecord(value) ||
+        !isIsoDateString(value.generatedAt) ||
+        !isNonNegativeInteger(value.artifactSchemaVersion) ||
+        value.artifactSchemaVersion !== ARTIFACT_SCHEMA_VERSION
+    ) {
         return false;
     }
 
-    if (!isRecord(value.collectionsBySlug)) {
+    if (!isPlainRecord(value.collectionsBySlug)) {
         return false;
     }
 
     return Object.values(value.collectionsBySlug).every((entry) => isRecord(entry) && isNonEmptyString(entry.id));
 };
 
+const hasRequiredSectionEntries = (value: CollectionRuntimeShard) => {
+    return value.sectionOrder.every(
+        (sectionId) =>
+            sectionId in value.sectionSummaries &&
+            sectionId in value.sectionDescriptors &&
+            sectionId in value.sectionExcerpts,
+    );
+};
+
 export const isCollectionRuntimeShard = (value: unknown): value is CollectionRuntimeShard => {
     if (
-        !isRecord(value) ||
-        !isFiniteNumber(value.artifactSchemaVersion) ||
+        !isPlainRecord(value) ||
+        !isNonNegativeInteger(value.artifactSchemaVersion) ||
+        value.artifactSchemaVersion !== ARTIFACT_SCHEMA_VERSION ||
         !isIsoDateString(value.generatedAt) ||
         !isNonEmptyString(value.collectionId) ||
         !Array.isArray(value.sectionOrder)
@@ -137,16 +160,18 @@ export const isCollectionRuntimeShard = (value: unknown): value is CollectionRun
         return false;
     }
 
+    const candidate = value as CollectionRuntimeShard;
     return (
-        value.sectionOrder.every((entry) => isNonEmptyString(entry)) &&
-        Object.values(value.sectionSummaries).every((entry) => isSectionSummary(entry)) &&
-        Object.values(value.sectionDescriptors).every(
+        candidate.sectionOrder.every((entry) => isNonEmptyString(entry)) &&
+        hasRequiredSectionEntries(candidate) &&
+        Object.values(candidate.sectionSummaries).every((entry) => isSectionSummary(entry)) &&
+        Object.values(candidate.sectionDescriptors).every(
             (entry) => Array.isArray(entry) && entry.every((descriptor) => isSectionChunkDescriptor(descriptor)),
         ) &&
-        Object.values(value.sectionExcerpts).every(
+        Object.values(candidate.sectionExcerpts).every(
             (entry) => Array.isArray(entry) && entry.every((excerptId) => isNonEmptyString(excerptId)),
         ) &&
-        Object.values(value.excerptLookup).every((entry) => isExcerptLookupEntry(entry))
+        Object.values(candidate.excerptLookup).every((entry) => isExcerptLookupEntry(entry))
     );
 };
 
@@ -182,8 +207,8 @@ export const buildSectionChunkDescriptor = (chunkKey: string, start: number, end
     }) satisfies SectionChunkDescriptor;
 
 export const buildRuntimeArtifactPayload = <T>(value: T) => ({
-    artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
     ...value,
+    artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
 });
 
 export const getRuntimeRouteBootstrapObjectKey = (datasetVersion: string) =>

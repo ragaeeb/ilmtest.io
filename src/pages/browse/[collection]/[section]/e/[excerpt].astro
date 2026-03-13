@@ -11,8 +11,10 @@ import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
 import Breadcrumb from '@/components/ui/Breadcrumb.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
+import RuntimeUnavailableLayout from '@/layouts/RuntimeUnavailableLayout.astro';
 import { getCitationParts } from '@/lib/citations';
 import { loadExcerptPageData } from '@/lib/data';
+import { isRuntimeDataError } from '@/lib/runtimeErrors';
 import { arabicToWestern } from '@/lib/textUtils';
 import type { Excerpt } from '@/types/excerpts';
 
@@ -22,33 +24,50 @@ if (!collectionSlug || !section || !excerptId) {
     return Astro.redirect('/404');
 }
 
-const excerptData = await loadExcerptPageData(collectionSlug, section, excerptId, Astro.request.url);
-if (!excerptData) {
+let excerptData: Awaited<ReturnType<typeof loadExcerptPageData>> = null;
+let runtimeUnavailable = false;
+
+try {
+    excerptData = await loadExcerptPageData(collectionSlug, section, excerptId, Astro.request.url);
+} catch (error) {
+    if (!isRuntimeDataError(error)) {
+        throw error;
+    }
+
+    runtimeUnavailable = true;
+    Astro.response.status = error.statusCode;
+    Astro.response.headers.set('Cache-Control', 'no-store');
+    Astro.response.headers.set('CDN-Cache-Control', 'no-store');
+}
+
+if (!runtimeUnavailable && !excerptData) {
     return Astro.redirect(`/browse/${collectionSlug}/${section}`);
 }
-const excerpt = excerptData.excerpt;
-const sectionTitle = excerptData.sectionSummary.title || `Section ${section}`;
+const excerpt = excerptData?.excerpt as Excerpt | undefined;
+const sectionTitle = excerptData?.sectionSummary.title || `Section ${section}`;
 
 // Format citation using the actual collection data
-const citation = getCitationParts(excerpt, excerptData.collection);
+const citation = excerptData && excerpt ? getCitationParts(excerpt, excerptData.collection) : null;
 marked.setOptions({ breaks: true });
 
-const citationMarkdown = `[${citation.label}](${citation.url})`;
-const englishHtml = marked.parse(excerpt.text);
-const copyPayload = `${excerpt.nass}\n\n${excerpt.text}\n\n${citationMarkdown}`;
+const citationMarkdown = citation ? `[${citation.label}](${citation.url})` : '';
+const englishHtml = excerpt ? marked.parse(excerpt.text) : '';
+const copyPayload = excerpt ? `${excerpt.nass}\n\n${excerpt.text}\n\n${citationMarkdown}` : '';
 
-const translatorName = excerptData.translators.find((translator) => translator.id === excerpt.translator)?.name;
+const translatorName = excerptData?.translators.find(
+    (translator) => excerpt && translator.id === excerpt.translator,
+)?.name;
 
-const excerptWords = excerpt.text.split(/\s+/).filter(Boolean);
+const excerptWords = excerpt?.text.split(/\s+/).filter(Boolean) ?? [];
 const excerptPreview = excerptWords.slice(0, 8).join(' ');
 const excerptLabel = excerptWords.length > 8 ? `${excerptPreview}…` : excerptPreview;
-const currentExcerptIndex = excerptData.sectionExcerptList.indexOf(excerptId);
+const currentExcerptIndex = excerptData?.sectionExcerptList.indexOf(excerptId) ?? -1;
 const currentExcerptNumber = currentExcerptIndex >= 0 ? currentExcerptIndex + 1 : 1;
-const totalExcerptsInSection = excerptData.sectionExcerptList.length;
-const previousExcerpt = excerptData.previousExcerpt;
-const nextExcerpt = excerptData.nextExcerpt;
+const totalExcerptsInSection = excerptData?.sectionExcerptList.length ?? 0;
+const previousExcerpt = excerptData?.previousExcerpt ?? null;
+const nextExcerpt = excerptData?.nextExcerpt ?? null;
 
-const meta = excerpt.meta;
+const meta = excerpt?.meta;
 const hadithMeta = meta && 'num' in meta ? meta : null;
 const bookMeta = meta && 'vol' in meta ? meta : null;
 
@@ -62,7 +81,7 @@ const formatHadithNumber = (num?: string) => {
 
 const breadcrumbItems = [
     { label: 'Browse', href: '/browse' },
-    { label: excerptData.collection.roman, href: `/browse/${collectionSlug}` },
+    { label: excerptData?.collection.roman ?? 'Collection', href: `/browse/${collectionSlug}` },
     { label: sectionTitle, href: `/browse/${collectionSlug}/${section}` },
     { label: excerptLabel || 'Excerpt' },
 ];
@@ -86,14 +105,22 @@ void hadithMeta;
 void bookMeta;
 void formatHadithNumber;
 void breadcrumbItems;
-void excerptData.previousExcerpt;
-void excerptData.nextExcerpt;
+void excerptData;
 
-// Set cache headers for edge caching
-Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
-Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
+if (!runtimeUnavailable) {
+    Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+    Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
+}
 ---
 
+{
+runtimeUnavailable || !excerptData || !excerpt ? (
+    <RuntimeUnavailableLayout
+        title="Excerpt unavailable"
+        message="The active dataset is missing excerpt artifacts for this route."
+        backHref={`/browse/${collectionSlug}/${section}`}
+    />
+) : (
 <BaseLayout
     title={`Excerpt ${excerptId}`}
     description={excerpt.text.slice(0, 160)}
@@ -206,6 +233,8 @@ Astro.response.headers.set('CDN-Cache-Control', 'max-age=3600');
 
     <Footer slot="footer" />
 </BaseLayout>
+)
+}
 
 <style>
     .excerpt-container {

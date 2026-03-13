@@ -40,7 +40,7 @@ const main = async () => {
             {
                 distCount,
                 chunkCount,
-                total: distCount + chunkCount,
+                total: distCount >= 0 && chunkCount >= 0 ? distCount + chunkCount : null,
             },
             null,
             2,

@@ -11,6 +11,24 @@
    Subset versions for performance */
 
 @font-face {
+    font-family: "KFGQPC Uthman Taha Naskh";
+    src: url("/fonts/KFGQPCUthmanTahaNaskh.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF;
+}
+
+@font-face {
+    font-family: "KFGQPC Uthman Taha Naskh";
+    src: url("/fonts/KFGQPCUthmanTahaNaskh-Bold.woff2") format("woff2");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF;
+}
+
+@font-face {
     font-family: "Noto Naskh Arabic";
     src: url("/fonts/NotoNaskhArabic-subset.woff2") format("woff2");
     font-weight: 400;
@@ -69,9 +87,9 @@
 
     /* --- Typography --- */
     --font-english: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    /* Fallback to system fonts until custom fonts are added */
-    --font-arabic-content: "Noto Naskh Arabic", "Traditional Arabic", "Geeza Pro", "Arabic Typesetting", serif;
-    --font-arabic-ui: "Noto Naskh Arabic", "SF Arabic", system-ui, sans-serif;
+    --font-arabic-content:
+        "KFGQPC Uthman Taha Naskh", "Noto Naskh Arabic", "Traditional Arabic", "Geeza Pro", "Arabic Typesetting", serif;
+    --font-arabic-ui: "KFGQPC Uthman Taha Naskh", "Noto Naskh Arabic", "SF Arabic", system-ui, sans-serif;
     --font-mono: "JetBrains Mono", "Fira Code", "Consolas", monospace;
 
     /* Font Sizes */
@@ -246,8 +264,6 @@ p {
 .arabic-content,
 [lang="ar"] {
     font-family: var(--font-arabic-content);
-    font-size: var(--text-lg);
-    line-height: var(--leading-arabic);
     direction: rtl;
     text-align: right;
 }

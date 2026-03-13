@@ -10,6 +10,10 @@ on:
         description: Publish the validated dataset after checks pass
         required: true
         default: "false"
+      preview_base_url:
+        description: Optional deployed preview URL for cold/warm runtime probing
+        required: false
+        default: ""
 
 jobs:
   release:
@@ -57,8 +61,35 @@ jobs:
       - name: Build project
         run: bun run build
 
+      - name: Bundle check
+        run: bun run bundle-check
+
+      - name: Workers deploy dry run
+        run: bun run deploy-check
+
+      - name: Workers preview deploy dry run
+        run: bun run deploy-check:preview
+
       - name: Route smoke
         run: bun run smoke-routes -- --port 4324
+
+      - name: Route smoke (preview)
+        if: inputs.preview_base_url != ''
+        run: bun run smoke-routes -- --base-url "${{ inputs.preview_base_url }}"
+
+      - name: Runtime probe (local)
+        if: inputs.preview_base_url == ''
+        run: bun run runtime-probe -- --port 4326 --output tmp/runtime-probe.json
+
+      - name: Runtime probe (preview)
+        if: inputs.preview_base_url != ''
+        run: bun run runtime-probe -- --base-url "${{ inputs.preview_base_url }}" --output tmp/runtime-probe.json
+
+      - name: Upload runtime probe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-probe-release
+          path: tmp/runtime-probe.json
 
       - name: Publish immutable dataset
         if: inputs.publish_dataset == 'true'

@@ -1,41 +1,7 @@
 import { isDatasetChannel } from '../src/lib/datasetPointer';
-import {
-    FileSystemObjectStore,
-    S3CompatibleObjectStore,
-    validateLocalDataset,
-    validateRemoteDataset,
-} from './datasetControl';
-
-const getFlagValue = (args: string[], flag: string) => {
-    const index = args.indexOf(flag);
-    if (index === -1) {
-        return undefined;
-    }
-    return args[index + 1];
-};
-
-const getStore = () => {
-    if (process.env.DATASET_STORE_ROOT) {
-        return new FileSystemObjectStore(process.env.DATASET_STORE_ROOT);
-    }
-
-    const bucketName = process.env.R2_BUCKET;
-    const endpoint =
-        process.env.R2_ENDPOINT ??
-        (process.env.R2_ACCOUNT_ID || process.env.CF_ACCOUNT_ID
-            ? `https://${process.env.R2_ACCOUNT_ID || process.env.CF_ACCOUNT_ID}.r2.cloudflarestorage.com`
-            : undefined);
-    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-
-    if (!bucketName || !endpoint || !accessKeyId || !secretAccessKey) {
-        throw new Error(
-            'Missing R2 configuration. Set DATASET_STORE_ROOT for local testing or provide R2_BUCKET, R2_ENDPOINT/R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY.',
-        );
-    }
-
-    return new S3CompatibleObjectStore(bucketName, endpoint, accessKeyId, secretAccessKey);
-};
+import { getFlagValue } from './cliUtils';
+import { validateLocalDataset, validateRemoteDataset } from './datasetControl';
+import { getStore } from './storeFactory';
 
 const main = async () => {
     const [mode = 'local', ...args] = process.argv.slice(2);
@@ -55,7 +21,7 @@ const main = async () => {
         if (channelArg && !isDatasetChannel(channelArg)) {
             throw new Error('remote validation requires --channel <prod|preview> when channel is provided');
         }
-        const channel = channelArg && isDatasetChannel(channelArg) ? channelArg : undefined;
+        const channel = channelArg as 'prod' | 'preview' | undefined;
         if (!channel && !datasetVersion) {
             throw new Error('remote validation requires either --channel or --dataset-version');
         }
