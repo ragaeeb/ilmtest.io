@@ -33,10 +33,10 @@ Each run writes a timestamped debug bundle under `tmp/cloudflare-guided/` with c
 ## Build Output
 
 - Build command: `bun run build`
-- Static asset output: `dist/dist`
+- Static asset output: `dist/client`
 - Worker bundle output: `dist/functions/index.mjs`
 - Generated Wrangler config: `dist/functions/wrangler.json`
-- Search index output: `dist/dist/pagefind`
+- Search index output: `dist/client/pagefind`
 
 ## Runtime Environments
 
@@ -111,7 +111,7 @@ This interactive flow validates the chosen dataset version, promotes `preview` i
 - `wrangler.jsonc` defines the runtime channel mapping and preview robots posture.
 - The Astro build generates the deployable Worker config at `dist/functions/wrangler.json`.
 - `scripts/prepareWorkerDeploy.ts` materializes `dist/functions/wrangler.prod.json` or `dist/functions/wrangler.preview.json` from that generated bundle config plus `wrangler.jsonc`.
-- The Worker serves static assets through the generated `ASSETS` binding from `dist/dist`.
+- The Worker serves static assets through the generated `ASSETS` binding from `dist/client`.
 - Keep the `EXCERPT_BUCKET` binding present in both default and `preview` environments.
 
 ## Cache Rules

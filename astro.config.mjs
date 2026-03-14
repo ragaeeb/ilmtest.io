@@ -62,7 +62,7 @@ export default defineConfig({
     },
 
     build: {
-        client: './dist',
+        client: './client',
         format: 'file',
         server: './functions',
     },

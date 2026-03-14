@@ -19,8 +19,16 @@ export type ChunkPayload = {
 };
 
 const resolveModuleFilePath = (relativePath: string) => {
-    const pathname = decodeURIComponent(new URL(relativePath, import.meta.url).pathname);
-    return pathname.replace(/^\/([A-Za-z]:\/)/, '$1');
+    if (relativePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(relativePath)) {
+        return relativePath;
+    }
+    try {
+        const baseUrl = typeof import.meta.url === 'string' ? import.meta.url : 'file:///';
+        const pathname = decodeURIComponent(new URL(relativePath, baseUrl).pathname);
+        return pathname.replace(/^\/([A-Za-z]:\/)/, '$1');
+    } catch {
+        return relativePath;
+    }
 };
 
 const getExcerptBucket = (): ExcerptBucket | undefined => env.EXCERPT_BUCKET as ExcerptBucket | undefined;

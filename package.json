@@ -17,7 +17,7 @@
     "homepage": "https://github.com/ragaeeb/ilmtest.io",
     "scripts": {
         "dev": "astro dev",
-        "build": "astro build && bun run build-search -- --output dist/dist/pagefind",
+        "build": "astro build && bun run build-search -- --output dist/client/pagefind",
         "test": "bun test",
         "verify": "bun run lint && bun run check && bun run test",
         "ci": "bun run verify && bun run build && bun run bundle-check",

@@ -12,7 +12,7 @@
  *   - lightweight display metadata for result rendering
  *
  * Usage:
- *   bun scripts/buildSearchIndex.ts [--output dist/dist/pagefind]
+ *   bun scripts/buildSearchIndex.ts [--output dist/client/pagefind]
  */
 import { mkdir } from 'node:fs/promises';
 import type { Collection, Excerpt } from '@/types/excerpts';
