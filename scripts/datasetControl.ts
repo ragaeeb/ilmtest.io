@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readdir, rm } from 'node:fs/promises';
+import { mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { basename, dirname, join, relative } from 'node:path';
 import {
     DeleteObjectCommand,
@@ -131,8 +131,14 @@ const readJsonFile = async <T>(filePath: string) => {
     return (await Bun.file(filePath).json()) as T;
 };
 
-const writeJsonFile = async (filePath: string, value: unknown) => {
+const _writeJsonFile = async (filePath: string, value: unknown) => {
     await Bun.write(filePath, JSON.stringify(value, null, 2));
+};
+
+const writeJsonFileAtomic = async (filePath: string, value: unknown) => {
+    const tempPath = `${filePath}.tmp`;
+    await Bun.write(tempPath, JSON.stringify(value, null, 2));
+    await rename(tempPath, filePath);
 };
 
 const readJsonObject = async <T>(store: ObjectStore, key: string) => {
@@ -199,7 +205,7 @@ const loadResumeState = async (statePath: string, datasetVersion: string): Promi
 
 export const saveResumeState = async (statePath: string, state: PublishResumeState) => {
     await mkdir(dirname(statePath), { recursive: true });
-    await writeJsonFile(statePath, {
+    await writeJsonFileAtomic(statePath, {
         ...state,
         uploadedKeys: [...new Set(state.uploadedKeys)].sort(),
         verifiedKeys: [...new Set(state.verifiedKeys)].sort(),
