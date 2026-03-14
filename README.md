@@ -56,7 +56,7 @@ All commands are run from the root of the project:
 | :--- | :--- |
 | `bun install` | Install dependencies |
 | `bun dev` | Start local dev server at `localhost:4321` |
-| `bun run build` | Build the Worker bundle and static assets (includes search index) |
+| `bun run build` | Build the Worker bundle and static assets (includes search index to `dist/client/pagefind`) |
 | `bun run test` | Run unit tests |
 | `bun run verify` | Lint + typecheck + tests |
 | `bun run ci` | Verify + build + bundle-check |
@@ -79,7 +79,7 @@ All commands are run from the root of the project:
 | `bun run smoke` | Smoke routes + runtime probe |
 | `bun run smoke-routes` | Verify core routes, robots, sitemap, and 404s |
 | `bun run runtime-probe` | Measure route timings and failure behavior |
-| `bun run build-search` | Build the Pagefind search index only |
+| `bun run build-search` | Build the Pagefind search index only (defaults to `public/pagefind`) |
 | `bun run baseline` | Report baseline performance metrics |
 | `bun run deploy` | Build + deploy the production Worker |
 | `bun run deploy:preview` | Build + deploy the shared preview Worker |
