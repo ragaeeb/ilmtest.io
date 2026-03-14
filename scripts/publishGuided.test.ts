@@ -7,7 +7,7 @@ import {
     parseCollectionIds,
     sanitizeReleaseLabel,
     suggestDatasetVersion,
-} from './publishGuided';
+} from './publishGuidedHelpers';
 
 const createStore = (existingDatasetVersions: string[]): ObjectStore => ({
     async putObject() {},

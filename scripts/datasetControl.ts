@@ -131,12 +131,9 @@ const readJsonFile = async <T>(filePath: string) => {
     return (await Bun.file(filePath).json()) as T;
 };
 
-const _writeJsonFile = async (filePath: string, value: unknown) => {
-    await Bun.write(filePath, JSON.stringify(value, null, 2));
-};
-
 const writeJsonFileAtomic = async (filePath: string, value: unknown) => {
-    const tempPath = `${filePath}.tmp`;
+    const dir = dirname(filePath);
+    const tempPath = join(dir, `.tmp-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
     await Bun.write(tempPath, JSON.stringify(value, null, 2));
     await rename(tempPath, filePath);
 };
