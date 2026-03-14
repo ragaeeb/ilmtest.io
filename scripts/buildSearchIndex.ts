@@ -57,6 +57,7 @@ type BuildSearchIndexOptions = {
     maxRecords?: number;
     collections?: string[];
     logEvery?: number;
+    pagefind?: PagefindModule;
 };
 
 type ResolvedIndexOptions = {
@@ -64,6 +65,16 @@ type ResolvedIndexOptions = {
     maxRecords?: number;
     logEvery: number;
     collectionFilter?: Set<string>;
+};
+
+type PagefindIndex = {
+    addCustomRecord: (record: SearchRecord) => Promise<{ errors?: string[] }>;
+    writeFiles: (options: { outputPath: string }) => Promise<{ errors?: string[] }>;
+};
+
+type PagefindModule = {
+    createIndex: (options: { forceLanguage?: string }) => Promise<{ index?: PagefindIndex | null; errors?: string[] }>;
+    close: () => Promise<void | null>;
 };
 
 // ---------------------------------------------------------------------------
@@ -353,7 +364,7 @@ export const buildSearchIndex = async (
     const resolvedOptions = resolveIndexOptions(options);
 
     // Dynamic import of pagefind (it's a dev dependency)
-    const pagefind = await import('pagefind');
+    const pagefind = options.pagefind ?? ((await import('pagefind')) as unknown as PagefindModule);
 
     // Create the Pagefind index
     const { index } = await pagefind.createIndex({

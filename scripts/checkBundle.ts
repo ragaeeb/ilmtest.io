@@ -97,4 +97,11 @@ const main = async () => {
     );
 };
 
-await main();
+try {
+    await main();
+} catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`${message}\n`);
+    process.stdout.write(`${message}\n`);
+    process.exit(1);
+}

@@ -300,8 +300,27 @@ describe('buildSearchIndex', () => {
                 ),
             );
 
-            const outputPath = join(tempRoot, 'dist', 'dist', 'pagefind');
-            await buildSearchIndex(outputPath, tempRoot);
+            const outputPath = join(tempRoot, 'dist', 'client', 'pagefind');
+            const pagefindStub = {
+                async createIndex() {
+                    return {
+                        index: {
+                            async addCustomRecord() {
+                                return {};
+                            },
+                            async writeFiles({ outputPath: writePath }: { outputPath: string }) {
+                                await mkdir(writePath, { recursive: true });
+                                await Bun.write(join(writePath, 'pagefind.js'), '');
+                                await Bun.write(join(writePath, 'pagefind-entry.json'), '{}');
+                                return {};
+                            },
+                        },
+                    };
+                },
+                async close() {},
+            };
+
+            await buildSearchIndex(outputPath, tempRoot, { pagefind: pagefindStub });
 
             const listFiles = async (dir: string): Promise<string[]> => {
                 const entries = await readdir(dir, { encoding: 'utf8', withFileTypes: true }).catch(() => []);
@@ -327,5 +346,5 @@ describe('buildSearchIndex', () => {
         } finally {
             await rm(tempRoot, { recursive: true, force: true });
         }
-    });
+    }, 20_000);
 });

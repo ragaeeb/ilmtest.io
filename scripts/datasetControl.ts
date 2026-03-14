@@ -485,15 +485,22 @@ export const publishDataset = async (store: ObjectStore, options: PublishDataset
     const verifiedKeys = new Set(resumeState.verifiedKeys);
     let persistedSinceFlush = 0;
     let successfulUploads = 0;
+    let pendingStateWrite: Promise<void> = Promise.resolve();
 
-    const flushState = async (manifestUploaded = resumeState.manifestUploaded) => {
-        await saveResumeState(statePath, {
+    const persistState = async (manifestUploaded = resumeState.manifestUploaded) => {
+        const nextState = {
             datasetVersion: prepared.datasetVersion,
             uploadedKeys: [...uploadedKeys],
             verifiedKeys: [...verifiedKeys],
             manifestUploaded,
             updatedAt: new Date().toISOString(),
-        });
+        };
+        pendingStateWrite = pendingStateWrite.then(() => saveResumeState(statePath, nextState));
+        await pendingStateWrite;
+    };
+
+    const flushState = async (manifestUploaded = resumeState.manifestUploaded) => {
+        await persistState(manifestUploaded);
         persistedSinceFlush = 0;
     };
 
@@ -546,13 +553,7 @@ export const publishDataset = async (store: ObjectStore, options: PublishDataset
         await store.putObject(prepared.manifestKey, manifestBody, JSON_CONTENT_TYPE);
     }
 
-    await saveResumeState(statePath, {
-        datasetVersion: prepared.datasetVersion,
-        uploadedKeys: [...uploadedKeys],
-        verifiedKeys: [...verifiedKeys],
-        manifestUploaded: true,
-        updatedAt: new Date().toISOString(),
-    });
+    await flushState(true);
 
     return {
         datasetVersion: prepared.datasetVersion,
