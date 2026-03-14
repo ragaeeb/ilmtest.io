@@ -5,6 +5,7 @@ import { defineConfig } from 'astro/config';
 
 const optimizeDeps = {
     entries: [],
+    exclude: ['audit', 'xray'],
     include: [],
     noDiscovery: true,
 };

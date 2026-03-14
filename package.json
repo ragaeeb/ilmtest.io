@@ -17,7 +17,7 @@
     "homepage": "https://github.com/ragaeeb/ilmtest.io",
     "scripts": {
         "dev": "astro dev",
-        "build": "astro build && bun run build-search",
+        "build": "astro build && bun run build-search -- --output dist/dist/pagefind",
         "test": "bun test",
         "verify": "bun run lint && bun run check && bun run test",
         "ci": "bun run verify && bun run build && bun run bundle-check",
@@ -28,7 +28,7 @@
         "prepare": "bun run install-hooks",
         "baseline": "bun scripts/reportBaseline.ts",
         "setup": "bun scripts/setup.ts",
-        "clean": "rm -rf src/data tmp/excerpt-chunks tmp/dataset-build tmp/publish-state tmp/runtime-artifacts dist code_packet.txt",
+        "clean": "rm -rf src/data tmp/excerpt-chunks tmp/dataset-build tmp/publish-state tmp/runtime-artifacts dist public/pagefind code_packet.txt",
         "cloudflare-guided": "bun scripts/cloudflareGuided.ts",
         "create-r2-bucket": "wrangler r2 bucket create \"${R2_BUCKET:-ilmtest-datasets}\"",
         "upload-r2": "bun scripts/uploadR2.ts",

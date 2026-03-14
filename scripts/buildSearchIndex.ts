@@ -52,16 +52,32 @@ export type SearchIndexStats = {
     durationMs: number;
 };
 
+type BuildSearchIndexOptions = {
+    maxChars?: number;
+    maxRecords?: number;
+    collections?: string[];
+    logEvery?: number;
+};
+
+type ResolvedIndexOptions = {
+    maxChars: number;
+    maxRecords?: number;
+    logEvery: number;
+    collectionFilter?: Set<string>;
+};
+
 // ---------------------------------------------------------------------------
 // Record building (pure, testable)
 // ---------------------------------------------------------------------------
+
+const DEFAULT_MAX_CHARS = 4000;
 
 /**
  * Truncate long text for search content to keep index sizes reasonable.
  * Pagefind indexes the text for search internally; we don't need the full
  * multi-page nass if it's enormous.
  */
-const truncateForIndex = (text: string, maxChars = 4000): string => {
+const truncateForIndex = (text: string, maxChars: number): string => {
     if (text.length <= maxChars) {
         return text;
     }
@@ -73,15 +89,15 @@ const truncateForIndex = (text: string, maxChars = 4000): string => {
  * Build a combined search content string from an excerpt.
  * Arabic text is placed first, then a separator, then the translation.
  */
-const buildSearchContent = (excerpt: Excerpt): string => {
+const buildSearchContent = (excerpt: Excerpt, maxChars: number): string => {
     const parts: string[] = [];
 
     if (excerpt.nass?.trim()) {
-        parts.push(truncateForIndex(excerpt.nass.trim()));
+        parts.push(truncateForIndex(excerpt.nass.trim(), maxChars));
     }
 
     if (excerpt.text?.trim()) {
-        parts.push(truncateForIndex(excerpt.text.trim()));
+        parts.push(truncateForIndex(excerpt.text.trim(), maxChars));
     }
 
     return parts.join('\n\n---\n\n');
@@ -143,10 +159,19 @@ type ExcerptRecordContext = {
  * Exported for unit testing.
  */
 export const buildSearchRecord = (ctx: ExcerptRecordContext): SearchRecord => {
+    const maxChars = DEFAULT_MAX_CHARS;
+    return buildSearchRecordWithOptions(ctx, { maxChars });
+};
+
+type BuildSearchRecordOptions = {
+    maxChars: number;
+};
+
+const buildSearchRecordWithOptions = (ctx: ExcerptRecordContext, options: BuildSearchRecordOptions): SearchRecord => {
     const { excerpt, collection, sectionId, sectionTitle } = ctx;
 
     const url = `/browse/${collection.slug}/${sectionId}/e/${excerpt.id}`;
-    const content = buildSearchContent(excerpt);
+    const content = buildSearchContent(excerpt, options.maxChars);
     const languages = detectLanguages(excerpt);
     const authorName = collection.authors?.[0]?.name ?? '';
     const sectionFilterValue = buildSectionFilterValue(collection.slug, sectionId, sectionTitle);
@@ -236,11 +261,18 @@ const yieldSectionExcerpts = async function* (
  * building. This reads chunks sequentially per collection to keep memory
  * usage bounded.
  */
-export const iterateCorpusExcerpts = async function* (data: LocalRuntimeData): AsyncGenerator<ExcerptWithContext> {
+export const iterateCorpusExcerpts = async function* (
+    data: LocalRuntimeData,
+    collectionFilter?: Set<string>,
+): AsyncGenerator<ExcerptWithContext> {
     const chunksDir = data.paths.chunksDir;
     const indexes = data.indexes;
 
     for (const collection of data.collections) {
+        if (collectionFilter && !collectionFilter.has(collection.id) && !collectionFilter.has(collection.slug)) {
+            continue;
+        }
+
         const sectionIds = indexes.collectionToSections[collection.id] ?? [];
 
         for (const sectionId of sectionIds) {
@@ -258,13 +290,67 @@ export const iterateCorpusExcerpts = async function* (data: LocalRuntimeData): A
 // Pagefind index builder
 // ---------------------------------------------------------------------------
 
-export const buildSearchIndex = async (outputPath: string, rootDir = '.'): Promise<SearchIndexStats> => {
+const resolveIndexOptions = (options: BuildSearchIndexOptions): ResolvedIndexOptions => {
+    const maxChars = options.maxChars ?? DEFAULT_MAX_CHARS;
+    const logEvery = options.logEvery ?? 1000;
+    const collectionFilter = options.collections?.length
+        ? new Set(options.collections.map((value) => value.trim()).filter(Boolean))
+        : undefined;
+
+    return {
+        maxChars,
+        maxRecords: options.maxRecords,
+        logEvery,
+        collectionFilter,
+    };
+};
+
+const indexCorpusRecords = async (
+    index: { addCustomRecord: (record: SearchRecord) => Promise<{ errors?: string[] }> },
+    data: LocalRuntimeData,
+    options: ResolvedIndexOptions,
+) => {
+    let recordCount = 0;
+    const byCollection: Record<string, number> = {};
+
+    for await (const ctx of iterateCorpusExcerpts(data, options.collectionFilter)) {
+        const record = buildSearchRecordWithOptions(ctx, { maxChars: options.maxChars });
+
+        const { errors } = await index.addCustomRecord(record);
+
+        if (errors && errors.length > 0) {
+            console.warn(`   ⚠ Error indexing ${record.url}:`, errors);
+            continue;
+        }
+
+        recordCount++;
+        byCollection[ctx.collection.slug] = (byCollection[ctx.collection.slug] ?? 0) + 1;
+
+        if (recordCount % options.logEvery === 0) {
+            console.log(`   … indexed ${recordCount} records`);
+        }
+
+        if (options.maxRecords && recordCount >= options.maxRecords) {
+            console.log(`   … reached max-records=${options.maxRecords}, stopping early`);
+            break;
+        }
+    }
+
+    return { recordCount, byCollection };
+};
+
+export const buildSearchIndex = async (
+    outputPath: string,
+    rootDir = '.',
+    options: BuildSearchIndexOptions = {},
+): Promise<SearchIndexStats> => {
     const startedAt = Date.now();
     console.log('🔍 Building search index...');
 
     // Load corpus data
     const data = await loadLocalRuntimeData(rootDir);
     console.log(`   ✓ Loaded ${data.collections.length} collections`);
+    const resolvedOptions = resolveIndexOptions(options);
 
     // Dynamic import of pagefind (it's a dev dependency)
     const pagefind = await import('pagefind');
@@ -286,25 +372,8 @@ export const buildSearchIndex = async (outputPath: string, rootDir = '.'): Promi
         durationMs: 0,
     };
 
-    let recordCount = 0;
-
-    for await (const ctx of iterateCorpusExcerpts(data)) {
-        const record = buildSearchRecord(ctx);
-
-        const { errors } = await index.addCustomRecord(record);
-
-        if (errors && errors.length > 0) {
-            console.warn(`   ⚠ Error indexing ${record.url}:`, errors);
-            continue;
-        }
-
-        recordCount++;
-        stats.byCollection[ctx.collection.slug] = (stats.byCollection[ctx.collection.slug] ?? 0) + 1;
-
-        if (recordCount % 1000 === 0) {
-            console.log(`   … indexed ${recordCount} records`);
-        }
-    }
+    const { recordCount, byCollection } = await indexCorpusRecords(index, data, resolvedOptions);
+    stats.byCollection = byCollection;
 
     stats.totalRecords = recordCount;
     stats.totalExcerpts = recordCount;
@@ -336,8 +405,26 @@ export const buildSearchIndex = async (outputPath: string, rootDir = '.'): Promi
 
 if (import.meta.main) {
     const args = process.argv.slice(2);
+    const normalizePositiveNumber = (value: number | undefined) =>
+        typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
     const outputFlag = args.indexOf('--output');
-    const outputPath = outputFlag >= 0 && args[outputFlag + 1] ? args[outputFlag + 1] : 'dist/dist/pagefind';
+    const outputPath = outputFlag >= 0 && args[outputFlag + 1] ? args[outputFlag + 1] : 'public/pagefind';
+    const maxCharsFlag = args.indexOf('--max-chars');
+    const maxChars = maxCharsFlag >= 0 && args[maxCharsFlag + 1] ? Number(args[maxCharsFlag + 1]) : DEFAULT_MAX_CHARS;
+    const maxRecordsFlag = args.indexOf('--max-records');
+    const maxRecords = maxRecordsFlag >= 0 && args[maxRecordsFlag + 1] ? Number(args[maxRecordsFlag + 1]) : undefined;
+    const collectionsFlag = args.indexOf('--collections');
+    const collections =
+        collectionsFlag >= 0 && args[collectionsFlag + 1]
+            ? args[collectionsFlag + 1].split(',').map((value) => value.trim())
+            : undefined;
+    const logEveryFlag = args.indexOf('--log-every');
+    const logEvery = logEveryFlag >= 0 && args[logEveryFlag + 1] ? Number(args[logEveryFlag + 1]) : undefined;
 
-    await buildSearchIndex(outputPath);
+    await buildSearchIndex(outputPath, '.', {
+        maxChars: normalizePositiveNumber(maxChars) ?? DEFAULT_MAX_CHARS,
+        maxRecords: normalizePositiveNumber(maxRecords),
+        collections,
+        logEvery: normalizePositiveNumber(logEvery),
+    });
 }

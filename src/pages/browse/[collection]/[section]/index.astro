@@ -2,6 +2,7 @@
 // Enable SSR for this route
 export const prerender = false;
 
+import { BookOpen, Eye, FileText, Languages } from 'lucide-react';
 import ExcerptCard from '@/components/domain/ExcerptCard.astro';
 import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
@@ -40,6 +41,14 @@ if (!runtimeUnavailable && !sectionData) {
 }
 const sectionTitle = sectionData?.sectionSummary.title || `Section ${section}`;
 const sectionTitleArabic = sectionData?.sectionSummary.titleArabic || '';
+const requestedView = Astro.url.searchParams.get('view');
+const excerptDisplayMode = ['preview', 'full', 'arabic', 'translation'].includes(requestedView ?? '')
+    ? (requestedView as 'preview' | 'full' | 'arabic' | 'translation')
+    : 'full';
+const previewHref = `/browse/${collectionSlug}/${section}?view=preview`;
+const fullHref = `/browse/${collectionSlug}/${section}`;
+const arabicHref = `/browse/${collectionSlug}/${section}?view=arabic`;
+const translationHref = `/browse/${collectionSlug}/${section}?view=translation`;
 
 const breadcrumbItems = [
     { label: 'Browse', href: '/browse' },
@@ -57,6 +66,15 @@ void BaseLayout;
 void sectionData;
 void sectionTitleArabic;
 void breadcrumbItems;
+void excerptDisplayMode;
+void previewHref;
+void fullHref;
+void arabicHref;
+void translationHref;
+void BookOpen;
+void Eye;
+void FileText;
+void Languages;
 
 if (!runtimeUnavailable) {
     Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
@@ -89,7 +107,47 @@ runtimeUnavailable || !sectionData ? (
                 )
             }
             <h1 class="section-title">{sectionTitle}</h1>
-            <p class="subtitle">{sectionData.excerpts.length} excerpts</p>
+            <div class="section-meta">
+                <p class="subtitle">{sectionData.excerpts.length} excerpts</p>
+                <nav class="view-toggle" aria-label="Excerpt display mode">
+                    <a
+                        href={fullHref}
+                        class:list={['view-toggle-link', excerptDisplayMode === 'full' && 'is-active']}
+                        aria-current={excerptDisplayMode === 'full' ? 'page' : undefined}
+                        aria-label="Show full text"
+                        title="Show full text"
+                    >
+                        <FileText size={14} strokeWidth={2} />
+                    </a>
+                    <a
+                        href={previewHref}
+                        class:list={['view-toggle-link', excerptDisplayMode === 'preview' && 'is-active']}
+                        aria-current={excerptDisplayMode === 'preview' ? 'page' : undefined}
+                        aria-label="Show preview text"
+                        title="Show preview text"
+                    >
+                        <Eye size={14} strokeWidth={2} />
+                    </a>
+                    <a
+                        href={arabicHref}
+                        class:list={['view-toggle-link', excerptDisplayMode === 'arabic' && 'is-active']}
+                        aria-current={excerptDisplayMode === 'arabic' ? 'page' : undefined}
+                        aria-label="Show Arabic text"
+                        title="Show Arabic text"
+                    >
+                        <BookOpen size={14} strokeWidth={2} />
+                    </a>
+                    <a
+                        href={translationHref}
+                        class:list={['view-toggle-link', excerptDisplayMode === 'translation' && 'is-active']}
+                        aria-current={excerptDisplayMode === 'translation' ? 'page' : undefined}
+                        aria-label="Show translation text"
+                        title="Show translation text"
+                    >
+                        <Languages size={14} strokeWidth={2} />
+                    </a>
+                </nav>
+            </div>
         </header>
 
         <div class="excerpts-list">
@@ -101,6 +159,7 @@ runtimeUnavailable || !sectionData ? (
                         collectionSlug={collectionSlug}
                         sectionSlug={section}
                         excerptId={excerpt.id}
+                        displayMode={excerptDisplayMode}
                     />
                 ))
             }
@@ -134,7 +193,7 @@ runtimeUnavailable || !sectionData ? (
                 return;
             }
 
-            const link = target.closest('a.card');
+            const link = target.closest('.excerpts-list a');
             if (!link) {
                 return;
             }
@@ -179,6 +238,50 @@ runtimeUnavailable || !sectionData ? (
     .subtitle {
         color: var(--color-text-secondary);
         font-size: var(--text-base);
+        margin: 0;
+    }
+
+    .section-meta {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        margin-top: var(--space-2);
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .view-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        padding: 3px;
+        border: 1px solid color-mix(in srgb, var(--color-border) 85%, transparent);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--color-surface) 92%, var(--color-background));
+    }
+
+    .view-toggle-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.9rem;
+        height: 1.9rem;
+        border-radius: 999px;
+        color: var(--color-text-secondary);
+        text-decoration: none;
+        transition:
+            background-color var(--duration-fast) var(--ease-out),
+            color var(--duration-fast) var(--ease-out);
+    }
+
+    .view-toggle-link:hover {
+        color: var(--color-text-primary);
+        background: var(--color-surface-hover);
+    }
+
+    .view-toggle-link.is-active {
+        background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
+        color: var(--color-primary);
     }
 
     .excerpts-list {
@@ -247,6 +350,11 @@ runtimeUnavailable || !sectionData ? (
 
         .section-title {
             font-size: var(--text-xl);
+        }
+
+        .section-meta {
+            flex-direction: column;
+            gap: var(--space-2);
         }
     }
 </style>
