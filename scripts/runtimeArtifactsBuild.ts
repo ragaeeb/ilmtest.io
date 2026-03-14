@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import type { Collection } from '@/types/excerpts';
+import type { Collection, Excerpt } from '@/types/excerpts';
 import { ARTIFACT_SCHEMA_VERSION } from '../src/lib/datasetManifest';
 import {
     assertCollectionRuntimeShard,
@@ -21,6 +21,7 @@ type BuildRuntimeArtifactsOptions = {
     indexes: LookupIndexes;
     chunksDir: string;
     generatedAt: string;
+    headingMarkersByCollection?: Record<string, Map<string, Excerpt>>;
 };
 
 export type BuiltRuntimeArtifacts = {
@@ -51,6 +52,19 @@ type BuiltSectionShard = {
     excerptIds: string[];
     excerptLookup: Record<string, ExcerptLookupEntry>;
 };
+
+const buildEmptySectionRuntimeShard = (sectionId: string, headingMarker?: Excerpt): BuiltSectionShard => ({
+    summary: {
+        sectionId,
+        title: headingMarker?.text || `Section ${sectionId}`,
+        titleArabic: headingMarker?.nass ?? '',
+        excerptCount: 0,
+        firstPage: headingMarker?.from ?? 0,
+    },
+    descriptors: [],
+    excerptIds: [],
+    excerptLookup: {},
+});
 
 const buildSectionShardArtifacts = async (sectionId: string, chunkKeys: string[], chunksDir: string) => {
     const descriptors: CollectionRuntimeShard['sectionDescriptors'][string] = [];
@@ -103,10 +117,15 @@ const buildSectionRuntimeShard = async (
     sectionId: string,
     indexes: LookupIndexes,
     chunksDir: string,
+    headingMarker?: Excerpt,
 ): Promise<BuiltSectionShard> => {
     const chunkKeys = indexes.sectionToChunks[collectionId]?.[sectionId] ?? [];
     const excerptIds = indexes.sectionToExcerpts[collectionId]?.[sectionId] ?? [];
     if (chunkKeys.length === 0) {
+        if (excerptIds.length === 0) {
+            return buildEmptySectionRuntimeShard(sectionId, headingMarker);
+        }
+
         throw new Error(`Missing chunk descriptors for section ${collectionId}/${sectionId}`);
     }
 
@@ -131,15 +150,21 @@ const buildCollectionRuntimeShard = async (
     indexes: LookupIndexes,
     chunksDir: string,
     generatedAt: string,
+    headingMarkers?: Map<string, Excerpt>,
 ) => {
     const sectionOrder = indexes.collectionToSections[collection.id] ?? [];
     const sectionSummaries: Record<string, SectionSummary> = {};
     const sectionDescriptors: CollectionRuntimeShard['sectionDescriptors'] = {};
     const sectionExcerpts: CollectionRuntimeShard['sectionExcerpts'] = {};
     const excerptLookup: CollectionRuntimeShard['excerptLookup'] = {};
-
     for (const sectionId of sectionOrder) {
-        const section = await buildSectionRuntimeShard(collection.id, sectionId, indexes, chunksDir);
+        const section = await buildSectionRuntimeShard(
+            collection.id,
+            sectionId,
+            indexes,
+            chunksDir,
+            headingMarkers?.get(sectionId),
+        );
         sectionSummaries[sectionId] = section.summary;
         sectionDescriptors[sectionId] = section.descriptors;
         sectionExcerpts[sectionId] = section.excerptIds;
@@ -176,7 +201,13 @@ export const buildRuntimeArtifacts = async (options: BuildRuntimeArtifactsOption
         await Promise.all(
             collections.map(async (collection) => [
                 collection.id,
-                await buildCollectionRuntimeShard(collection, options.indexes, options.chunksDir, options.generatedAt),
+                await buildCollectionRuntimeShard(
+                    collection,
+                    options.indexes,
+                    options.chunksDir,
+                    options.generatedAt,
+                    options.headingMarkersByCollection?.[collection.id],
+                ),
             ]),
         ),
     );

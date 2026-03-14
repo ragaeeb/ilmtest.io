@@ -52,27 +52,52 @@ We chose a **Hybrid Rendering** approach to solve the "54k Page Problem". Static
 
 All commands are run from the root of the project:
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `bun install`             | Installs dependencies                            |
-| `bun dev`                 | Starts local dev server at `localhost:4321`      |
-| `bun build`               | Build your production site to `./dist/`          |
-| `bun run setup`           | Runs the ETL pipeline to generate content/data   |
-| `bun run setup-fixture`   | Materialize the tiny or medium fixture corpus    |
-| `bun run clean`           | Removes generated content, data, and build files |
-| `bun run smoke-routes`    | Verify core routes, robots, sitemap, and 404s   |
-| `bun run runtime-probe`   | Measure route timings and failure behavior       |
-| `bun run create-r2-bucket`| Creates the R2 bucket (uses `R2_BUCKET`)         |
-| `bun run upload-r2`       | Uploads chunks to R2                             |
-| `bun run deploy`          | Build + deploy the production Worker             |
-| `bun run deploy:preview`  | Build + deploy the shared preview Worker         |
-| `bun run deploy-check`    | Dry-run the Worker deploy contract               |
-| `bun run deploy-check:preview` | Dry-run the preview Worker deploy contract  |
-| `bun run resume`          | Resume upload with skip-existing                 |
+| Command | Action |
+| :--- | :--- |
+| `bun install` | Install dependencies |
+| `bun dev` | Start local dev server at `localhost:4321` |
+| `bun run build` | Build the Worker bundle and static assets (includes search index to `dist/client/pagefind`) |
+| `bun run test` | Run unit tests |
+| `bun run verify` | Lint + typecheck + tests |
+| `bun run ci` | Verify + build + bundle-check |
+| `bun run lint` | Lint via Biome |
+| `bun run check` | Astro typecheck |
+| `bun run cloudflare-guided` | Interactive first-time Cloudflare bootstrap for R2 bucket creation and `.env` setup |
+| `bun run setup` | Run the ETL pipeline to generate corpus data |
+| `bun run setup-fixture -- tiny` | Materialize the tiny fixture corpus |
+| `bun run setup-fixture -- medium` | Materialize the medium fixture corpus |
+| `bun run validate-dataset` | Validate dataset inputs or remote dataset metadata |
+| `bun run publish-guided` | Interactive guided flow for setup, validation, publish, and optional preview promotion |
+| `bun run release-guided` | Interactive guided flow for preview deploy, validation, and optional production release |
+| `bun run publish-dataset` | Publish an immutable dataset version |
+| `bun run promote-dataset` | Promote `preview` or `prod` dataset pointers |
+| `bun run rollback-dataset` | Roll back a dataset pointer |
+| `bun run prune-datasets` | Prune older preview datasets |
+| `bun run clean` | Remove generated content, data, and build files |
+| `bun run integrity` | Validate lookup indexes, shards, and runtime metadata |
+| `bun run bundle-check` | Verify the bundle output for runtime constraints |
+| `bun run smoke` | Smoke routes + runtime probe |
+| `bun run smoke-routes` | Verify core routes, robots, sitemap, and 404s |
+| `bun run runtime-probe` | Measure route timings and failure behavior |
+| `bun run build-search` | Build the Pagefind search index only (defaults to `public/pagefind`) |
+| `bun run baseline` | Report baseline performance metrics |
+| `bun run deploy` | Build + deploy the production Worker |
+| `bun run deploy:preview` | Build + deploy the shared preview Worker |
+| `bun run deploy-check` | Dry-run the Worker deploy contract |
+| `bun run deploy-check:preview` | Dry-run the preview Worker deploy contract |
+| `bun run create-r2-bucket` | Create the R2 bucket (defaults to `ilmtest-datasets`) |
+| `bun run upload-r2` | Upload chunks to R2 (legacy helper) |
+| `bun run resume` | Resume upload with skip-existing |
 
 ## 🔐 Environment Variables
 
 Place these in `.env` so Bun picks them up. See `docs/deployment.md` for the full list and R2 resume options.
+
+For first-time Cloudflare setup, prefer:
+
+`bun run cloudflare-guided`
+
+It defaults the dataset bucket to `ilmtest-datasets`, verifies Wrangler auth, can create the R2 bucket, writes the required R2 variables into `.env`, and keeps `wrangler.jsonc` aligned with the chosen bucket.
 
 ## 🛠️ Troubleshooting
 

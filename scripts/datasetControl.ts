@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-import { mkdir, readdir, rm } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { basename, dirname, join, relative } from 'node:path';
 import {
     DeleteObjectCommand,
@@ -131,8 +131,17 @@ const readJsonFile = async <T>(filePath: string) => {
     return (await Bun.file(filePath).json()) as T;
 };
 
-const writeJsonFile = async (filePath: string, value: unknown) => {
-    await Bun.write(filePath, JSON.stringify(value, null, 2));
+const writeJsonFileAtomic = async (filePath: string, value: unknown) => {
+    const dir = dirname(filePath);
+    const tempPath = join(dir, `.tmp-${Date.now()}-${randomUUID()}.json`);
+    try {
+        await Bun.write(tempPath, JSON.stringify(value, null, 2));
+        await rename(tempPath, filePath);
+    } finally {
+        if (await Bun.file(tempPath).exists()) {
+            await rm(tempPath, { force: true });
+        }
+    }
 };
 
 const readJsonObject = async <T>(store: ObjectStore, key: string) => {
@@ -199,7 +208,7 @@ const loadResumeState = async (statePath: string, datasetVersion: string): Promi
 
 export const saveResumeState = async (statePath: string, state: PublishResumeState) => {
     await mkdir(dirname(statePath), { recursive: true });
-    await writeJsonFile(statePath, {
+    await writeJsonFileAtomic(statePath, {
         ...state,
         uploadedKeys: [...new Set(state.uploadedKeys)].sort(),
         verifiedKeys: [...new Set(state.verifiedKeys)].sort(),
@@ -485,15 +494,22 @@ export const publishDataset = async (store: ObjectStore, options: PublishDataset
     const verifiedKeys = new Set(resumeState.verifiedKeys);
     let persistedSinceFlush = 0;
     let successfulUploads = 0;
+    let pendingStateWrite: Promise<void> = Promise.resolve();
 
-    const flushState = async (manifestUploaded = resumeState.manifestUploaded) => {
-        await saveResumeState(statePath, {
+    const persistState = async (manifestUploaded = resumeState.manifestUploaded) => {
+        const nextState = {
             datasetVersion: prepared.datasetVersion,
             uploadedKeys: [...uploadedKeys],
             verifiedKeys: [...verifiedKeys],
             manifestUploaded,
             updatedAt: new Date().toISOString(),
-        });
+        };
+        pendingStateWrite = pendingStateWrite.then(() => saveResumeState(statePath, nextState));
+        await pendingStateWrite;
+    };
+
+    const flushState = async (manifestUploaded = resumeState.manifestUploaded) => {
+        await persistState(manifestUploaded);
         persistedSinceFlush = 0;
     };
 
@@ -546,13 +562,7 @@ export const publishDataset = async (store: ObjectStore, options: PublishDataset
         await store.putObject(prepared.manifestKey, manifestBody, JSON_CONTENT_TYPE);
     }
 
-    await saveResumeState(statePath, {
-        datasetVersion: prepared.datasetVersion,
-        uploadedKeys: [...uploadedKeys],
-        verifiedKeys: [...verifiedKeys],
-        manifestUploaded: true,
-        updatedAt: new Date().toISOString(),
-    });
+    await flushState(true);
 
     return {
         datasetVersion: prepared.datasetVersion,

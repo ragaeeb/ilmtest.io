@@ -5,6 +5,7 @@ import { defineConfig } from 'astro/config';
 
 const optimizeDeps = {
     entries: [],
+    exclude: ['audit', 'xray'],
     include: [],
     noDiscovery: true,
 };
@@ -53,10 +54,15 @@ export default defineConfig({
         },
         optimizeDeps,
         plugins: [tailwindcss(), disableServerDepScanPlugin],
+        build: {
+            rollupOptions: {
+                external: ['/pagefind/pagefind.js'],
+            },
+        },
     },
 
     build: {
-        client: './dist',
+        client: './client',
         format: 'file',
         server: './functions',
     },

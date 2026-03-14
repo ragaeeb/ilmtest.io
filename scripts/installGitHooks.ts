@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 const PRE_COMMIT_HOOK = `#!/bin/sh
 set -eu
 
-bun run lint
+bun run format
 bun run check
 `;
 

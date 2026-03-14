@@ -19,26 +19,24 @@ export type ChunkPayload = {
 };
 
 const resolveModuleFilePath = (relativePath: string) => {
-    const pathname = decodeURIComponent(new URL(relativePath, import.meta.url).pathname);
-    return pathname.replace(/^\/([A-Za-z]:\/)/, '$1');
+    if (relativePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(relativePath)) {
+        return relativePath;
+    }
+    try {
+        const baseUrl = typeof import.meta.url === 'string' ? import.meta.url : 'file:///';
+        const pathname = decodeURIComponent(new URL(relativePath, baseUrl).pathname);
+        return pathname.replace(/^\/([A-Za-z]:\/)/, '$1');
+    } catch {
+        return relativePath;
+    }
 };
-
-const localChunkModules = import.meta.env.DEV
-    ? (import.meta.glob('../../tmp/excerpt-chunks/**/*.json', {
-          eager: true,
-          import: 'default',
-      }) as Record<string, unknown>)
-    : {};
 
 const getExcerptBucket = (): ExcerptBucket | undefined => env.EXCERPT_BUCKET as ExcerptBucket | undefined;
 
-const readLocalChunk = async (chunkKey: string) => {
-    if (import.meta.env.DEV) {
-        const match = Object.entries(localChunkModules).find(([path]) => path.endsWith(`/${chunkKey}`));
-        return (match?.[1] as ChunkPayload | undefined) ?? null;
-    }
+const getLocalChunkFilePath = (chunkKey: string) => resolveModuleFilePath(`../../tmp/excerpt-chunks/${chunkKey}`);
 
-    const filePath = resolveModuleFilePath(`../../tmp/excerpt-chunks/${chunkKey}`);
+const readLocalChunkFromFs = async (chunkKey: string) => {
+    const filePath = getLocalChunkFilePath(chunkKey);
 
     if (typeof Bun !== 'undefined') {
         const file = Bun.file(filePath);
@@ -50,6 +48,26 @@ const readLocalChunk = async (chunkKey: string) => {
     }
 
     return null;
+};
+
+const readLocalChunkFromDevServer = async (chunkKey: string, requestUrl?: string) => {
+    if (!requestUrl) {
+        return null;
+    }
+
+    const devServerUrl = new URL(`/@fs${getLocalChunkFilePath(chunkKey)}`, requestUrl);
+    const response = await fetch(devServerUrl);
+    if (response.status === 404) {
+        return null;
+    }
+    if (!response.ok) {
+        throw new RuntimeDataError('local-artifact-missing', `Failed to load local chunk payload for ${chunkKey}`, {
+            artifactKey: devServerUrl.toString(),
+            chunkKey,
+        });
+    }
+
+    return (await response.json()) as ChunkPayload;
 };
 
 const logChunkFetch = (details: {
@@ -75,11 +93,12 @@ const logChunkFetch = (details: {
 
 const loadLocalChunkWithSignal = async (
     chunkKey: string,
+    requestUrl: string | undefined,
     datasetVersion: string | undefined,
     startedAt: number,
     messagePrefix: string,
 ) => {
-    const chunk = await readLocalChunk(chunkKey);
+    const chunk = (await readLocalChunkFromFs(chunkKey)) ?? (await readLocalChunkFromDevServer(chunkKey, requestUrl));
     logChunkFetch({
         datasetVersion: datasetVersion ?? 'local',
         cacheStatus: 'local',
@@ -120,7 +139,7 @@ const loadRemoteChunk = async (bucket: ExcerptBucket, chunkKey: string, datasetV
 
 export const fetchExcerptChunk = async (
     chunkKey: string,
-    _requestUrl?: string,
+    requestUrl?: string,
     datasetVersion?: string,
 ): Promise<ChunkPayload | null> => {
     const startedAt = Date.now();
@@ -128,13 +147,20 @@ export const fetchExcerptChunk = async (
 
     try {
         if (localRuntime) {
-            return loadLocalChunkWithSignal(chunkKey, datasetVersion, startedAt, 'Missing local chunk payload for');
+            return loadLocalChunkWithSignal(
+                chunkKey,
+                requestUrl,
+                datasetVersion,
+                startedAt,
+                'Missing local chunk payload for',
+            );
         }
 
         const bucket = getExcerptBucket();
         if (!bucket) {
             return loadLocalChunkWithSignal(
                 chunkKey,
+                requestUrl,
                 datasetVersion,
                 startedAt,
                 'Missing fallback local chunk payload for',

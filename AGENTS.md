@@ -76,7 +76,7 @@ Citations are the project's source of truth.
 
 ### 7. Scope Boundaries (MVP)
 -   ❌ **No User Auth**: Do not suggest login/signup features.
--   ❌ **No Complex Search**: Do not implement full-text search yet (Post-MVP).
+-   ✅ **Search (M5)**: Pagefind-based search is implemented and allowed.
 -   ❌ **No Semantic Search**: Defer embeddings/vector dbs.
 
 ## ⚙️ The Data Pipeline (`scripts/setup.ts`)

@@ -44,6 +44,7 @@ Use the versions in `package.json` as the canonical floor unless a later ADR cha
 
 ### Dataset publish / validation against R2
 
+- First-time setup: `bun run cloudflare-guided`
 - `R2_BUCKET`
 - `R2_ENDPOINT` or `R2_ACCOUNT_ID` / `CF_ACCOUNT_ID`
 - `R2_ACCESS_KEY_ID`

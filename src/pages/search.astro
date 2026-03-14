@@ -1,0 +1,196 @@
+---
+import { SearchDialog } from '../components/islands/SearchDialog';
+import { ThemeToggle } from '../components/islands/ThemeToggle';
+import Footer from '../components/layout/Footer.astro';
+import Header from '../components/layout/Header.astro';
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+// Biome doesn't see template usage in .astro files.
+void ThemeToggle;
+void SearchDialog;
+void Footer;
+void Header;
+void BaseLayout;
+---
+
+<BaseLayout
+  title="Search"
+  description="Search across all IlmTest collections — find excerpts in Arabic and English."
+>
+  <Header slot="header" currentPath="/search">
+    <SearchDialog client:only="react" slot="search" />
+    <ThemeToggle client:only="react" slot="theme-toggle" />
+  </Header>
+
+  <section class="search-page">
+    <div class="search-hero">
+      <h1 class="search-title">Search</h1>
+      <p class="search-desc">
+        Find excerpts across all collections. Search in Arabic or English.
+      </p>
+      <div class="search-open-cta">
+        <button
+          id="search-open-btn"
+          class="search-cta-button"
+          type="button"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+          </svg>
+          <span>Search excerpts…</span>
+          <kbd>⌘K / Ctrl+K</kbd>
+        </button>
+      </div>
+
+      <div class="search-hints">
+        <h2 class="hints-title">Search tips</h2>
+        <ul class="hints-list">
+          <li>Search in <strong>Arabic</strong> for original text</li>
+          <li>Search in <strong>English</strong> for translations</li>
+          <li>Use <strong>collection filters</strong> to narrow results</li>
+          <li>Press <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> from any page</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <Footer slot="footer" />
+</BaseLayout>
+
+<script>
+  // Wire up the CTA button to trigger ⌘K
+  document.getElementById('search-open-btn')?.addEventListener('click', () => {
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'k',
+        metaKey: true,
+        ctrlKey: true,
+        bubbles: true,
+      })
+    );
+  });
+</script>
+
+<style>
+  .search-page {
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-12) var(--space-6);
+  }
+
+  .search-hero {
+    text-align: center;
+    max-width: 560px;
+  }
+
+  .search-title {
+    font-size: var(--text-4xl);
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-3);
+  }
+
+  .search-desc {
+    font-size: var(--text-lg);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-8);
+    line-height: var(--leading-relaxed);
+  }
+
+  .search-open-cta {
+    margin-bottom: var(--space-12);
+  }
+
+  .search-cta-button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-6);
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    color: var(--color-text-secondary);
+    font-size: var(--text-base);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+    min-width: 300px;
+    justify-content: center;
+  }
+
+  .search-cta-button:hover {
+    border-color: var(--color-primary);
+    color: var(--color-text-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 15%, transparent);
+  }
+
+  .search-cta-button kbd {
+    padding: 2px 8px;
+    border-radius: 4px;
+    background-color: var(--color-background);
+    border: 1px solid var(--color-border);
+    font-size: 12px;
+    font-family: monospace;
+    margin-left: var(--space-2);
+  }
+
+  .search-hints {
+    text-align: left;
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    padding: var(--space-6);
+    border: 1px solid var(--color-border);
+  }
+
+  .hints-title {
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-3);
+  }
+
+  .hints-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .hints-list li {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    padding-left: var(--space-4);
+    position: relative;
+  }
+
+  .hints-list li::before {
+    content: '→';
+    position: absolute;
+    left: 0;
+    color: var(--color-primary);
+  }
+
+  .hints-list kbd {
+    padding: 1px 6px;
+    border-radius: 3px;
+    background-color: var(--color-background);
+    border: 1px solid var(--color-border);
+    font-size: 11px;
+    font-family: monospace;
+  }
+
+  @media (max-width: 640px) {
+    .search-title {
+      font-size: var(--text-3xl);
+    }
+
+    .search-cta-button {
+      min-width: auto;
+      width: 100%;
+    }
+  }
+</style>

@@ -2,30 +2,9 @@ import { describe, expect, it } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-
-const runBundleCheck = async (cwd: string, scriptPath: string) => {
-    const proc = Bun.spawn(['bun', scriptPath], {
-        cwd,
-        stdout: 'pipe',
-        stderr: 'pipe',
-        env: process.env,
-    });
-    const [stdout, stderr] = await Promise.all([
-        proc.stdout ? new Response(proc.stdout).text() : '',
-        proc.stderr ? new Response(proc.stderr).text() : '',
-        proc.exited,
-    ]);
-    return {
-        exitCode: proc.exitCode ?? 0,
-        stdout,
-        stderr,
-    };
-};
+import { checkBundle } from './checkBundle';
 
 describe('checkBundle', () => {
-    const root = process.cwd();
-    const scriptPath = join(root, 'scripts', 'checkBundle.ts');
-
     it('fails when index signatures appear in bundle output', async () => {
         const tempRoot = await mkdtemp(join(tmpdir(), 'ilmtest-bundle-'));
         try {
@@ -33,10 +12,15 @@ describe('checkBundle', () => {
             await mkdir(distDir, { recursive: true });
             await writeFile(join(distDir, 'bad.js'), 'const data = {"sectionToExcerpts":{}};');
 
-            const result = await runBundleCheck(tempRoot, scriptPath);
-
-            expect(result.exitCode).not.toBe(0);
-            expect(result.stderr + result.stdout).toContain('indexes');
+            let error: unknown;
+            try {
+                await checkBundle(tempRoot);
+            } catch (caught) {
+                error = caught;
+            }
+            expect(error).toBeInstanceOf(Error);
+            const output = error instanceof Error ? error.message : String(error);
+            expect(output).toContain('indexes');
         } finally {
             await rm(tempRoot, { recursive: true, force: true });
         }
@@ -49,9 +33,7 @@ describe('checkBundle', () => {
             await mkdir(distDir, { recursive: true });
             await writeFile(join(distDir, 'ok.js'), 'console.log("ok");');
 
-            const result = await runBundleCheck(tempRoot, scriptPath);
-
-            expect(result.exitCode).toBe(0);
+            await checkBundle(tempRoot);
         } finally {
             await rm(tempRoot, { recursive: true, force: true });
         }
@@ -64,10 +46,15 @@ describe('checkBundle', () => {
             await mkdir(distDir, { recursive: true });
             await writeFile(join(distDir, '_worker.js'), 'const data = {"pageToHeading":{}};');
 
-            const result = await runBundleCheck(tempRoot, scriptPath);
-
-            expect(result.exitCode).not.toBe(0);
-            expect(result.stderr + result.stdout).toContain('indexes');
+            let error: unknown;
+            try {
+                await checkBundle(tempRoot);
+            } catch (caught) {
+                error = caught;
+            }
+            expect(error).toBeInstanceOf(Error);
+            const output = error instanceof Error ? error.message : String(error);
+            expect(output).toContain('indexes');
         } finally {
             await rm(tempRoot, { recursive: true, force: true });
         }

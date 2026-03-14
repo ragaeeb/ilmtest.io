@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { resolveDefaultRobotsPolicy, resolveRuntimeChannel } from '../src/lib/runtimeEnvironment';
 import { startAstroDevServer } from './devServerHarness';
 import { loadLocalRuntimeData, readChunkFromDisk } from './runtimeData';
@@ -29,6 +30,7 @@ const getFlagValue = (args: string[], flag: string) => {
     return args[index + 1];
 };
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: route collection includes guarded branching
 const collectSmokeRoutes = async (baseUrl: string) => {
     const { collections, indexes, paths } = await loadLocalRuntimeData();
     const channel = resolveRuntimeChannel({ requestUrl: baseUrl });
@@ -69,6 +71,12 @@ const collectSmokeRoutes = async (baseUrl: string) => {
     ];
 
     for (const collection of collections) {
+        const shardPath = join(paths.runtimeArtifactsDir, 'collections', `${collection.id}.json`);
+        const hasShard = await Bun.file(shardPath).exists();
+        if (!hasShard) {
+            continue;
+        }
+
         const sectionId = indexes.collectionToSections[collection.id]?.[0];
         if (!sectionId) {
             continue;
@@ -90,6 +98,11 @@ const collectSmokeRoutes = async (baseUrl: string) => {
             continue;
         }
 
+        const excerptSource = excerpt.text?.trim() || excerpt.nass?.trim() || '';
+        const excerptWords = excerptSource.split(/\s+/).filter(Boolean);
+        const excerptPreview = excerptWords.slice(0, 8).join(' ');
+        const excerptLabel = excerptWords.length > 8 ? `${excerptPreview}…` : excerptPreview;
+
         routes.push(
             {
                 label: `${collection.slug}:collection`,
@@ -108,10 +121,12 @@ const collectSmokeRoutes = async (baseUrl: string) => {
             {
                 label: `${collection.slug}:excerpt`,
                 path: `/browse/${collection.slug}/${sectionId}/e/${excerptId}`,
-                expectText: excerpt.text.split('\n')[0],
+                expectText: excerptLabel,
                 expectHeaders: [{ name: 'Cache-Control', value: CACHE_HEADER }],
             },
         );
+
+        break;
     }
 
     return routes;

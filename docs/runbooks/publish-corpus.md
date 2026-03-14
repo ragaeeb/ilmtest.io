@@ -11,6 +11,8 @@ This runbook covers the dataset control plane. It publishes immutable corpus art
 
 ## Required Inputs
 
+For first-time setup, prefer `bun run cloudflare-guided` to populate the Cloudflare values below.
+
 - `HF_TOKEN`
 - `HF_EXCERPT_STORE`, `HF_ASL_STORE`, `HF_SHAMELA4_STORE`
 - `HF_EXCERPT_REVISION`, `HF_ASL_REVISION`, `HF_SHAMELA4_REVISION` for release builds
@@ -21,6 +23,19 @@ This runbook covers the dataset control plane. It publishes immutable corpus art
 - `R2_SECRET_ACCESS_KEY`
 
 ## Local Flow
+
+If this is your first Cloudflare publish on a machine or account:
+
+1. Run `bun run cloudflare-guided`
+2. Confirm `.env` now contains the R2 settings and `wrangler.jsonc` points at the same bucket
+
+For the common manual path, prefer:
+
+`bun run publish-guided`
+
+This interactive flow asks for collection IDs, suggests a dataset version using the repo convention, runs `setup`, validates the generated dataset, publishes it, validates the remote manifest, and can promote `preview`.
+
+If you want to run each step explicitly, use the sequence below.
 
 1. Generate or refresh local corpus data:
    `bun run setup <collection ids...>`

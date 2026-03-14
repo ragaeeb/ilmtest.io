@@ -2,6 +2,7 @@
 export const prerender = false;
 
 import CollectionCard from '@/components/domain/CollectionCard.astro';
+import { SearchDialog } from '@/components/islands/SearchDialog';
 import { ThemeToggle } from '@/components/islands/ThemeToggle';
 import Footer from '@/components/layout/Footer.astro';
 import Header from '@/components/layout/Header.astro';
@@ -41,6 +42,7 @@ if (!runtimeUnavailable) {
             description="Explore Islamic texts with verified translations and scholarly sources."
         >
             <Header slot="header" currentPath="/browse">
+                <SearchDialog client:idle slot="search" />
                 <ThemeToggle client:only="react" slot="theme-toggle" />
             </Header>
 

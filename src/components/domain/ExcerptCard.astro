@@ -1,5 +1,8 @@
 ---
+import { ExternalLink } from 'lucide-react';
+import CitationBlock from '@/components/domain/CitationBlock.astro';
 import Card from '@/components/ui/Card.astro';
+import { getExcerptLocator } from '@/lib/excerptLocator';
 import type { Collection, Excerpt } from '@/types/excerpts';
 
 interface Props {
@@ -8,12 +11,22 @@ interface Props {
     collectionSlug: string;
     sectionSlug: string;
     excerptId: string;
+    displayMode?: 'preview' | 'full' | 'arabic' | 'translation';
 }
 
 const { excerpt, collection, collectionSlug, sectionSlug, excerptId } = Astro.props as Props;
+const displayMode = Astro.props.displayMode ?? 'preview';
 
-const previewText = excerpt.nass.length > 150 ? `${excerpt.nass.substring(0, 150)}...` : excerpt.nass;
-const previewEnglish = excerpt.text.length > 150 ? `${excerpt.text.substring(0, 150)}...` : excerpt.text;
+const truncateText = (value: string) => (value.length > 150 ? `${value.substring(0, 150)}...` : value);
+const showArabicFull = displayMode === 'full' || displayMode === 'arabic';
+const showEnglishFull = displayMode === 'full' || displayMode === 'translation';
+
+const arabicText = showArabicFull ? excerpt.nass : truncateText(excerpt.nass);
+const englishText = showEnglishFull ? excerpt.text : truncateText(excerpt.text);
+const locator = getExcerptLocator(excerpt);
+const excerptHref = `/browse/${collectionSlug}/${sectionSlug}/e/${excerptId}`;
+const cardHref = displayMode === 'preview' ? excerptHref : undefined;
+const isPreviewMode = displayMode === 'preview';
 
 // Biome doesn't see template usage in .astro files.
 void excerpt;
@@ -21,35 +34,53 @@ void collection;
 void collectionSlug;
 void sectionSlug;
 void excerptId;
-void previewText;
-void previewEnglish;
+void truncateText;
+void showArabicFull;
+void showEnglishFull;
+void arabicText;
+void englishText;
+void locator;
+void excerptHref;
+void cardHref;
+void isPreviewMode;
 void Card;
+void CitationBlock;
+void ExternalLink;
 ---
 
-<Card 
-  href={`/browse/${collectionSlug}/${sectionSlug}/e/${excerptId}`}
+<Card
+  href={cardHref}
   variant="outlined"
-  hoverable={true}
+  hoverable={isPreviewMode}
   padding="md"
   class="excerpt-card-override"
 >
   <div class="excerpt-content">
     <div class="excerpt-preview">
       <div class="excerpt-text-arabic" lang="ar" dir="rtl">
-        {previewText}
+        {arabicText}
       </div>
       <div class="excerpt-text-english">
-        {previewEnglish}
+        {englishText}
       </div>
       <div class="excerpt-meta">
-        <span class="page-number">Page {excerpt.from}</span>
+        <span class="page-number">{locator.label} {locator.value}</span>
       </div>
+      {displayMode === 'full' && <CitationBlock excerpt={excerpt} collection={collection} />}
     </div>
     
     <div class="card-footer">
-      <span class="read-more">
-        Read Full
-      </span>
+      {
+        isPreviewMode ? (
+          <span class="detail-icon" aria-hidden="true">
+            <ExternalLink size={14} strokeWidth={2} />
+          </span>
+        ) : (
+          <a class="detail-icon-link" href={excerptHref} aria-label="Open excerpt detail" title="Open excerpt detail">
+            <ExternalLink size={14} strokeWidth={2} />
+          </a>
+        )
+      }
     </div>
   </div>
 </Card>
@@ -105,13 +136,31 @@ void Card;
     border-top: 1px solid var(--color-surface-hover); /* slightly lighter border than main */
   }
 
-  .read-more {
-    font-size: var(--text-xs);
-    font-weight: 500;
+  .detail-icon,
+  .detail-icon-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.85rem;
+    height: 1.85rem;
+    border-radius: 999px;
     color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
   }
 
-  :global(.card-hoverable:hover) .read-more {
-    text-decoration: underline;
+  .detail-icon-link {
+    text-decoration: none;
+    transition:
+      background-color var(--duration-fast) var(--ease-out),
+      color var(--duration-fast) var(--ease-out);
+  }
+
+  .detail-icon-link:hover {
+    color: var(--color-primary-text);
+    background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  }
+
+  :global(.card-hoverable:hover) .detail-icon {
+    background: color-mix(in srgb, var(--color-primary) 16%, transparent);
   }
 </style>

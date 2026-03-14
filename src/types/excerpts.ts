@@ -123,6 +123,11 @@ type WebMeta = {
     url: string;
 };
 
+type HeadingReferenceMeta = {
+    /** Explicit heading/section membership for sources that do not need page-based inference. */
+    headingId: string;
+};
+
 type ArabicAsl = {
     /** The Arabic text of the excerpt */
     nass: string;
@@ -144,5 +149,5 @@ export type Heading = ArabicAsl & AITranslation;
  */
 export type Excerpt = ArabicAsl &
     AITranslation & {
-        meta?: BookMeta | HadithMetadata | QuranMeta | WebMeta;
+        meta?: BookMeta | HadithMetadata | QuranMeta | WebMeta | HeadingReferenceMeta;
     };

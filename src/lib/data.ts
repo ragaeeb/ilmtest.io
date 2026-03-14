@@ -15,6 +15,7 @@ import { getErrorMessage, RuntimeDataError } from './runtimeErrors';
 import { logRuntimeSignal } from './runtimeSignals';
 
 type ModuleMap<T> = Record<string, T>;
+type LazyModuleMap<T> = Record<string, () => Promise<T>>;
 
 type SectionPageData = {
     collection: RuntimeCollectionSummary;
@@ -56,18 +57,51 @@ const translatorModules = import.meta.glob('../data/translators.json', {
 }) as ModuleMap<unknown>;
 const localCollectionShardModules = import.meta.env.DEV
     ? (import.meta.glob('../../tmp/runtime-artifacts/collections/*.json', {
-          eager: true,
           import: 'default',
-      }) as ModuleMap<unknown>)
+      }) as LazyModuleMap<unknown>)
     : {};
+const localCollectionShardLoaders = import.meta.env.DEV
+    ? new Map(
+          Object.entries(localCollectionShardModules)
+              .map(([path, loader]) => {
+                  const fileName = path.split('/').pop() ?? '';
+                  const collectionId = fileName.replace(/\.json$/u, '');
+                  return collectionId ? [collectionId, loader] : null;
+              })
+              .filter((entry): entry is [string, () => Promise<unknown>] => Boolean(entry)),
+      )
+    : new Map<string, () => Promise<unknown>>();
 
 const resolveModuleFilePath = (relativePath: string) => {
-    const pathname = decodeURIComponent(new URL(relativePath, import.meta.url).pathname);
-    return pathname.replace(/^\/([A-Za-z]:\/)/, '$1');
+    if (relativePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(relativePath)) {
+        return relativePath;
+    }
+    try {
+        const baseUrl = typeof import.meta.url === 'string' ? import.meta.url : 'file:///';
+        const pathname = decodeURIComponent(new URL(relativePath, baseUrl).pathname);
+        return pathname.replace(/^\/([A-Za-z]:\/)/, '$1');
+    } catch {
+        return relativePath;
+    }
 };
 
-const LOCAL_COLLECTIONS_PATH = resolveModuleFilePath('../data/collections.json');
-const LOCAL_TRANSLATORS_PATH = resolveModuleFilePath('../data/translators.json');
+const RUNTIME_ROOT =
+    typeof process !== 'undefined' && typeof process.cwd === 'function' ? process.cwd() : resolveModuleFilePath('.');
+const resolveRuntimePath = (relativePath: string) => {
+    if (relativePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(relativePath)) {
+        return relativePath;
+    }
+    const base = RUNTIME_ROOT.endsWith('/') ? RUNTIME_ROOT : `${RUNTIME_ROOT}/`;
+    try {
+        const pathname = decodeURIComponent(new URL(relativePath, `file://${base}`).pathname);
+        return pathname.replace(/^\/([A-Za-z]:\/)/, '$1');
+    } catch {
+        return `${base}${relativePath}`;
+    }
+};
+
+const LOCAL_COLLECTIONS_PATH = resolveRuntimePath('src/data/collections.json');
+const LOCAL_TRANSLATORS_PATH = resolveRuntimePath('src/data/translators.json');
 
 const readLocalJson = async <T>(filePath: string) => {
     if (typeof Bun === 'undefined') {
@@ -93,17 +127,17 @@ const loadBundledCollections = () => assertRuntimeCollectionSummaryArray(getFirs
 
 const loadBundledTranslators = () => getFirstModule(translatorModules, []) as Array<{ id: number; name: string }>;
 
-const loadBundledCollectionShard = (collectionId: string) => {
-    const match = Object.entries(localCollectionShardModules).find(([path]) => path.endsWith(`/${collectionId}.json`));
-    if (!match) {
+const loadBundledCollectionShard = async (collectionId: string) => {
+    const loader = localCollectionShardLoaders.get(collectionId);
+    if (!loader) {
         return null;
     }
 
-    return assertCollectionRuntimeShard(match[1]);
+    return assertCollectionRuntimeShard(await loader());
 };
 
 const getLocalCollectionShardPath = (collectionId: string) =>
-    resolveModuleFilePath(`../../tmp/runtime-artifacts/collections/${collectionId}.json`);
+    resolveRuntimePath(`tmp/runtime-artifacts/collections/${collectionId}.json`);
 
 const loadCollectionsArtifactFromContext = async (context: RuntimeContext) => {
     const startedAt = Date.now();
@@ -214,6 +248,7 @@ const resolveCollectionBySlugFromContext = async (slug: string, context: Runtime
     return collections.find((collection) => collection.id === collectionId) ?? null;
 };
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: guarded branching for local vs remote artifact loading
 const loadCollectionShardFromContext = async (collectionId: string, context: RuntimeContext) => {
     const startedAt = Date.now();
     const cacheKey = buildRuntimeCacheKey('artifact', context.datasetVersion, 'collection', collectionId);
@@ -221,49 +256,66 @@ const loadCollectionShardFromContext = async (collectionId: string, context: Run
     const cacheStatus = !manifest ? 'local' : runtimeCache.hasFresh(cacheKey) ? 'hit' : 'miss';
 
     try {
-        const shard = !manifest
-            ? import.meta.env.DEV
-                ? (() => {
-                      const localShard = loadBundledCollectionShard(collectionId);
-                      if (!localShard) {
-                          throw new RuntimeDataError(
-                              'local-artifact-missing',
-                              `Missing local runtime shard for collection ${collectionId}`,
-                              {
-                                  datasetVersion: context.datasetVersion,
-                                  manifestKey: context.manifestKey,
-                                  artifactKey: getLocalCollectionShardPath(collectionId),
-                                  collectionId,
-                              },
-                          );
-                      }
-                      return localShard;
-                  })()
-                : assertCollectionRuntimeShard(
-                      await readLocalJson<CollectionRuntimeShard>(getLocalCollectionShardPath(collectionId)),
-                  )
-            : await runtimeCache.getOrLoad(cacheKey, ARTIFACT_CACHE_TTL_MS, async () => {
-                  const descriptor = manifest.runtimeArtifactSet.runtime.collectionShards[collectionId];
-                  if (!descriptor) {
-                      throw new RuntimeDataError(
-                          'artifact-missing',
-                          `Missing runtime shard descriptor for collection ${collectionId}`,
-                          {
-                              datasetVersion: context.datasetVersion,
-                              manifestKey: context.manifestKey,
-                              collectionId,
-                          },
-                      );
-                  }
+        let shard: CollectionRuntimeShard;
+        if (!manifest) {
+            if (import.meta.env.DEV) {
+                const localShard = await loadBundledCollectionShard(collectionId);
+                if (!localShard) {
+                    throw new RuntimeDataError(
+                        'local-artifact-missing',
+                        `Missing local runtime shard for collection ${collectionId}`,
+                        {
+                            datasetVersion: context.datasetVersion,
+                            manifestKey: context.manifestKey,
+                            artifactKey: getLocalCollectionShardPath(collectionId),
+                            collectionId,
+                        },
+                    );
+                }
+                shard = localShard;
+            } else {
+                const artifactKey = getLocalCollectionShardPath(collectionId);
+                try {
+                    shard = assertCollectionRuntimeShard(await readLocalJson<CollectionRuntimeShard>(artifactKey));
+                } catch (error) {
+                    const runtimeError = new RuntimeDataError(
+                        'local-artifact-missing',
+                        `Missing local runtime shard for collection ${collectionId}`,
+                        {
+                            datasetVersion: context.datasetVersion,
+                            manifestKey: context.manifestKey,
+                            artifactKey,
+                            collectionId,
+                        },
+                    );
+                    (runtimeError as Error & { cause?: unknown }).cause = error;
+                    throw runtimeError;
+                }
+            }
+        } else {
+            shard = await runtimeCache.getOrLoad(cacheKey, ARTIFACT_CACHE_TTL_MS, async () => {
+                const descriptor = manifest.runtimeArtifactSet.runtime.collectionShards[collectionId];
+                if (!descriptor) {
+                    throw new RuntimeDataError(
+                        'artifact-missing',
+                        `Missing runtime shard descriptor for collection ${collectionId}`,
+                        {
+                            datasetVersion: context.datasetVersion,
+                            manifestKey: context.manifestKey,
+                            collectionId,
+                        },
+                    );
+                }
 
-                  return assertCollectionRuntimeShard(
-                      await readBucketJson<CollectionRuntimeShard>(descriptor.key, {
-                          datasetVersion: context.datasetVersion,
-                          manifestKey: context.manifestKey,
-                          collectionId,
-                      }),
-                  );
-              });
+                return assertCollectionRuntimeShard(
+                    await readBucketJson<CollectionRuntimeShard>(descriptor.key, {
+                        datasetVersion: context.datasetVersion,
+                        manifestKey: context.manifestKey,
+                        collectionId,
+                    }),
+                );
+            });
+        }
 
         logRuntimeSignal({
             routeType: 'collection-shard',

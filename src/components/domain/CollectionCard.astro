@@ -10,7 +10,11 @@ interface Props {
 
 const { collection, slug } = Astro.props;
 
-const authorNames = collection.authors.map((a) => a.name).join(', ');
+const authorNames = collection.authors
+    .map((author) => author.name?.trim())
+    .filter(Boolean)
+    .join(', ');
+const hasAuthors = authorNames.length > 0;
 ---
 
 <Card 
@@ -31,10 +35,12 @@ const authorNames = collection.authors.map((a) => a.name).join(', ');
       </div>
     </div>
 
-    <div class="meta-group">
-      <span class="meta-label">Author:</span> 
-      <span class="meta-value">{authorNames}</span>
-    </div>
+    {hasAuthors && (
+      <div class="meta-group">
+        <span class="meta-label">Author:</span> 
+        <span class="meta-value">{authorNames}</span>
+      </div>
+    )}
 
     {collection.roman && (
       <p class="collection-description">

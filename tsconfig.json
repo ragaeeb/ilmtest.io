@@ -8,7 +8,7 @@
             "@/types/*": ["./src/types/*"]
         }
     },
-    "exclude": ["dist", "tmp"],
+    "exclude": ["dist", "tmp", "public/pagefind/**"],
     "extends": "astro/tsconfigs/strict",
     "include": [".astro/types.d.ts", "**/*"]
 }

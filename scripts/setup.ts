@@ -37,9 +37,12 @@ import { downloadDataSet } from './huggingface';
 import { addEntityMappings, generateIndexes, type LookupIndexes } from './indexing';
 import { decompressJson } from './io';
 import { mapHeadingIdToShamelaTitleId, mapTitlesToTableOfContents, type TitleNode } from './mapping';
+import { type LoadedCompilation, normalizeQuranCompilation, type RawCompilation } from './quranCompilation';
 import { buildRuntimeArtifacts, writeRuntimeArtifacts } from './runtimeArtifactsBuild';
 
+const SHAMELA2_LIBRARY_ID = '1';
 const SHAMELA4_LIBRARY_ID = '75';
+const QURAN_LIBRARY_ID = '10';
 const OUTPUT_DATA_DIR = 'src/data';
 const CONTENT_CHUNKS_DIR = 'tmp/excerpt-chunks';
 const DATASET_BUILD_DIR = 'tmp/dataset-build';
@@ -123,17 +126,19 @@ const loadCollection = async (id: string): Promise<Collection> => {
     library.url_template = library.url_template!.replace('{id}', collection.fid!).replace('{page}', ':page');
 
     const [entity] = collection.author ? await getEntity(collection.author) : [];
-    const slug = slugify(collection.title!, entity.display_name);
+    const slug = slugify(collection.title!, entity?.display_name);
 
     return {
-        authors: [
-            {
-                id: entity.id.toString(),
-                name: entity.display_name,
-                ism: entity.ar_display_name!,
-                img: entity.avatars!,
-            },
-        ],
+        authors: entity
+            ? [
+                  {
+                      id: entity.id.toString(),
+                      name: entity.display_name,
+                      ism: entity.ar_display_name!,
+                      img: entity.avatars!,
+                  },
+              ]
+            : [],
         src: { id: collection.library!.toString(), fid: collection.fid! },
         roman: collection.display_name,
         slug,
@@ -144,7 +149,7 @@ const loadCollection = async (id: string): Promise<Collection> => {
 };
 
 const getDataSetPropsForCollection = (c: Collection) => {
-    if (c.src.id === SHAMELA4_LIBRARY_ID) {
+    if (c.src.id === SHAMELA2_LIBRARY_ID || c.src.id === SHAMELA4_LIBRARY_ID) {
         return {
             dataset: HF_SHAMELA4_STORE,
             id: c.src.fid,
@@ -159,31 +164,60 @@ const getDataSetPropsForCollection = (c: Collection) => {
     };
 };
 
-const loadExcerpts = async (collectionId: string): Promise<Compilation> => {
+const loadExcerpts = async (collectionId: string): Promise<LoadedCompilation> => {
     const excerptsFile = format({ dir: OUTPUT_DIR, name: collectionId, ext: '.json' });
 
     if (await Bun.file(excerptsFile).exists()) {
-        return Bun.file(excerptsFile).json();
+        const localCompilation = (await Bun.file(excerptsFile).json()) as RawCompilation;
+        const collection = localCompilation.collection ?? (await loadCollection(collectionId));
+
+        if (collection.src.id === QURAN_LIBRARY_ID) {
+            return normalizeQuranCompilation(localCompilation, collection);
+        }
+
+        return {
+            data: {
+                ...localCompilation,
+                collection,
+                sourceDocument: localCompilation.sourceDocument as Compilation['sourceDocument'],
+                footnotes: localCompilation.footnotes ?? [],
+            } as Compilation,
+        };
     }
 
     console.log('Downloading excerpts from HuggingFace...');
-    const excerpts: Compilation = await downloadAndUnzipFile({
+    const excerpts = (await downloadAndUnzipFile({
         id: collectionId,
         dataset: HF_EXCERPT_STORE,
         revision: HF_EXCERPT_REVISION,
-    });
+    })) as RawCompilation;
 
     console.log('Loading collection metadata...');
-    excerpts.collection = await loadCollection(collectionId);
+    const collection = await loadCollection(collectionId);
+    excerpts.collection = collection;
+
+    if (collection.src.id === QURAN_LIBRARY_ID) {
+        const serialized = JSON.stringify(excerpts, null, 2);
+        console.log('Saving', excerptsFile, serialized.length, 'bytes');
+        await Bun.write(excerptsFile, serialized);
+        return normalizeQuranCompilation(excerpts, collection);
+    }
 
     console.log('Downloading asl from HuggingFace...');
-    excerpts.sourceDocument = await downloadAndUnzipFile(getDataSetPropsForCollection(excerpts.collection));
+    excerpts.sourceDocument = await downloadAndUnzipFile(getDataSetPropsForCollection(collection));
 
     const serialized = JSON.stringify(excerpts, null, 2);
     console.log('Saving', excerptsFile, serialized.length, 'bytes');
     await Bun.write(excerptsFile, serialized);
 
-    return excerpts;
+    return {
+        data: {
+            ...excerpts,
+            collection,
+            sourceDocument: excerpts.sourceDocument as Compilation['sourceDocument'],
+            footnotes: excerpts.footnotes ?? [],
+        } as Compilation,
+    };
 };
 
 const loadTranslators = async (): Promise<SDKTranslator[]> => {
@@ -406,15 +440,27 @@ const buildHeadingMarkers = (headings: Heading[]) => {
     return headingMarkers;
 };
 
-const buildSectionToExcerptsFromRanges = (headingsWithRanges: HeadingWithRange[], excerpts: Excerpt[]) => {
+const buildSectionToExcerptsFromRanges = (
+    headings: Heading[],
+    headingsWithRanges: HeadingWithRange[],
+    excerpts: Excerpt[],
+) => {
     const sectionToExcerpts: Record<string, string[]> = {};
+    const rangeByHeadingId = new Map(headingsWithRanges.map((heading) => [heading.id, heading]));
 
-    for (const heading of headingsWithRanges) {
-        if (!heading.indexRange) {
+    for (const heading of headings) {
+        const rangedHeading = rangeByHeadingId.get(heading.id);
+        if (!rangedHeading?.indexRange) {
+            sectionToExcerpts[heading.id] = [];
             continue;
         }
 
-        const { start, end } = heading.indexRange;
+        const { start, end } = rangedHeading.indexRange;
+        const firstExcerpt = excerpts[start];
+        if (start === 0 && end === 0 && firstExcerpt?.from !== heading.from) {
+            sectionToExcerpts[heading.id] = [];
+            continue;
+        }
         const slice = excerpts.slice(start, end + 1);
         sectionToExcerpts[heading.id] = slice.map((excerpt) => excerpt.id);
     }
@@ -454,6 +500,11 @@ const writeSectionChunks = async (
     let chunkCount = 0;
 
     for (const [sectionId, excerptIds] of Object.entries(sectionToExcerpts)) {
+        if (excerptIds.length === 0) {
+            sectionToChunks[sectionId] = [];
+            continue;
+        }
+
         const sectionExcerpts = excerptIds
             .map((excerptId) => excerptById.get(excerptId))
             .filter((e): e is Excerpt => Boolean(e))
@@ -492,7 +543,7 @@ const writeSectionChunks = async (
 // ============================================================================
 // Main Setup
 // ============================================================================
-
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: orchestration flow is linear but lengthy
 export const setup = async (...collectionIds: string[]) => {
     console.log('Starting setup\n');
 
@@ -509,6 +560,7 @@ export const setup = async (...collectionIds: string[]) => {
 
     const allTranslators = await loadTranslators();
     const collections: Collection[] = [];
+    const headingMarkersByCollection: Record<string, Map<string, Excerpt>> = {};
     let totalSections = 0;
     let totalExcerpts = 0;
     let totalChunks = 0;
@@ -524,17 +576,28 @@ export const setup = async (...collectionIds: string[]) => {
 
     for (const id of collectionIds) {
         console.log(`\n📚 Processing collection ${id}...`);
-        const data = await loadExcerpts(id);
+        const loaded = await loadExcerpts(id);
+        const data = loaded.data;
         collections.push(data.collection);
 
         backfillMissingTranslators(data.excerpts, 'excerpt');
         backfillMissingTranslators(data.headings, 'heading');
 
         // Compute heading ranges based on source type
-        let headingsWithRanges: HeadingWithRange[];
+        let headingsWithRanges: HeadingWithRange[] = [];
         let topLevelHeadingIds: string[] = [];
+        let sectionToExcerpts: Record<string, string[]> = {};
+        let excerptToSection: Record<string, string> = {};
+        let pageToHeading: Record<number, string> = {};
 
-        if ((data.sourceDocument as BookData)?.titles) {
+        if (data.collection.src.id === QURAN_LIBRARY_ID) {
+            console.log("  Type: Qur'an");
+            topLevelHeadingIds = data.headings.map((heading) => heading.id);
+            sectionToExcerpts = loaded.explicitSectionToExcerpts ?? {};
+            excerptToSection = loaded.explicitExcerptToSection ?? {};
+            pageToHeading = Object.fromEntries(data.headings.map((heading) => [heading.from, heading.id]));
+            console.log(`  ✓ ${Object.keys(sectionToExcerpts).length} headings with explicit excerpt mapping`);
+        } else if ((data.sourceDocument as BookData)?.titles) {
             console.log('  Type: Shamela book');
             const titleTree = mapTitlesToTableOfContents((data.sourceDocument as BookData).titles);
             headingsWithRanges = computeShamelaHeadingRanges(titleTree, data.headings, data.excerpts);
@@ -543,33 +606,40 @@ export const setup = async (...collectionIds: string[]) => {
             topLevelHeadingIds = data.headings
                 .filter((heading) => rootTitleIds.has(mapHeadingIdToShamelaTitleId(heading)))
                 .map((heading) => heading.id);
+
+            const partialIndexes = generateIndexes(data, id);
+            sectionToExcerpts = buildSectionToExcerptsFromRanges(data.headings, headingsWithRanges, data.excerpts);
+            excerptToSection = partialIndexes.excerptToSection?.[id] ?? {};
+            pageToHeading = partialIndexes.pageToHeading?.[id] ?? {};
         } else {
             console.log('  Type: Web scraped');
             headingsWithRanges = computeWebHeadingRanges(data.headings, data.excerpts);
             topLevelHeadingIds = headingsWithRanges.filter((heading) => !heading.parent).map((heading) => heading.id);
+
+            const partialIndexes = generateIndexes(data, id);
+            sectionToExcerpts = buildSectionToExcerptsFromRanges(data.headings, headingsWithRanges, data.excerpts);
+            excerptToSection = partialIndexes.excerptToSection?.[id] ?? {};
+            pageToHeading = partialIndexes.pageToHeading?.[id] ?? {};
         }
 
         console.log(`  ✓ ${data.excerpts.length} excerpts`);
-        console.log(`  ✓ ${headingsWithRanges.length} headings with ranges`);
+        if (data.collection.src.id !== QURAN_LIBRARY_ID) {
+            console.log(`  ✓ ${headingsWithRanges.length} headings with ranges`);
+        }
         totalExcerpts += data.excerpts.length;
-        totalSections += headingsWithRanges.length;
-
-        // Generate lookup indexes for this collection
-        const partialIndexes = generateIndexes(data, id);
-        const rangeSectionToExcerpts = buildSectionToExcerptsFromRanges(headingsWithRanges, data.excerpts);
+        totalSections += data.headings.length;
 
         // Ensure heading IDs map to themselves (used for section title lookup)
-        const excerptToSection = partialIndexes.excerptToSection?.[id] ?? {};
         for (const heading of data.headings) {
             excerptToSection[heading.id] = heading.id;
         }
-        indexes.sectionToExcerpts[id] = rangeSectionToExcerpts;
+        indexes.sectionToExcerpts[id] = sectionToExcerpts;
         indexes.excerptToSection[id] = excerptToSection;
-        indexes.pageToHeading[id] = partialIndexes.pageToHeading?.[id] ?? {};
+        indexes.pageToHeading[id] = pageToHeading;
         indexes.collectionToSections[id] = topLevelHeadingIds;
 
-        const sectionToExcerpts = rangeSectionToExcerpts;
         const headingMarkers = buildHeadingMarkers(data.headings);
+        headingMarkersByCollection[id] = headingMarkers;
         const chunkResult = await writeSectionChunks(id, data, sectionToExcerpts, headingMarkers);
         indexes.sectionToChunks[id] = chunkResult.sectionToChunks;
         indexes.excerptToChunk[id] = chunkResult.excerptToChunk;
@@ -599,6 +669,7 @@ export const setup = async (...collectionIds: string[]) => {
         indexes,
         chunksDir: CONTENT_CHUNKS_DIR,
         generatedAt,
+        headingMarkersByCollection,
     });
     await writeRuntimeArtifacts(runtimeArtifacts, {
         collectionsFile: collectionsPath,
