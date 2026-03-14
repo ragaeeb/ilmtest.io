@@ -192,7 +192,13 @@ export const runPublishGuided = async () => {
         }
 
         console.log('\nNext step');
-        console.log('Run `bun run deploy:preview` to test the Worker against the preview dataset.');
+        if (promotePreview) {
+            console.log('Run `bun run deploy:preview` to test the Worker against the preview dataset.');
+        } else {
+            console.log(
+                `Preview was not promoted. Run \`bun run promote-dataset -- --channel preview --dataset-version ${datasetVersion}\` before deploying preview.`,
+            );
+        }
     } finally {
         rl.close();
     }

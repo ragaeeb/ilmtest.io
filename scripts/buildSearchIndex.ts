@@ -241,16 +241,21 @@ const yieldSectionExcerpts = async function* (
     collection: Collection,
     sectionId: string,
 ): AsyncGenerator<ExcerptWithContext> {
-    // Load all chunks for this section to resolve heading title
-    const chunks: ChunkPayload[] = [];
+    let sectionTitle = `Section ${sectionId}`;
+
+    // First pass: resolve the section title without keeping all chunks in memory.
     for (const chunkKey of chunkKeys) {
-        chunks.push(await readChunkFromDisk(chunksDir, chunkKey));
+        const chunk: ChunkPayload = await readChunkFromDisk(chunksDir, chunkKey);
+        const heading = chunk.excerpts.find((excerpt) => excerpt.id === sectionId);
+        if (heading) {
+            sectionTitle = resolveSectionTitle([chunk], sectionId);
+            break;
+        }
     }
 
-    const sectionTitle = resolveSectionTitle(chunks, sectionId);
-
-    // Yield each non-heading excerpt
-    for (const chunk of chunks) {
+    // Second pass: yield each non-heading excerpt without accumulating chunks.
+    for (const chunkKey of chunkKeys) {
+        const chunk: ChunkPayload = await readChunkFromDisk(chunksDir, chunkKey);
         for (const excerpt of chunk.excerpts) {
             // Skip the heading marker itself — it's not user-facing content
             if (excerpt.id === sectionId) {
@@ -375,39 +380,41 @@ export const buildSearchIndex = async (
         throw new Error('Failed to create Pagefind index');
     }
 
-    const stats: SearchIndexStats = {
-        totalRecords: 0,
-        totalExcerpts: 0,
-        totalCollections: data.collections.length,
-        byCollection: {},
-        durationMs: 0,
-    };
+    try {
+        const stats: SearchIndexStats = {
+            totalRecords: 0,
+            totalExcerpts: 0,
+            totalCollections: data.collections.length,
+            byCollection: {},
+            durationMs: 0,
+        };
 
-    const { recordCount, byCollection } = await indexCorpusRecords(index, data, resolvedOptions);
-    stats.byCollection = byCollection;
+        const { recordCount, byCollection } = await indexCorpusRecords(index, data, resolvedOptions);
+        stats.byCollection = byCollection;
 
-    stats.totalRecords = recordCount;
-    stats.totalExcerpts = recordCount;
+        stats.totalRecords = recordCount;
+        stats.totalExcerpts = recordCount;
 
-    console.log(`   ✓ Indexed ${recordCount} excerpt records`);
+        console.log(`   ✓ Indexed ${recordCount} excerpt records`);
 
-    // Write the index to disk
-    await mkdir(outputPath, { recursive: true });
-    const { errors: writeErrors } = await index.writeFiles({
-        outputPath,
-    });
+        // Write the index to disk
+        await mkdir(outputPath, { recursive: true });
+        const { errors: writeErrors } = await index.writeFiles({
+            outputPath,
+        });
 
-    if (writeErrors && writeErrors.length > 0) {
-        throw new Error(`Failed to write search index: ${writeErrors.join(', ')}`);
+        if (writeErrors && writeErrors.length > 0) {
+            throw new Error(`Failed to write search index: ${writeErrors.join(', ')}`);
+        }
+
+        stats.durationMs = Date.now() - startedAt;
+        console.log(`   ✓ Search index written to ${outputPath}`);
+        console.log(`   ✓ Build completed in ${(stats.durationMs / 1000).toFixed(1)}s`);
+
+        return stats;
+    } finally {
+        await pagefind.close();
     }
-
-    await pagefind.close();
-
-    stats.durationMs = Date.now() - startedAt;
-    console.log(`   ✓ Search index written to ${outputPath}`);
-    console.log(`   ✓ Build completed in ${(stats.durationMs / 1000).toFixed(1)}s`);
-
-    return stats;
 };
 
 // ---------------------------------------------------------------------------

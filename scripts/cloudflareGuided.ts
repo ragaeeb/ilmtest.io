@@ -2,6 +2,7 @@ import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
 import { createInterface } from 'node:readline/promises';
+import { applyEdits, findNodeAtLocation, modify, parse, parseTree } from 'jsonc-parser';
 
 const DEFAULT_R2_BUCKET_NAME = 'ilmtest-datasets';
 const WRANGLER_CONFIG_PATH = 'wrangler.jsonc';
@@ -217,28 +218,50 @@ export const writeEnvFile = async (filePath: string, updates: EnvMap) => {
 };
 
 export const updateWranglerBucketBindings = async (filePath: string, bucketName: string) => {
-    const parsed = JSON.parse(await readFile(filePath, 'utf8')) as WranglerConfig;
-    const updateEntries = (entries?: Array<Record<string, unknown>>) => {
-        if (!entries) {
-            return;
-        }
+    const raw = await readFile(filePath, 'utf8');
+    const tree = parseTree(raw);
+    if (!tree) {
+        throw new Error(`Failed to parse wrangler config: ${filePath}`);
+    }
 
-        for (const entry of entries) {
+    const parsed = parse(raw) as WranglerConfig;
+    const edits: import('jsonc-parser').Edit[] = [];
+
+    const updateEntries = (entries: Array<Record<string, unknown>>, pathPrefix: (string | number)[]) => {
+        for (const [index, entry] of entries.entries()) {
             if (entry.binding === 'EXCERPT_BUCKET') {
-                entry.bucket_name = bucketName;
-                entry.preview_bucket_name = bucketName;
+                edits.push(
+                    ...modify(raw, [...pathPrefix, index, 'bucket_name'], bucketName, {
+                        formattingOptions: { insertSpaces: true, tabSize: 4 },
+                    }),
+                    ...modify(raw, [...pathPrefix, index, 'preview_bucket_name'], bucketName, {
+                        formattingOptions: { insertSpaces: true, tabSize: 4 },
+                    }),
+                );
             }
         }
     };
 
-    updateEntries(parsed.r2_buckets);
-    if (parsed.env) {
-        for (const envConfig of Object.values(parsed.env)) {
-            updateEntries(envConfig.r2_buckets);
+    if (parsed.r2_buckets && findNodeAtLocation(tree, ['r2_buckets'])) {
+        updateEntries(parsed.r2_buckets, ['r2_buckets']);
+    }
+
+    if (parsed.env && findNodeAtLocation(tree, ['env'])) {
+        for (const [envName, envConfig] of Object.entries(parsed.env)) {
+            if (envConfig.r2_buckets && findNodeAtLocation(tree, ['env', envName, 'r2_buckets'])) {
+                updateEntries(envConfig.r2_buckets, ['env', envName, 'r2_buckets']);
+            }
         }
     }
 
-    await writeFile(filePath, `${JSON.stringify(parsed, null, 4)}\n`, 'utf8');
+    const nextText =
+        edits.length > 0
+            ? applyEdits(
+                  raw,
+                  edits.sort((a, b) => a.offset - b.offset),
+              )
+            : raw;
+    await writeFile(filePath, nextText.endsWith('\n') ? nextText : `${nextText}\n`, 'utf8');
 };
 
 class CloudflareLogger {

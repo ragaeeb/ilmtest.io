@@ -10,8 +10,11 @@ interface Props {
 
 const { collection, slug } = Astro.props;
 
-const authorNames = collection.authors.map((a) => a.name).join(', ');
-const hasAuthors = authorNames.trim().length > 0;
+const authorNames = collection.authors
+    .map((author) => author.name?.trim())
+    .filter(Boolean)
+    .join(', ');
+const hasAuthors = authorNames.length > 0;
 ---
 
 <Card 

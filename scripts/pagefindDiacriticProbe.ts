@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import * as pagefind from 'pagefind';
 import { chromium } from 'playwright';
 
@@ -82,6 +82,21 @@ const arabicExpected = new Map<string, string[]>([
     ['الْحَمْدُ', ['/ar/diacritics-hamd']],
 ]);
 
+const CONTENT_TYPES: Record<string, string> = {
+    html: 'text/html',
+    js: 'application/javascript',
+    css: 'text/css',
+    json: 'application/json',
+    pf_meta: 'application/json',
+    wasm: 'application/wasm',
+    svg: 'image/svg+xml',
+};
+
+const resolveContentType = (filePath: string) => {
+    const ext = filePath.split('.').pop()?.toLowerCase();
+    return ext ? CONTENT_TYPES[ext] : undefined;
+};
+
 const normalize = (values: string[]) => [...values].sort();
 
 const expectSameMembers = (label: string, actual: string[], expected: string[]) => {
@@ -95,58 +110,49 @@ const expectSameMembers = (label: string, actual: string[], expected: string[]) 
 const createIndex = async (outputPath: string) => {
     const { index, errors } = await pagefind.createIndex();
 
-    if (!index || (errors && errors.length > 0)) {
-        throw new Error(`Pagefind index creation failed: ${errors?.join(', ') ?? 'unknown error'}`);
-    }
-
-    for (const record of records) {
-        const { errors: addErrors } = await index.addCustomRecord({
-            url: record.url,
-            content: record.content,
-            language: record.language,
-        });
-
-        if (addErrors && addErrors.length > 0) {
-            throw new Error(`Failed to add record ${record.id}: ${addErrors.join(', ')}`);
+    try {
+        if (!index || (errors && errors.length > 0)) {
+            throw new Error(`Pagefind index creation failed: ${errors?.join(', ') ?? 'unknown error'}`);
         }
+
+        for (const record of records) {
+            const { errors: addErrors } = await index.addCustomRecord({
+                url: record.url,
+                content: record.content,
+                language: record.language,
+            });
+
+            if (addErrors && addErrors.length > 0) {
+                throw new Error(`Failed to add record ${record.id}: ${addErrors.join(', ')}`);
+            }
+        }
+
+        await mkdir(outputPath, { recursive: true });
+
+        const { errors: writeErrors } = await index.writeFiles({ outputPath });
+        if (writeErrors && writeErrors.length > 0) {
+            throw new Error(`Failed to write pagefind index: ${writeErrors.join(', ')}`);
+        }
+    } finally {
+        await pagefind.close();
     }
-
-    await mkdir(outputPath, { recursive: true });
-
-    const { errors: writeErrors } = await index.writeFiles({ outputPath });
-    if (writeErrors && writeErrors.length > 0) {
-        throw new Error(`Failed to write pagefind index: ${writeErrors.join(', ')}`);
-    }
-
-    await pagefind.close();
 };
 
 const serveStatic = (rootDir: string) => {
+    const root = resolve(rootDir);
     return Bun.serve({
         port: 0,
         async fetch(request) {
             const url = new URL(request.url);
             const relativePath = decodeURIComponent(url.pathname).replace(/^\/+/, '') || 'en.html';
-            const filePath = join(rootDir, relativePath);
+            const filePath = resolve(root, relativePath);
+            if (filePath !== root && !filePath.startsWith(`${root}${sep}`)) {
+                return new Response('Not found', { status: 404 });
+            }
             const file = Bun.file(filePath);
 
             if (await file.exists()) {
-                const ext = filePath.split('.').pop()?.toLowerCase();
-                const contentType =
-                    ext === 'html'
-                        ? 'text/html'
-                        : ext === 'js'
-                          ? 'application/javascript'
-                          : ext === 'css'
-                            ? 'text/css'
-                            : ext === 'json' || ext === 'pf_meta'
-                              ? 'application/json'
-                              : ext === 'wasm'
-                                ? 'application/wasm'
-                                : ext === 'svg'
-                                  ? 'image/svg+xml'
-                                  : undefined;
-
+                const contentType = resolveContentType(filePath);
                 const headers = contentType ? new Headers({ 'Content-Type': contentType }) : undefined;
                 return new Response(file, { headers });
             }
@@ -176,9 +182,9 @@ const writeProbeHtml = async (rootDir: string, lang: 'en' | 'ar') => {
 
 const runQueries = async (baseUrl: string, pageLang: 'en' | 'ar', queryList: string[]): Promise<ProbeResult> => {
     const browser = await chromium.launch();
-    const page = await browser.newPage();
 
     try {
+        const page = await browser.newPage();
         page.on('console', (message) => {
             console.log(`[browser:${message.type()}][${pageLang}] ${message.text()}`);
         });
@@ -191,6 +197,7 @@ const runQueries = async (baseUrl: string, pageLang: 'en' | 'ar', queryList: str
         await page.waitForFunction(() => Boolean(window.__pagefind), undefined, { timeout: 30_000 });
 
         return await page.evaluate(
+            // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: runs in browser context
             async ({ pageLang, queryList }) => {
                 const instance = window.__pagefind;
                 if (!instance) {

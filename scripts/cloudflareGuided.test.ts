@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parse } from 'jsonc-parser';
 import { updateWranglerBucketBindings, writeEnvFile } from './cloudflareGuided';
 
 const tempRoots: string[] = [];
@@ -42,32 +43,29 @@ describe('cloudflareGuided helpers', () => {
         const wranglerPath = join(tempRoot, 'wrangler.jsonc');
         await writeFile(
             wranglerPath,
-            JSON.stringify(
-                {
-                    r2_buckets: [
-                        { binding: 'EXCERPT_BUCKET', bucket_name: 'old-bucket', preview_bucket_name: 'old-bucket' },
-                    ],
-                    env: {
-                        preview: {
-                            r2_buckets: [
-                                {
-                                    binding: 'EXCERPT_BUCKET',
-                                    bucket_name: 'old-bucket',
-                                    preview_bucket_name: 'old-bucket',
-                                },
-                            ],
-                        },
-                    },
-                },
-                null,
-                4,
-            ),
+            `{
+                // top-level binding should be updated too
+                "r2_buckets": [
+                    { "binding": "EXCERPT_BUCKET", "bucket_name": "old-bucket", "preview_bucket_name": "old-bucket" }
+                ],
+                "env": {
+                    "preview": {
+                        "r2_buckets": [
+                            {
+                                "binding": "EXCERPT_BUCKET",
+                                "bucket_name": "old-bucket",
+                                "preview_bucket_name": "old-bucket"
+                            }
+                        ]
+                    }
+                }
+            }`,
             'utf8',
         );
 
         await updateWranglerBucketBindings(wranglerPath, 'ilmtest-datasets');
 
-        const result = JSON.parse(await readFile(wranglerPath, 'utf8')) as {
+        const result = parse(await readFile(wranglerPath, 'utf8')) as {
             r2_buckets: Array<{ bucket_name: string; preview_bucket_name: string }>;
             env: { preview: { r2_buckets: Array<{ bucket_name: string; preview_bucket_name: string }> } };
         };

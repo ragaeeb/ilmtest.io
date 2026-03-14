@@ -30,6 +30,7 @@ const getFlagValue = (args: string[], flag: string) => {
     return args[index + 1];
 };
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: route collection includes guarded branching
 const collectSmokeRoutes = async (baseUrl: string) => {
     const { collections, indexes, paths } = await loadLocalRuntimeData();
     const channel = resolveRuntimeChannel({ requestUrl: baseUrl });
@@ -97,8 +98,9 @@ const collectSmokeRoutes = async (baseUrl: string) => {
             continue;
         }
 
-        const excerptWords = excerpt.text?.split(/\s+/).filter(Boolean) ?? [];
-        const excerptPreview = excerptWords.length > 0 ? excerptWords.slice(0, 8).join(' ') : (excerpt.nass ?? '');
+        const excerptSource = excerpt.text?.trim() || excerpt.nass?.trim() || '';
+        const excerptWords = excerptSource.split(/\s+/).filter(Boolean);
+        const excerptPreview = excerptWords.slice(0, 8).join(' ');
         const excerptLabel = excerptWords.length > 8 ? `${excerptPreview}…` : excerptPreview;
 
         routes.push(

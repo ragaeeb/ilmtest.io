@@ -60,6 +60,17 @@ const localCollectionShardModules = import.meta.env.DEV
           import: 'default',
       }) as LazyModuleMap<unknown>)
     : {};
+const localCollectionShardLoaders = import.meta.env.DEV
+    ? new Map(
+          Object.entries(localCollectionShardModules)
+              .map(([path, loader]) => {
+                  const fileName = path.split('/').pop() ?? '';
+                  const collectionId = fileName.replace(/\.json$/u, '');
+                  return collectionId ? [collectionId, loader] : null;
+              })
+              .filter((entry): entry is [string, () => Promise<unknown>] => Boolean(entry)),
+      )
+    : new Map<string, () => Promise<unknown>>();
 
 const resolveModuleFilePath = (relativePath: string) => {
     if (relativePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(relativePath)) {
@@ -74,8 +85,23 @@ const resolveModuleFilePath = (relativePath: string) => {
     }
 };
 
-const LOCAL_COLLECTIONS_PATH = resolveModuleFilePath('../data/collections.json');
-const LOCAL_TRANSLATORS_PATH = resolveModuleFilePath('../data/translators.json');
+const RUNTIME_ROOT =
+    typeof process !== 'undefined' && typeof process.cwd === 'function' ? process.cwd() : resolveModuleFilePath('.');
+const resolveRuntimePath = (relativePath: string) => {
+    if (relativePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(relativePath)) {
+        return relativePath;
+    }
+    const base = RUNTIME_ROOT.endsWith('/') ? RUNTIME_ROOT : `${RUNTIME_ROOT}/`;
+    try {
+        const pathname = decodeURIComponent(new URL(relativePath, `file://${base}`).pathname);
+        return pathname.replace(/^\/([A-Za-z]:\/)/, '$1');
+    } catch {
+        return `${base}${relativePath}`;
+    }
+};
+
+const LOCAL_COLLECTIONS_PATH = resolveRuntimePath('src/data/collections.json');
+const LOCAL_TRANSLATORS_PATH = resolveRuntimePath('src/data/translators.json');
 
 const readLocalJson = async <T>(filePath: string) => {
     if (typeof Bun === 'undefined') {
@@ -102,16 +128,16 @@ const loadBundledCollections = () => assertRuntimeCollectionSummaryArray(getFirs
 const loadBundledTranslators = () => getFirstModule(translatorModules, []) as Array<{ id: number; name: string }>;
 
 const loadBundledCollectionShard = async (collectionId: string) => {
-    const match = Object.entries(localCollectionShardModules).find(([path]) => path.endsWith(`/${collectionId}.json`));
-    if (!match) {
+    const loader = localCollectionShardLoaders.get(collectionId);
+    if (!loader) {
         return null;
     }
 
-    return assertCollectionRuntimeShard(await match[1]());
+    return assertCollectionRuntimeShard(await loader());
 };
 
 const getLocalCollectionShardPath = (collectionId: string) =>
-    resolveModuleFilePath(`../../tmp/runtime-artifacts/collections/${collectionId}.json`);
+    resolveRuntimePath(`tmp/runtime-artifacts/collections/${collectionId}.json`);
 
 const loadCollectionsArtifactFromContext = async (context: RuntimeContext) => {
     const startedAt = Date.now();
@@ -248,9 +274,23 @@ const loadCollectionShardFromContext = async (collectionId: string, context: Run
                 }
                 shard = localShard;
             } else {
-                shard = assertCollectionRuntimeShard(
-                    await readLocalJson<CollectionRuntimeShard>(getLocalCollectionShardPath(collectionId)),
-                );
+                const artifactKey = getLocalCollectionShardPath(collectionId);
+                try {
+                    shard = assertCollectionRuntimeShard(await readLocalJson<CollectionRuntimeShard>(artifactKey));
+                } catch (error) {
+                    const runtimeError = new RuntimeDataError(
+                        'local-artifact-missing',
+                        `Missing local runtime shard for collection ${collectionId}`,
+                        {
+                            datasetVersion: context.datasetVersion,
+                            manifestKey: context.manifestKey,
+                            artifactKey,
+                            collectionId,
+                        },
+                    );
+                    (runtimeError as Error & { cause?: unknown }).cause = error;
+                    throw runtimeError;
+                }
             }
         } else {
             shard = await runtimeCache.getOrLoad(cacheKey, ARTIFACT_CACHE_TTL_MS, async () => {

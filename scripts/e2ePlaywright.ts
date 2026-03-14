@@ -1,6 +1,5 @@
 import { createServer } from 'node:net';
-import { join } from 'node:path';
-import { chromium } from 'playwright';
+import { type Browser, chromium, type Page } from 'playwright';
 import { startAstroDevServer } from './devServerHarness';
 
 const FIXTURE_COLLECTION_SLUG = 'sample-shamela-text';
@@ -47,23 +46,10 @@ const getAvailablePort = async () =>
     });
 
 const ensureFixtureData = async () => {
-    const hasCollections = await Bun.file(join('src', 'data', 'collections.json')).exists();
-    const shouldGenerate = process.env.E2E_USE_FIXTURE === '1' || !hasCollections;
-    if (!shouldGenerate) {
-        return;
-    }
-
     await runCommand(['bun', 'scripts/setupFixture.ts', 'tiny']);
 };
 
 const ensureSearchIndex = async () => {
-    const pagefindPath = join('public', 'pagefind', 'pagefind.js');
-    const hasPagefind = await Bun.file(pagefindPath).exists();
-    const forceBuild = process.env.E2E_USE_FIXTURE === '1';
-    if (hasPagefind && !forceBuild) {
-        return;
-    }
-
     await runCommand(['bun', 'scripts/buildSearchIndex.ts', '--output', 'public/pagefind']);
 };
 
@@ -72,12 +58,19 @@ const runE2E = async () => {
     await ensureFixtureData();
     await ensureSearchIndex();
 
-    const port = await getAvailablePort();
-    const server = await startAstroDevServer(port);
-    const browser = await chromium.launch({ headless: process.env.E2E_HEADLESS === '1' });
-    const page = await browser.newPage();
+    let server: Awaited<ReturnType<typeof startAstroDevServer>> | undefined;
+    let browser: Browser | undefined;
+    let page: Page | undefined;
 
     try {
+        const port = await getAvailablePort();
+        server = await startAstroDevServer(port);
+        browser = await chromium.launch({ headless: process.env.E2E_HEADLESS === '1' });
+        page = await browser.newPage();
+        if (!server || !page) {
+            throw new Error('Failed to initialize E2E resources');
+        }
+
         await page.goto(server.baseUrl, { waitUntil: 'networkidle' });
         await page.locator('header').getByRole('link', { name: 'Browse', exact: true }).waitFor();
 
@@ -157,8 +150,12 @@ const runE2E = async () => {
             ),
         );
     } finally {
-        await browser.close();
-        await server.dispose();
+        if (browser) {
+            await browser.close();
+        }
+        if (server) {
+            await server.dispose();
+        }
     }
 };
 

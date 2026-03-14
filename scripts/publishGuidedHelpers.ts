@@ -5,7 +5,7 @@ const MAX_DATASET_VERSION_ATTEMPTS = 100;
 const formatLocalDatePart = (value: number) => String(value).padStart(2, '0');
 
 export const formatLocalDate = (now = new Date()) =>
-    `${now.getFullYear()}-${formatLocalDatePart(now.getMonth() + 1)}-${formatLocalDatePart(now.getDate())}`;
+    `${now.getUTCFullYear()}-${formatLocalDatePart(now.getUTCMonth() + 1)}-${formatLocalDatePart(now.getUTCDate())}`;
 
 export const parseCollectionIds = (raw: string) => {
     const ids = raw

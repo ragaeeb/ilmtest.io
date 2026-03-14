@@ -322,6 +322,7 @@ const printRemoteState = (label: string, state: RemoteState | null) => {
     console.log(`${label}: ${state.datasetVersion}`);
 };
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: orchestrates guided release workflow
 export const runReleaseGuided = async () => {
     if (!input.isTTY || !output.isTTY) {
         throw new Error('release-guided requires an interactive terminal.');
@@ -335,6 +336,8 @@ export const runReleaseGuided = async () => {
     const logger = new ReleaseLogger(logDir);
 
     await logger.init();
+    let promotedPreview = false;
+    let promotedProd = false;
 
     try {
         console.log('Guided release');
@@ -356,6 +359,7 @@ export const runReleaseGuided = async () => {
         console.log(`Continue to production: ${proceedToProd ? 'yes' : 'no'}`);
         if (!(await promptYesNo(rl, 'Continue?', true))) {
             await recordSkippedStep(logger, 'release', 'user aborted before execution');
+            await logger.finish();
             console.log(`Aborted. Logs: ${logDir}`);
             return;
         }
@@ -379,6 +383,7 @@ export const runReleaseGuided = async () => {
                     }),
                 'promote-preview-pointer.json',
             );
+            promotedPreview = true;
         } else {
             await recordSkippedStep(
                 logger,
@@ -457,6 +462,7 @@ export const runReleaseGuided = async () => {
                     }),
                 'promote-prod-pointer.json',
             );
+            promotedProd = true;
         } else {
             await recordSkippedStep(logger, 'promote-prod-pointer', 'prod already points at the requested dataset');
         }
@@ -501,6 +507,40 @@ export const runReleaseGuided = async () => {
         await logger.finish();
         console.log(`Production release complete. Logs: ${logDir}`);
     } catch (error) {
+        if (promotedProd && currentProd?.datasetVersion) {
+            try {
+                await promoteDataset(store, {
+                    channel: 'prod',
+                    datasetVersion: currentProd.datasetVersion,
+                    notes: 'rollback after failed release',
+                });
+                await logger.appendEvent(`Rolled back prod pointer to ${currentProd.datasetVersion}`);
+            } catch (rollbackError) {
+                await logger.appendEvent(
+                    `Failed to rollback prod pointer: ${
+                        rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
+                    }`,
+                );
+            }
+        }
+
+        if (promotedPreview && currentPreview?.datasetVersion) {
+            try {
+                await promoteDataset(store, {
+                    channel: 'preview',
+                    datasetVersion: currentPreview.datasetVersion,
+                    notes: 'rollback after failed release',
+                });
+                await logger.appendEvent(`Rolled back preview pointer to ${currentPreview.datasetVersion}`);
+            } catch (rollbackError) {
+                await logger.appendEvent(
+                    `Failed to rollback preview pointer: ${
+                        rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
+                    }`,
+                );
+            }
+        }
+
         await logger.fail(error);
         console.error(`Release failed. Logs: ${logDir}`);
         throw error;

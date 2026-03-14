@@ -1,10 +1,6 @@
 import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
-const DIST_DIR = join(process.cwd(), 'dist');
-const FUNCTION_DIR = join(DIST_DIR, 'functions');
-const WORKER_DIR = join(DIST_DIR, '_worker.js');
-
 const INDEX_SIGNATURES = [
     '"sectionToExcerpts"',
     '"excerptToSection"',
@@ -43,13 +39,17 @@ const readTextIfJs = async (filePath: string) => {
     return await Bun.file(filePath).text();
 };
 
-const main = async () => {
-    const distEntries = await readdir(DIST_DIR, { encoding: 'utf8', withFileTypes: true }).catch(() => null);
+export const checkBundle = async (rootDir = process.cwd()) => {
+    const distDir = join(rootDir, 'dist');
+    const functionDir = join(distDir, 'functions');
+    const workerDir = join(distDir, '_worker.js');
+
+    const distEntries = await readdir(distDir, { encoding: 'utf8', withFileTypes: true }).catch(() => null);
     if (!distEntries) {
         throw new Error('Missing dist output. Run `bun run build` before bundle checks.');
     }
 
-    const allFiles = [...(await scanPath(FUNCTION_DIR)), ...(await scanPath(WORKER_DIR))];
+    const allFiles = [...(await scanPath(functionDir)), ...(await scanPath(workerDir))];
 
     const offendingFiles: string[] = [];
     for (const filePath of allFiles) {
@@ -97,11 +97,13 @@ const main = async () => {
     );
 };
 
-try {
-    await main();
-} catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`${message}\n`);
-    process.stdout.write(`${message}\n`);
-    process.exit(1);
+if (import.meta.main) {
+    try {
+        await checkBundle();
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(message);
+        console.log(message);
+        process.exitCode = 1;
+    }
 }

@@ -329,6 +329,103 @@ export function SearchDialog() {
     const pagefindRef = useRef<PagefindAPI | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const queuedQueryRef = useRef<{
+        query: string;
+        collectionFilter: string | null;
+        sectionFilter: string | null;
+    } | null>(null);
+    const requestIdRef = useRef(0);
+    const initTokenRef = useRef(0);
+
+    const buildFilters = useCallback((collectionFilter: string | null, sectionFilter: string | null) => {
+        const filters: Record<string, string | string[]> = {};
+        if (collectionFilter) {
+            filters.collection = collectionFilter;
+        }
+        if (sectionFilter) {
+            filters.section = sectionFilter;
+        }
+        return Object.keys(filters).length > 0 ? filters : undefined;
+    }, []);
+
+    const loadSearchResults = useCallback(async (search: PagefindSearchResponse) => {
+        return await Promise.all(
+            search.results.slice(0, RESULTS_PER_PAGE).map(async (result) => {
+                const data = await result.data();
+                return { ...data, id: result.id };
+            }),
+        );
+    }, []);
+
+    const clearResults = useCallback(() => {
+        setState((prev) => ({
+            ...prev,
+            results: [],
+            resultCount: 0,
+            isLoading: false,
+        }));
+    }, []);
+
+    const performSearch = useCallback(
+        async (query: string, collectionFilter: string | null, sectionFilter: string | null) => {
+            const requestId = ++requestIdRef.current;
+            const pagefind = pagefindRef.current;
+
+            if (!pagefind) {
+                queuedQueryRef.current = { query, collectionFilter, sectionFilter };
+                return;
+            }
+
+            const trimmed = query.trim();
+            if (!trimmed) {
+                clearResults();
+                return;
+            }
+
+            setState((prev) => ({ ...prev, isLoading: true, error: null }));
+
+            try {
+                const filters = buildFilters(collectionFilter, sectionFilter);
+                const search = await pagefind.search(trimmed, { filters });
+                const loaded = await loadSearchResults(search);
+
+                if (requestId !== requestIdRef.current) {
+                    return;
+                }
+
+                setState((prev) => ({
+                    ...prev,
+                    results: loaded,
+                    resultCount: search.results.length,
+                    isLoading: false,
+                }));
+            } catch (error) {
+                if (requestId !== requestIdRef.current) {
+                    return;
+                }
+                console.error('[search] Query failed:', error);
+                setState((prev) => ({
+                    ...prev,
+                    isLoading: false,
+                    error: 'Search failed. Please try again.',
+                }));
+            }
+        },
+        [buildFilters, clearResults, loadSearchResults],
+    );
+
+    const scheduleSearch = useCallback(
+        (query: string, collectionFilter: string | null, sectionFilter: string | null) => {
+            if (debounceTimer.current) {
+                clearTimeout(debounceTimer.current);
+            }
+
+            debounceTimer.current = setTimeout(() => {
+                performSearch(query, collectionFilter, sectionFilter);
+            }, 200);
+        },
+        [performSearch],
+    );
 
     // Initialize Pagefind lazily on first open
     const initPagefind = useCallback(async () => {
@@ -337,6 +434,7 @@ export function SearchDialog() {
         }
 
         try {
+            const initToken = ++initTokenRef.current;
             // Use a dynamic template string to completely hide the module path from Vite/Rollup static analysis
             const scriptUrl = `${window.location.origin}/pagefind/pagefind.js`;
             const pf = (await import(
@@ -353,6 +451,13 @@ export function SearchDialog() {
                 },
             });
 
+            if (initToken !== initTokenRef.current) {
+                if (typeof pf.destroy === 'function') {
+                    await pf.destroy();
+                }
+                return;
+            }
+
             pagefindRef.current = pf;
 
             // Pre-load the filter index
@@ -363,6 +468,12 @@ export function SearchDialog() {
                 isInitialized: true,
                 availableFilters: filters,
             }));
+
+            const queued = queuedQueryRef.current;
+            if (queued) {
+                queuedQueryRef.current = null;
+                scheduleSearch(queued.query, queued.collectionFilter, queued.sectionFilter);
+            }
         } catch (error) {
             console.error('[search] Failed to initialize Pagefind:', error);
             setState((prev) => ({
@@ -370,7 +481,7 @@ export function SearchDialog() {
                 error: 'Search is not available. The search index may not have been built yet.',
             }));
         }
-    }, []);
+    }, [scheduleSearch]);
 
     // Open the dialog
     const open = useCallback(() => {
@@ -379,6 +490,14 @@ export function SearchDialog() {
 
     // Close the dialog
     const close = useCallback(() => {
+        if (debounceTimer.current) {
+            clearTimeout(debounceTimer.current);
+            debounceTimer.current = null;
+        }
+        queuedQueryRef.current = null;
+        pagefindRef.current = null;
+        requestIdRef.current += 1;
+        initTokenRef.current += 1;
         setIsOpen(false);
         setState((prev) => ({
             ...prev,
@@ -399,6 +518,19 @@ export function SearchDialog() {
             return () => clearTimeout(timer);
         }
     }, [isOpen, initPagefind]);
+
+    useEffect(() => {
+        return () => {
+            if (debounceTimer.current) {
+                clearTimeout(debounceTimer.current);
+                debounceTimer.current = null;
+            }
+            queuedQueryRef.current = null;
+            pagefindRef.current = null;
+            requestIdRef.current += 1;
+            initTokenRef.current += 1;
+        };
+    }, []);
 
     // Global keyboard shortcuts
     useEffect(() => {
@@ -433,79 +565,15 @@ export function SearchDialog() {
         };
     }, [isOpen]);
 
-    // Search handler (debounced)
-    const performSearch = useCallback(
-        async (query: string, collectionFilter: string | null, sectionFilter: string | null) => {
-            if (!pagefindRef.current) {
-                return;
-            }
-
-            if (!query.trim()) {
-                setState((prev) => ({
-                    ...prev,
-                    results: [],
-                    resultCount: 0,
-                    isLoading: false,
-                }));
-                return;
-            }
-
-            setState((prev) => ({ ...prev, isLoading: true, error: null }));
-
-            try {
-                const filters: Record<string, string | string[]> = {};
-                if (collectionFilter) {
-                    filters.collection = collectionFilter;
-                }
-                if (sectionFilter) {
-                    filters.section = sectionFilter;
-                }
-
-                const search = await pagefindRef.current.search(query, {
-                    filters: Object.keys(filters).length > 0 ? filters : undefined,
-                });
-
-                // Load the first page of results
-                const loaded = await Promise.all(
-                    search.results.slice(0, RESULTS_PER_PAGE).map(async (result) => {
-                        const data = await result.data();
-                        return { ...data, id: result.id };
-                    }),
-                );
-
-                setState((prev) => ({
-                    ...prev,
-                    results: loaded,
-                    resultCount: search.results.length,
-                    isLoading: false,
-                }));
-            } catch (error) {
-                console.error('[search] Query failed:', error);
-                setState((prev) => ({
-                    ...prev,
-                    isLoading: false,
-                    error: 'Search failed. Please try again.',
-                }));
-            }
-        },
-        [],
-    );
-
     // Input change handler with debounce
     const onQueryChange = useCallback(
         (e: React.ChangeEvent<HTMLInputElement>) => {
             const query = e.target.value;
             setState((prev) => ({ ...prev, query }));
 
-            if (debounceTimer.current) {
-                clearTimeout(debounceTimer.current);
-            }
-
-            debounceTimer.current = setTimeout(() => {
-                performSearch(query, state.activeCollectionFilter, state.activeSectionFilter);
-            }, 200);
+            scheduleSearch(query, state.activeCollectionFilter, state.activeSectionFilter);
         },
-        [performSearch, state.activeCollectionFilter, state.activeSectionFilter],
+        [scheduleSearch, state.activeCollectionFilter, state.activeSectionFilter],
     );
 
     // Collection filter toggle
@@ -519,10 +587,10 @@ export function SearchDialog() {
             }));
 
             if (state.query.trim()) {
-                performSearch(state.query, newFilter, null);
+                scheduleSearch(state.query, newFilter, null);
             }
         },
-        [state.activeCollectionFilter, state.query, performSearch],
+        [state.activeCollectionFilter, state.query, scheduleSearch],
     );
 
     const onSectionFilterChange = useCallback(
@@ -531,10 +599,10 @@ export function SearchDialog() {
             setState((prev) => ({ ...prev, activeSectionFilter: nextFilter }));
 
             if (state.query.trim()) {
-                performSearch(state.query, state.activeCollectionFilter, nextFilter);
+                scheduleSearch(state.query, state.activeCollectionFilter, nextFilter);
             }
         },
-        [performSearch, state.activeCollectionFilter, state.query],
+        [scheduleSearch, state.activeCollectionFilter, state.query],
     );
 
     // Click on overlay to close
@@ -637,6 +705,7 @@ export function SearchDialog() {
                         <input
                             ref={inputRef}
                             type="search"
+                            aria-label="Search excerpts"
                             placeholder="Search excerpts…"
                             value={state.query}
                             onChange={onQueryChange}
@@ -735,6 +804,16 @@ export function SearchDialog() {
                                     href={result.url}
                                     style={styles.resultItem}
                                     onClick={(e) => {
+                                        if (
+                                            e.defaultPrevented ||
+                                            e.button !== 0 ||
+                                            e.metaKey ||
+                                            e.ctrlKey ||
+                                            e.shiftKey ||
+                                            e.altKey
+                                        ) {
+                                            return;
+                                        }
                                         e.preventDefault();
                                         navigateToResult(result.url);
                                     }}

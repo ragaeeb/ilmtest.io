@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { basename, dirname, join, relative } from 'node:path';
 import {
@@ -133,9 +133,15 @@ const readJsonFile = async <T>(filePath: string) => {
 
 const writeJsonFileAtomic = async (filePath: string, value: unknown) => {
     const dir = dirname(filePath);
-    const tempPath = join(dir, `.tmp-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
-    await Bun.write(tempPath, JSON.stringify(value, null, 2));
-    await rename(tempPath, filePath);
+    const tempPath = join(dir, `.tmp-${Date.now()}-${randomUUID()}.json`);
+    try {
+        await Bun.write(tempPath, JSON.stringify(value, null, 2));
+        await rename(tempPath, filePath);
+    } finally {
+        if (await Bun.file(tempPath).exists()) {
+            await rm(tempPath, { force: true });
+        }
+    }
 };
 
 const readJsonObject = async <T>(store: ObjectStore, key: string) => {

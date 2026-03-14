@@ -17,6 +17,13 @@ export const getExcerptLocator = (excerpt: Excerpt): ExcerptLocator => {
         };
     }
 
+    if (isRecord(meta) && 'vp' in meta && typeof meta.vp === 'number') {
+        return {
+            label: 'Page',
+            value: meta.vp,
+        };
+    }
+
     return {
         label: 'Page',
         value: excerpt.from,

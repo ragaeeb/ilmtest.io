@@ -18,7 +18,7 @@ export const getStore = () => {
 
     if (!bucketName || !endpoint || !accessKeyId || !secretAccessKey) {
         throw new Error(
-            'Missing R2 configuration. Set DATASET_STORE_ROOT for local testing or run `bun run cloudflare-guided`. Manual configuration requires R2_BUCKET (defaults to ilmtest-datasets), R2_ENDPOINT/R2_ACCOUNT_ID/CF_ACCOUNT_ID, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY.',
+            'Missing R2 configuration. Set DATASET_STORE_ROOT for local testing or run `bun run cloudflare-guided`. Manual configuration requires R2_ENDPOINT/R2_ACCOUNT_ID/CF_ACCOUNT_ID, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY. `R2_BUCKET` is optional and defaults to `ilmtest-datasets`.',
         );
     }
 

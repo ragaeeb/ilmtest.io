@@ -456,6 +456,11 @@ const buildSectionToExcerptsFromRanges = (
         }
 
         const { start, end } = rangedHeading.indexRange;
+        const firstExcerpt = excerpts[start];
+        if (start === 0 && end === 0 && firstExcerpt?.from !== heading.from) {
+            sectionToExcerpts[heading.id] = [];
+            continue;
+        }
         const slice = excerpts.slice(start, end + 1);
         sectionToExcerpts[heading.id] = slice.map((excerpt) => excerpt.id);
     }

@@ -41,8 +41,10 @@ describe('prepareWorkerDeploy', () => {
         expect(previewConfig.vars?.ILMTEST_RUNTIME_CHANNEL).toBe('preview');
         expect(previewConfig.vars?.PUBLIC_ROBOTS_POLICY).toBe('disallow');
         expect(previewConfig.vars?.PUBLIC_AI_CRAWL_POLICY).toBe('disallow');
+        expect(previewConfig.r2_buckets).toEqual([{ binding: 'EXCERPT_BUCKET', bucket_name: 'ilmtest-datasets' }]);
         expect(prodConfig.name).toBe('ilmtest-io');
         expect(prodConfig.vars?.ILMTEST_RUNTIME_CHANNEL).toBe('prod');
         expect(prodConfig.vars?.PUBLIC_ROBOTS_POLICY).toBe('allow');
+        expect(prodConfig.r2_buckets).toEqual([{ binding: 'EXCERPT_BUCKET', bucket_name: 'ilmtest-datasets' }]);
     });
 });

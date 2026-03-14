@@ -43,13 +43,21 @@ type Page = {
  */
 const nowInSeconds = () => mapUnixTimestampToSeconds(Date.now());
 
-let db = new Database('/Users/rhaq/workspace/ilmtest/admin-api/api/db/quran_english.db');
+if (!process.argv[2]) {
+    throw new Error("The Qur'an Arabic database was not provided.");
+}
+
+if (!process.argv[3]) {
+    throw new Error("The Qur'an translation database was not provided.");
+}
+
+let db = new Database(process.argv[2]);
 const chapters = db.query('SELECT * FROM chapters').all() as Chapter[];
 const verses = db.query('SELECT * FROM verses').all() as Verse[];
 
 db.close();
 
-db = new Database('/Users/rhaq/workspace/ilmtest/admin-api/api/db/quran_arabic.db');
+db = new Database(process.argv[3]);
 const surahs = db.query('SELECT * FROM surahs').all() as Surah[];
 const ayahs = db.query('SELECT * FROM ayahs').all() as Ayat[];
 const pages = db.query('SELECT * FROM ayahs').all() as Page[];

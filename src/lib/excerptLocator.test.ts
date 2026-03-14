@@ -26,7 +26,7 @@ describe('getExcerptLocator', () => {
 
     it('returns a page locator for non-Qur’an excerpts', () => {
         const excerpt = createExcerpt({
-            from: 93,
+            from: 100,
             meta: { vol: 2, vp: 93 },
         });
 
