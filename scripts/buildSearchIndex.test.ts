@@ -317,7 +317,9 @@ describe('buildSearchIndex', () => {
                         },
                     };
                 },
-                async close() {},
+                async close() {
+                    return null;
+                },
             };
 
             await buildSearchIndex(outputPath, tempRoot, { pagefind: pagefindStub });

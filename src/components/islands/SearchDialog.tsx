@@ -347,6 +347,10 @@ export function SearchDialog() {
             await pf.options({
                 baseUrl: '/',
                 bundlePath: '/pagefind/',
+                exactDiacritics: false,
+                ranking: {
+                    diacriticSimilarity: 0.0,
+                },
             });
 
             pagefindRef.current = pf;

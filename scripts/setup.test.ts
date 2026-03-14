@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { Collection } from '@/types/excerpts';
-import { normalizeQuranCompilation } from './setup';
+import { normalizeQuranCompilation } from './quranCompilation';
 
 const quranCollection: Collection = {
     id: '1',

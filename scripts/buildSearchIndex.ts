@@ -74,7 +74,7 @@ type PagefindIndex = {
 
 type PagefindModule = {
     createIndex: (options: { forceLanguage?: string }) => Promise<{ index?: PagefindIndex | null; errors?: string[] }>;
-    close: () => Promise<void | null>;
+    close: () => Promise<undefined | null>;
 };
 
 // ---------------------------------------------------------------------------
